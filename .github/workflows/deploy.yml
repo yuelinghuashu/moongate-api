@@ -29,8 +29,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.ACR_REGISTRY }}/moongate-api:latest
-            ${{ secrets.ACR_REGISTRY }}/moongate-api:${{ github.sha }}
+            ${{ secrets.ACR_REGISTRY }}/moongate/moongate-api:latest
+            ${{ secrets.ACR_REGISTRY }}/moongate/moongate-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -66,10 +66,8 @@ jobs:
             set -e
             cd /var/www/my-site
 
-            # 更新 .env 文件（只更新 Go 相关的部分）
-            # 先读取现有的 .env，保留已有值，更新或添加 Go 相关的
             cat > .env << EOF
-            # 数据库（保持不变）
+            # 数据库
             POSTGRES_DB=$POSTGRES_DB
             POSTGRES_USER=$POSTGRES_USER
             POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -81,21 +79,18 @@ jobs:
             OAUTH_GITHUB_SECRET=$OAUTH_GITHUB_SECRET
             GITHUB_CALLBACK_URL=https://moongate.top/auth/github/callback
 
-            # Nuxt 前端（保持不变）
+            # Nuxt 前端
             NUXT_PUBLIC_SITE_URL=https://moongate.top
 
-            # 镜像仓库
-            ACR_REGISTRY=$ACR_REGISTRY
+            # 镜像仓库（写完整地址）
+            ACR_REGISTRY=$ACR_REGISTRY/moongate
             EOF
 
-            # 登录 ACR
             echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
 
-            # 只拉取和重启 Go
             docker compose pull go-backend
             docker compose up -d --force-recreate go-backend
 
-            # 清理旧镜像
             docker image prune -f --filter "until=24h"
 
             docker compose ps
