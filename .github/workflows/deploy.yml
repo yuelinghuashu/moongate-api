@@ -69,7 +69,7 @@ jobs:
             
             docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_TOKEN }} crpi-pq052z16v6ao2qwc.cn-beijing.personal.cr.aliyuncs.com
             
-            docker-compose pull
-            docker-compose up -d
+            docker compose pull
+            docker compose up -d
             docker image prune -f
-            docker-compose ps
+            docker compose ps
