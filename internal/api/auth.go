@@ -32,7 +32,7 @@ func GitHubLogin(c *gin.Context) {
 	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
 
 	params := url.Values{}
-	params.Set("client_id", os.Getenv("GITHUB_KEY"))
+	params.Set("client_id", os.Getenv("OAUTH_GITHUB_KEY"))
 	params.Set("redirect_uri", os.Getenv("GITHUB_CALLBACK_URL"))
 	params.Set("state", state)
 	params.Set("scope", "read:user")
@@ -118,8 +118,8 @@ func generateState() (string, error) {
 func fetchGitHubUser(code string) (map[string]interface{}, error) {
 	// 换 token
 	params := url.Values{}
-	params.Set("client_id", os.Getenv("GITHUB_KEY"))
-	params.Set("client_secret", os.Getenv("GITHUB_SECRET"))
+	params.Set("client_id", os.Getenv("OAUTH_GITHUB_KEY"))
+	params.Set("client_secret", os.Getenv("OAUTH_GITHUB_SECRET"))
 	params.Set("code", code)
 
 	resp, err := http.PostForm("https://github.com/login/oauth/access_token", params)

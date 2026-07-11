@@ -20,20 +20,21 @@ func main() {
 	}
 
 	// 2. 检查环境变量
-	githubKey := os.Getenv("GITHUB_KEY")
+	githubKey := os.Getenv("OAUTH_GITHUB_KEY")
 	if githubKey == "" {
-		log.Fatal("❌ GITHUB_KEY 环境变量未设置")
+		log.Fatal("❌ OAUTH_GITHUB_KEY 环境变量未设置")
 	}
-	githubSecret := os.Getenv("GITHUB_SECRET")
+	githubSecret := os.Getenv("OAUTH_GITHUB_SECRET")
 	if githubSecret == "" {
-		log.Fatal("❌ GITHUB_SECRET 环境变量未设置")
+		log.Fatal("❌ OAUTH_GITHUB_SECRET 环境变量未设置")
 	}
 	githubCallback := os.Getenv("GITHUB_CALLBACK_URL")
 	if githubCallback == "" {
 		log.Fatal("❌ GITHUB_CALLBACK_URL 环境变量未设置")
 	}
 
-	log.Printf("🔍 GITHUB_KEY: %s", githubKey[:8]+"...")
+	log.Printf("🔍 OAUTH_GITHUB_KEY: %s", githubKey[:8]+"...")
+	log.Printf("🔍 OAUTH_GITHUB_SECRET: %s", githubSecret[:8]+"...")
 	log.Printf("🔍 GITHUB_CALLBACK_URL: %s", githubCallback)
 
 	// 3. 初始化数据库
