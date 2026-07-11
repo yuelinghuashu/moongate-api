@@ -1,0 +1,37 @@
+- name: Deploy via SSH
+  uses: appleboy/ssh-action@v1.0.3
+  with:
+    host: ${{ secrets.SERVER_HOST }}
+    username: ${{ secrets.SERVER_USER }}
+    key: ${{ secrets.SERVER_SSH_KEY }}
+    script: |
+      cd /var/www/my-site
+      
+      # 创建 .env 文件（包含 ACR_REGISTRY）
+      cat > .env << EOF
+      # 数据库
+      POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+      POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+      
+      # Go 后端
+      JWT_SECRET=${{ secrets.JWT_SECRET }}
+      SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+      GITHUB_KEY=${{ secrets.GITHUB_KEY }}
+      GITHUB_SECRET=${{ secrets.GITHUB_SECRET }}
+      
+      # Nuxt 前端
+      NUXT_PUBLIC_SITE_URL=${{ secrets.NUXT_PUBLIC_SITE_URL }}
+      
+      # 镜像仓库（从 Secrets 读取）
+      ACR_REGISTRY=${{ secrets.ACR_REGISTRY }}
+      EOF
+      
+      # 拉取最新镜像
+      docker-compose pull
+      
+      # 重新部署
+      docker-compose up -d
+      
+      # 清理旧镜像
+      docker image prune -f
