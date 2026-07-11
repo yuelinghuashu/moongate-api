@@ -25,8 +25,8 @@ jobs:
       - name: Build and push Go backend
         uses: docker/build-push-action@v5
         with:
-          context: ./go
-          file: ./go/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ secrets.ACR_REGISTRY }}/moongate-api:latest
