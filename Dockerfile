@@ -1,5 +1,5 @@
-# 构建阶段
-FROM golang:1.22-alpine AS builder
+# 构建阶段 - 使用 Go 1.26
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -18,7 +18,7 @@ WORKDIR /root/
 # 复制二进制文件
 COPY --from=builder /app/server .
 
-# ✅ 复制 content 目录到镜像中
+# 复制 content 目录到镜像中
 COPY --from=builder /app/content ./content
 
 EXPOSE 8080
