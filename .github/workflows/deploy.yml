@@ -29,8 +29,8 @@ jobs:
           file: ./Dockerfile 
           push: true
           tags: |
-            ${{ secrets.ACR_REGISTRY }}/moongate/moongate-api:latest
-            ${{ secrets.ACR_REGISTRY }}/moongate/moongate-api:${{ github.sha }}
+            ${{ secrets.ACR_REGISTRY }}/moongate-api:latest
+            ${{ secrets.ACR_REGISTRY }}/moongate-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
