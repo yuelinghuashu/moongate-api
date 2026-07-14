@@ -122,9 +122,9 @@ package parser
 type TokenType string
 
 const (
-	LEFT_BRACKET  TokenType = "LEFT_BRACKET"  // 【
-	RIGHT_BRACKET TokenType = "RIGHT_BRACKET" // 】
-	TEXT          TokenType = "TEXT"          // 普通文本
+	TOKEN_LEFT_BRACKET  TokenType = "LEFT_BRACKET"  // 【
+	TOKEN_RIGHT_BRACKET TokenType = "RIGHT_BRACKET" // 】
+	TOKEN_TEXT          TokenType = "TEXT"          // 普通文本
 	// 更多 Token 类型将在后续文章中逐步引入
 )
 
@@ -218,9 +218,9 @@ package parser
 type TokenType string
 
 const (
-	LEFT_BRACKET  TokenType = "LEFT_BRACKET"
-	RIGHT_BRACKET TokenType = "RIGHT_BRACKET"
-	TEXT          TokenType = "TEXT"
+	TOKEN_LEFT_BRACKET  TokenType = "LEFT_BRACKET"
+	TOKEN_RIGHT_BRACKET TokenType = "RIGHT_BRACKET"
+	TOKEN_TEXT          TokenType = "TEXT"
 )
 
 type Token struct {

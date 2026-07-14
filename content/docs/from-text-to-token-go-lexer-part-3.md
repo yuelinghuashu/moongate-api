@@ -85,7 +85,6 @@ func (l *Lexer) advance() rune {
 	l.position++
 	return ch
 }
-
 ```
 
 有了这三个基础方法，我们的光标就能安全、自由地在文本数组中穿梭了。
@@ -115,8 +114,6 @@ func (l *Lexer) skipWhitespace() {
 ```
 
 ## 五、核心逻辑：实现 `NextToken()` 分发器
-
-现在，一切准备就绪！我们来实现上一篇预告过的、被数据驱动重构到极致的 `NextToken()`。
 
 它的职责是：跳过空白，盯着光标位置。如果是符号表里的符号，一律直接消费并返回；如果表里找不到，那它必然是普通文本！
 
@@ -186,7 +183,7 @@ package main
 
 import (
 	"fmt"
-	"mephisto/internal/parser" // 🌟 纠正为您实际的项目路径
+	"mephisto/internal/parser"
 	"os"
 )
 
@@ -223,7 +220,6 @@ func main() {
 		}
 	}
 }
-
 ```
 
 再次运行我们的测试文件（`testdata/sample.meph`）：

@@ -199,7 +199,7 @@ volumes:
 
 ```caddy
 umami.your-domain.com {
-    reverse_proxy umami:3000   # 关键修正：指向 umami 容器
+    reverse_proxy umami:3000   # 关键：指向 umami 容器
     encode gzip zstd
     header {
         X-Content-Type-Options "nosniff"
@@ -345,7 +345,7 @@ NUXT_PUBLIC_UMAMI_HOST=https://umami.your-domain.com
 
 ## 🔧 第六部分：Dockerfile 必须接收构建参数
 
-**关键修正**：`NUXT_PUBLIC_*` 变量在构建时被嵌入客户端代码，必须在 Docker 构建阶段通过 `ARG` 和 `ENV` 传递。
+**关键**：`NUXT_PUBLIC_*` 变量在构建时被嵌入客户端代码，必须在 Docker 构建阶段通过 `ARG` 和 `ENV` 传递。
 
 编辑项目根目录的 `Dockerfile`，确保包含以下内容：
 
