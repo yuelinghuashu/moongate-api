@@ -4,7 +4,7 @@ description: 详解 demoblock 3.x 的配置原理、踩坑记录和最佳实践�
 date: 2026-06-03
 permalink: 1129affd-8dc5-4dd2-8c76-59a477dc5c06
 level: P1
-series:
+series: 
 tags:
   - Vue
   - Engineering

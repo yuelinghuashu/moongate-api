@@ -132,7 +132,7 @@ const (
 type Token struct {
 	Type    TokenType // 类型：LEFT_BRACKET？TEXT？
 	Literal string    // 字面量："【"？"角色名"？
-	// Line 字段将在后续文章中引入（用于错误提示）
+	Line    int       // Line 字段将在后续文章中引入（用于错误提示）
 }
 ```
 

@@ -55,6 +55,12 @@ func loadDocs(dir string, store *Store) error {
 			continue
 		}
 
+		// 后处理：空字符串的 series 视为 nil
+		// YAML 中 series: （值为空）会被解析为 *string 指向 "" 而非 nil
+		if doc.Series != nil && *doc.Series == "" {
+			doc.Series = nil
+		}
+
 		store.Docs[doc.Permalink] = &doc  // 存储 permalink 索引
 		store.DocsBySlug[doc.Slug] = &doc // 存储 slug 索引
 	}

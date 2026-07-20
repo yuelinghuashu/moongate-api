@@ -46,7 +46,6 @@ func NewLexer(input string) *Lexer {
 		line:     1,
 	}
 }
-
 ```
 
 ### 为什么用 `[]rune(input)` 提前转换？
@@ -110,7 +109,6 @@ func (l *Lexer) skipWhitespace() {
 		l.advance() // 光标无情后移
 	}
 }
-
 ```
 
 ## 五、核心逻辑：实现 `NextToken()` 分发器
@@ -140,12 +138,13 @@ func (l *Lexer) NextToken() Token {
 	// 5. 符号表里查不到？那它一定是普通文本文字（如 "贝利亚奥特曼"）
 	return l.readText()
 }
-
 ```
 
 你看！得益于同包内直接查表的设计，整个分发核心干净得让人感动。**这里没有任何复杂的条件分支，更去掉了不必要的套娃函数调用**。无论未来你的语法扩充到有多少种符号，这个 `NextToken()` 的大框架都**稳如磐石，永远不需要修改一行。**
 
 ## 六、文本的贪婪读取：`readText()`
+
+`NextToken()` 的核心逻辑我们已经看完了。现在进入它调用的最后一个分支——`readText()`，看看普通文本是如何被一口气吞下的。
 
 当字符不在符号表里时（比如碰到了中文汉字 `贝`），Lexer 应该开启“贪婪模式”：**只要后面接下来的字符不是符号，就一路把它们全部吞下，拼成一个长字符串。**
 
@@ -171,7 +170,6 @@ func (l *Lexer) readText() Token {
 	literal := string(l.input[start:l.position])
 	return Token{Type: TOKEN_TEXT, Literal: literal, Line: l.line}
 }
-
 ```
 
 ## 七、大功告成：在 `main.go` 中验证成果
@@ -226,7 +224,6 @@ func main() {
 
 ```bash
 go run main.go testdata/sample.meph
-
 ```
 
 终端将会输出一行极其漂亮、对齐完美、极具工业美感的词法流结果：
@@ -240,7 +237,6 @@ go run main.go testdata/sample.meph
 1     | NEWLINE              | \n
 2     | TEXT                 | 贝利亚奥特曼
 3     | EOF                  |
-
 ```
 
 看！计算机通过我们写的 Lexer，成功把一串冰冷的、毫无结构的原始字节，变成了一个个生动的、自带行号和类型的结构化 Token 块！
@@ -256,5 +252,3 @@ go run main.go testdata/sample.meph
 | 实现了极其精简的 `readText()` 截断机制 | 只要 peek 字符在 `symbolMap` 中即自动作为边界，消灭了所有零散的判断逻辑 |
 
 至此，词法分析的战役完美结束。
-
-> **下一篇预告：** 当 Token 流源源不断地从 Lexer 中产出时，我们要把它从“一维”的平铺结构变成“二维”的嵌套结构——用 **AST（抽象语法树）** 把区块之间的层级关系真正建立起来！敬请期待。
