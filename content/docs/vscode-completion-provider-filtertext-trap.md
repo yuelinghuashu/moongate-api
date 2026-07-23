@@ -78,7 +78,7 @@ vscode.workspace.onDidChangeTextDocument((e) => {
 
 当用户输入 `【` 后，auto-closing 立即插入 `】`，当前行变成了：
 
-```
+```text
 【】
 ```
 
