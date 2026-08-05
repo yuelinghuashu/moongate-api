@@ -1,5 +1,5 @@
 ---
-title: 工业级篇：可测试、可验证的构建脚本架构
+title: 构建体系：可测试、可验证的工程实践
 description: 从单体脚本到模块化工程体系——ESM 模块拆分、WCAG 对比度自动校验、scope 自动验证、自动化测试与多格式产物生成，让构建脚本自身成为一套可信赖的工程基础设施。
 date: 2026-08-06 04:00:00
 permalink: ef9e2761-be41-4778-8552-22cb86ed3407
@@ -17,24 +17,24 @@ tags:
 
 本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
    —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
    —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
    —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
    —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
 
-5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
 ---
 
-在设计系统篇中，我们已经拥有了一套基于 DTCG 三层架构的主题生产系统，构建脚本能自动生成深色/浅色双主题，并能导出 CSS 变量。
+在[设计系统](./create-vscode-theme-design-system)中，我们已经拥有了一套基于 DTCG 三层架构的主题生产系统，构建脚本能自动生成深色/浅色双主题，并能导出 CSS 变量。
 
 但随着语言数量增长到 15 种、构建脚本功能越来越复杂，新的问题浮现了：
 
@@ -111,6 +111,8 @@ your-theme/
 - 项目 `package.json` 中声明 `"type": "module"`，所有 `.js` 文件默认视为 ESM。
 
 `build.js` 作为主流程，只负责**编排**——加载模块、调用函数、捕获错误，不包含具体实现。
+
+> 📌 **与上一篇的分工**：`resolveTokens`、`replaceVariables` 的完整实现在[设计系统](./create-vscode-theme-design-system)中已经见过，本篇**不再重复**。你要关注的是四个**新增**模块：`validators`（质量验证）、`optimizers`（输出精简）、`generators`（多格式产物）、`scope-validator`（scope 验证）——数据流地图里的每一步，都会落到这四个模块上。
 
 在阅读下面的代码之前，先建立一张「数据流地图」——每个关键步骤输入什么、输出什么：
 
@@ -261,7 +263,7 @@ export function resolveTokens(obj, tokenMap, depth = 0, path = []) {
 
 ### 2.5 架构污染检测
 
-设计系统篇提到：颜色必须经历「原始值 → 语义层 → 组件层」的传递链条，任何跨层直接引用都是架构污染。
+上一篇文章介绍过：颜色必须经历「原始值 → 语义层 → 组件层」的传递链条，任何跨层直接引用都是架构污染。
 
 `tokens.js` 中的 `detectPrimitiveReference` 会在构建时检测**组件层是否直接引用了原始值**（如 `workbench.yaml` 中出现 `editor.background: "${blue-500}"` 而非 `${surfaceGround}`），并给出警告：
 
@@ -530,7 +532,7 @@ const tags = TAG_MAP.map(({ tag, semanticKey, ...style }) => {
 
 ## 📦 七、多格式产物生成：一套令牌，全平台复用
 
-设计系统篇介绍了 CSS 变量导出。Moongate 进一步将语义层导出为**四种格式**，覆盖 Web、Sass 和 TypeScript 生态：
+设计系统介绍了 CSS 变量导出，Moongate 进一步将语义层导出为**四种格式**，覆盖 Web、Sass 和 TypeScript 生态：
 
 | 产物 | 格式 | 适用场景 |
 |------|------|---------|
@@ -633,7 +635,7 @@ pnpm run package
 
 至此，你的主题构建系统已经完成了从「能用」到「工业级」的跃迁：
 
-| 能力 | 工程篇 | 工业级篇 |
+| 能力 | 主题工程化 | 构建体系 |
 |------|--------|---------|
 | 模块化 | 单体 `build.js` | `scripts/lib/` 单职责模块 |
 | 代码风格 | CommonJS | ESM |
@@ -652,6 +654,6 @@ pnpm run package
 
 但工程能力再强，也只是「怎么做」的问题。下一个问题同样重要：**「为什么这样做」——设计哲学从何而来？如何让用户在不同硬件上获得一致的体验？如何让主题超越代码，成为品牌的组成部分？**
 
-这正是系列的最后一篇——**品牌生态篇**要回答的。
+这正是系列的最后一篇——**品牌生态**要回答的。
 
-[**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
+[**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)

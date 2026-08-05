@@ -1,5 +1,5 @@
 ---
-title: 工程篇：告别手写 JSON，用 YAML 构建脚本自动化
+title: 主题工程化：从单体 JSON 到模块化 YAML
 description: 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。让颜色变量可复用、语言规则可维护，为设计系统升级打下坚实基础。
 date: 2026-08-06 02:00:00
 permalink: 7199f437-f5ae-40e9-b08b-fba6968205b5
@@ -15,24 +15,24 @@ tags:
 
 本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
    —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
    —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
    —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
    —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
 
-5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
 ---
 
-在[基础篇](./create-vscode-theme-basics)中，你已经学会了如何手写一个可发布的 VS Code 主题。但随着主题功能越来越丰富，你可能遇到了以下痛点：
+在[VS Code 主题](./create-vscode-theme-basics)中，你已经学会了如何手写一个可发布的 VS Code 主题。但随着主题功能越来越丰富，你可能遇到了以下痛点：
 
 - 一个 JSON 文件动辄上千行，修改一个颜色需要全局搜索，容易误改。
 - 想为不同语言定制高亮，却要在同一个 `tokenColors` 数组里堆砌规则，难以维护。
@@ -40,7 +40,7 @@ tags:
 
 是时候引入工程化了！本篇将带你**将一个单体的 JSON 主题重构为模块化、可自动构建的工程化项目**：用 YAML 拆分源文件，用构建脚本自动合并与变量替换。
 
-> 💡 **本篇的定位**：本文采用的「单一颜色变量文件 + 构建脚本」方案是工程化的第一步。在[设计系统篇](./create-vscode-theme-multi-theme)中，这个方案会进一步升级为 DTCG 三层架构（原始值 → 语义层 → 组件层）。建议按顺序阅读，理解每一步的动机。
+> 💡 **本篇的定位**：本文采用的「单一颜色变量文件 + 构建脚本」方案是工程化的第一步。在[设计系统](./create-vscode-theme-design-system)中，这个方案会进一步升级为 DTCG 三层架构（原始值 → 语义层 → 组件层）。建议按顺序阅读，理解每一步的动机。
 
 ---
 
@@ -473,12 +473,12 @@ npm run build
 - ✅ watch 模式实时预览开发
 - ✅ 发布时自动构建的正确配置
 
-但你可能已经注意到，工程篇的方案还有一些问题需要解决：
+但你可能已经注意到，上一篇文章的方案还有一些问题需要解决：
 
 - `colors.yaml` 是一个**扁平的变量池**，颜色之间的层级关系（哪些是原始色、哪些是语义角色）完全靠命名约定，没有结构性的约束。
 - 深浅两套主题需要**两套颜色变量文件**，而「同一角色在深色和浅色下应该保持色相一致、明度不同」这件事完全靠手动维护。
 - 构建脚本只能做变量替换，还**不能自动校验**颜色是否符合对比度标准、是否引用了不存在的变量。
 
-这些问题，正是我们下一篇要解决的——**设计系统篇：用 DTCG 三层架构管理颜色，通过语义层与重力补偿构建深色/浅色双变体**。
+这些问题，正是我们下一篇要解决的——**设计系统：DTCG 三层架构与昼夜双变体**。
 
-[**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+[**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)

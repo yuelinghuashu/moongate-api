@@ -1,5 +1,5 @@
 ---
-title: 基础篇：从手动 JSON 到第一个可发布的 VS Code 主题
+title: VS Code 主题：从手写 JSON 到可发布
 description: 不依赖脚手架，从零手写最小主题 JSON，理解 colors 与 tokenColors 的核心机制，掌握调试、打包与发布的完整流程，构建属于你的第一个 VS Code 主题。
 date: 2026-08-06 00:00:00
 permalink: 7a7bec85-c90e-4770-92d3-4ef537ba2960
@@ -15,26 +15,26 @@ tags:
 
 本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
    —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
    —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
    —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
    —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
 
-5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
 ---
 
 如果你有编程基础（熟悉 JavaScript、JSON、命令行），想把一套配色方案变成 VS Code 主题，但完全不知道从何下手——这篇文章正是为你准备的。
 
-Moongate 主题最初就是从个人博客的配色衍生而来。在这篇基础篇中，我们不使用任何脚手架，而是**从一个最小的 JSON 文件开始**，逐步理解主题的运作机制。等机制清楚了，你自然会发现哪些环节需要工程化——那就是整个系列接下来要做的事。
+Moongate 主题最初就是从个人博客的配色衍生而来。在这篇文章中，我们不使用任何脚手架，而是**从一个最小的 JSON 文件开始**，逐步理解主题的运作机制。等机制清楚了，你自然会发现哪些环节需要工程化——那就是整个系列接下来要做的事。
 
 ---
 
@@ -375,4 +375,4 @@ vsce publish
 
 这些问题不是你的失误，而是**手写 JSON 这种工作方式的极限**。这正是我们接下来的系列要解决的问题——从工程化到设计系统，让主题维护变得轻松而优雅。
 
-[**进阶篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+[**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
