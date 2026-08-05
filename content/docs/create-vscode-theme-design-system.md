@@ -5,7 +5,7 @@ date: 2026-08-06 04:00:00
 permalink: 97e09fc8-13a0-4703-958d-44700fe20a62
 series: design-system
 level: P3
-tags: 
+tags:
   - Design System
   - Theme
   - Engineering
@@ -202,9 +202,9 @@ class: "${warning}"
 
 在 Moongate 的架构中，两种「引用」有着完全不同的语义：
 
-| 语法 | 含义 | 使用位置 | 示例 |
-|------|------|---------|------|
-| `{token}` | **层间引用**：引用另一个令牌 | 语义层引用原始值 | `primary: "{blue-500}"` |
+| 语法          | 含义                               | 使用位置         | 示例                                    |
+| ------------- | ---------------------------------- | ---------------- | --------------------------------------- |
+| `{token}`     | **层间引用**：引用另一个令牌       | 语义层引用原始值 | `primary: "{blue-500}"`                 |
 | `${variable}` | **变量替换**：构建时替换为最终色值 | 组件层引用语义层 | `editor.background: "${surfaceGround}"` |
 
 - 语义层用 `{token}` 引用原始值，构建脚本递归解析令牌引用（支持循环检测，见构建体系）。
@@ -229,12 +229,12 @@ class: "${warning}"
 
 ### 3.2 Moongate 的补偿实例
 
-| 语义角色 | 深色版 | 浅色版 | 调整方法 |
-|---------|--------|--------|---------|
-| 主色（primary） | `#3b82f6` (60% 明度) | `#0284c7` (48% 明度) | 蓝调不变，明度降低约 20%，适应白底 |
-| 成功（success） | `#34d399` (65%) | `#059669` (40%) | 绿色更沉稳，保证对比度 |
-| 警告（warning） | `#fbbf24` (75%) | `#b45309` (35%) | 从亮黄转为橙黄，避免在白底上「消失」 |
-| 错误（error） | `#f87171` (60%) | `#b91c1c` (35%) | 深红保持警示感 |
+| 语义角色        | 深色版               | 浅色版               | 调整方法                             |
+| --------------- | -------------------- | -------------------- | ------------------------------------ |
+| 主色（primary） | `#3b82f6` (60% 明度) | `#0284c7` (48% 明度) | 蓝调不变，明度降低约 20%，适应白底   |
+| 成功（success） | `#34d399` (65%)      | `#059669` (40%)      | 绿色更沉稳，保证对比度               |
+| 警告（warning） | `#fbbf24` (75%)      | `#b45309` (35%)      | 从亮黄转为橙黄，避免在白底上「消失」 |
+| 错误（error）   | `#f87171` (60%)      | `#b91c1c` (35%)      | 深红保持警示感                       |
 
 **补偿规律**：
 
@@ -259,12 +259,12 @@ class: "${warning}"
 
 **Moongate 的四层海拔**（v2.6.0 最新值）：
 
-| 海拔层级 | 用途 | 深色模式 | 浅色模式 | 说明 |
-|---------|------|---------|---------|------|
-| `surfaceGround` | 底层背景（编辑器） | `#0f172a` | `#f9fafb` | 基准层 |
-| `surfaceRaised` | 侧边栏、活动栏、选项卡栏 | `#1a2538` | `#ffffff` | 深色 +5%，浅色纯白 |
-| `surfaceFloating` | 面板、悬浮卡片、菜单 | `#25364a` | `#f1f5f9` | 再 +5%，浅色浅灰蓝 |
-| `surfaceTooltip` | 提示框、弹窗 | `#2e3b4d` | `#e2e8f0` | 最高层 |
+| 海拔层级          | 用途                     | 深色模式  | 浅色模式  | 说明               |
+| ----------------- | ------------------------ | --------- | --------- | ------------------ |
+| `surfaceGround`   | 底层背景（编辑器）       | `#0f172a` | `#f9fafb` | 基准层             |
+| `surfaceRaised`   | 侧边栏、活动栏、选项卡栏 | `#1a2538` | `#ffffff` | 深色 +5%，浅色纯白 |
+| `surfaceFloating` | 面板、悬浮卡片、菜单     | `#25364a` | `#f1f5f9` | 再 +5%，浅色浅灰蓝 |
+| `surfaceTooltip`  | 提示框、弹窗             | `#2e3b4d` | `#e2e8f0` | 最高层             |
 
 > 📌 **注意**：浅色模式采用「越高越亮」还是「越高越暗」是一个设计选择。Moongate 选择浅色模式下浮层比背景**更亮**（更白），形成「纸张层叠」的通透感；深色模式则采用「越高越亮」，让浮层从背景中微微隆起。两种模式都遵循「海拔越高越醒目」的物理隐喻。
 
@@ -303,7 +303,9 @@ const primitives = yaml.load(fs.readFileSync(PATHS.primitives, "utf8"))
 function resolveTokens(obj, tokenMap, depth = 0) {
   const MAX_DEPTH = 20
   if (depth > MAX_DEPTH) {
-    throw new Error(`[ENGINEERING_FATAL] 令牌循环引用检测: ${JSON.stringify(obj)}`)
+    throw new Error(
+      `[ENGINEERING_FATAL] 令牌循环引用检测: ${JSON.stringify(obj)}`,
+    )
   }
   if (typeof obj === "string") {
     return obj.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, key) => {
@@ -315,7 +317,8 @@ function resolveTokens(obj, tokenMap, depth = 0) {
       return resolveTokens(value, tokenMap, depth + 1)
     })
   }
-  if (Array.isArray(obj)) return obj.map((item) => resolveTokens(item, tokenMap, depth + 1))
+  if (Array.isArray(obj))
+    return obj.map((item) => resolveTokens(item, tokenMap, depth + 1))
   if (obj && typeof obj === "object") {
     const result = {}
     for (const [k, v] of Object.entries(obj)) {
@@ -341,7 +344,8 @@ function replaceVariables(obj, colors) {
       },
     )
   }
-  if (Array.isArray(obj)) return obj.map((item) => replaceVariables(item, colors))
+  if (Array.isArray(obj))
+    return obj.map((item) => replaceVariables(item, colors))
   if (obj && typeof obj === "object") {
     const result = {}
     for (const [k, v] of Object.entries(obj)) {
@@ -362,22 +366,30 @@ fs.readdirSync(PATHS.langDir)
   .filter((f) => f.endsWith(".yaml"))
   .sort()
   .forEach((file) => {
-    const rules = yaml.load(fs.readFileSync(path.join(PATHS.langDir, file), "utf8"))
+    const rules = yaml.load(
+      fs.readFileSync(path.join(PATHS.langDir, file), "utf8"),
+    )
     if (rules?.tokenColors) {
       tokenColorsRaw = tokenColorsRaw.concat(rules.tokenColors)
     }
   })
 
 // 读取 package.json 获取主题基础名
-const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "package.json"), "utf8"))
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(ROOT_DIR, "package.json"), "utf8"),
+)
 const baseName = pkg.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase()
 
 // 为每个语义层文件构建一个主题
-const semanticFiles = fs.readdirSync(PATHS.semanticsDir).filter((f) => f.endsWith(".yaml"))
+const semanticFiles = fs
+  .readdirSync(PATHS.semanticsDir)
+  .filter((f) => f.endsWith(".yaml"))
 
 semanticFiles.forEach((semanticFile) => {
   const themeType = path.basename(semanticFile, ".yaml") // 'dark' 或 'light'
-  const semantics = yaml.load(fs.readFileSync(path.join(PATHS.semanticsDir, semanticFile), "utf8"))
+  const semantics = yaml.load(
+    fs.readFileSync(path.join(PATHS.semanticsDir, semanticFile), "utf8"),
+  )
 
   // 1. 解析语义层的令牌引用 {token} -> 最终色值
   const resolved = resolveTokens(semantics, primitives)
@@ -500,14 +512,14 @@ Moongate 正是这样做的——博客、设计系统文档与 VS Code 主题�
 
 ## ⚠️ 七、常见问题与陷阱
 
-| 问题 | 可能原因 | 解决方法 |
-|------|---------|---------|
-| **主题未出现在颜色主题列表中** | `package.json` 中未正确注册，或 JSON 文件路径错误 | 检查 `contributes.themes` 条目，确保 `path` 指向正确的文件 |
-| **浅色主题显示为深色** | `uiTheme` 字段误设为 `"vs-dark"` | 浅色主题应使用 `"vs"` |
-| **颜色变量未替换，仍显示为 `${var}`** | 变量名拼写错误，或语义层未定义该变量 | 检查变量名是否一致，确保所有语义变量在 `dark.yaml` 和 `light.yaml` 中都有定义 |
-| **深色/浅色主题视觉差异过大** | 重力补偿不合理，明度调整幅度不均 | 遵循「色相不变、明度有规律降低、饱和度适度调整」的补偿规则 |
-| **新增语义变量后，某个主题报错** | `dark.yaml` 和 `light.yaml` 变量名不一致 | 所有变体的语义层变量名必须完全一致 |
-| **构建脚本报错「找不到文件」** | 缺少必要的 YAML 文件 | 确保 `src/core/primitives/`、`src/core/semantics/`、`src/languages/` 等目录存在，且包含所需文件 |
+| 问题                                  | 可能原因                                          | 解决方法                                                                                        |
+| ------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **主题未出现在颜色主题列表中**        | `package.json` 中未正确注册，或 JSON 文件路径错误 | 检查 `contributes.themes` 条目，确保 `path` 指向正确的文件                                      |
+| **浅色主题显示为深色**                | `uiTheme` 字段误设为 `"vs-dark"`                  | 浅色主题应使用 `"vs"`                                                                           |
+| **颜色变量未替换，仍显示为 `${var}`** | 变量名拼写错误，或语义层未定义该变量              | 检查变量名是否一致，确保所有语义变量在 `dark.yaml` 和 `light.yaml` 中都有定义                   |
+| **深色/浅色主题视觉差异过大**         | 重力补偿不合理，明度调整幅度不均                  | 遵循「色相不变、明度有规律降低、饱和度适度调整」的补偿规则                                      |
+| **新增语义变量后，某个主题报错**      | `dark.yaml` 和 `light.yaml` 变量名不一致          | 所有变体的语义层变量名必须完全一致                                                              |
+| **构建脚本报错「找不到文件」**        | 缺少必要的 YAML 文件                              | 确保 `src/core/primitives/`、`src/core/semantics/`、`src/languages/` 等目录存在，且包含所需文件 |
 
 ---
 
