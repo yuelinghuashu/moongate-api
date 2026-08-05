@@ -1,1169 +1,657 @@
 ---
-title: 工程深化篇：工业级构建脚本与 DTCG 完整实现
-description: 深入工业级构建脚本，掌握颜色标准化、WCAG 对比度校验、循环引用检测、自动生成 CSS 变量和设计系统文档，将 DTCG 设计令牌从概念落地为可运行的工程代码。
-date: 2026-03-28
+title: 工业级篇：可测试、可验证的构建脚本架构
+description: 从单体脚本到模块化工程体系——ESM 模块拆分、WCAG 对比度自动校验、scope 自动验证、自动化测试与多格式产物生成，让构建脚本自身成为一套可信赖的工程基础设施。
+date: 2026-08-06 04:00:00
 permalink: ef9e2761-be41-4778-8552-22cb86ed3407
-level: P3
+level: P4
 series: design-system
 tags: 
   - VSCode
   - Theme
   - Design System
   - Engineering
+  - CI/CD
 ---
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程：
+本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**从零到第一个 VS Code 主题：完全入门指南（入门篇）**](./create-vscode-theme-basics)
-   —— 创建、配置并发布你的第一个 VS Code 主题，掌握核心概念与基础工作流。
+1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**告别手改 JSON：用 YAML 工程化你的主题（工程篇）**](./create-vscode-theme-engineering)
-   —— 将零散的 JSON 主题重构为模块化 YAML 项目，用构建脚本实现自动化生成。
+2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**亮色、暗色与更多：多主题变体与重力补偿（多主题篇）**](./create-vscode-theme-multi-theme)
-   —— 同时构建暗色、亮色和高对比度主题变体，用重力补偿原理实现视觉重量平衡。
+3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**从主题到设计系统：视觉契约与品牌生态（设计系统篇）**](./create-vscode-theme-design-system)
+4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
+
+5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
-5. [**工业级构建脚本与 DTCG 实现（工程进阶篇）**](./create-vscode-theme-engineering-deep)
-   —— DTCG 三层架构、颜色归一化、WCAG 对比度检测、循环引用检测，自动生成 CSS 变量与设计文档。
+---
+
+在设计系统篇中，我们已经拥有了一套基于 DTCG 三层架构的主题生产系统，构建脚本能自动生成深色/浅色双主题，并能导出 CSS 变量。
+
+但随着语言数量增长到 15 种、构建脚本功能越来越复杂，新的问题浮现了：
+
+1. **构建脚本本身缺乏架构**——所有逻辑堆在 `build.js` 一个文件里，难以测试和维护。
+2. **质量无法自动保证**——颜色是否符合 WCAG 对比度标准？引用的变量是否都存在？有没有产生「组件层直接引用原始值」的架构污染？
+3. **语言 scope 无法验证**——写了 20 条语言规则，怎么确认每个 scope 真的存在于 VS Code 的 TextMate 语法中？「规则写了对不上」如何自动化检测？
+4. **产物只有主题 JSON 和 CSS**——能否进一步导出 SCSS、TypeScript 等更多格式，让设计资产在更多平台复用？
+
+本篇将回答这些问题，把构建脚本从「能用」升级为「工业级」——**一套可测试、可验证、可维护的工程基础设施**。
+
+> 🗺️ **本篇路线图**：五个步骤，层层递进——
+>
+> 1. **架构**：把单体脚本拆成可维护的模块（`一`）
+> 2. **验证**：让构建过程自我证明——质量校验与 scope 验证（`二`、`四`）
+> 3. **优化**：让生成的产物更精简（`三`）
+> 4. **测试**：让构建系统自身可回归验证（`五`）
+> 5. **发布**：把验证串进生态整合与交付链路（`六`、`七`、`八`）
+>
+> 篇幅较长，建议先通读一遍建立全局认知，再结合自己的项目逐节实践——每节结尾都有与下一节的衔接说明。
+
+> 💡 **提示**：本篇内容涉及较深的工程实践，建议先完成前三篇再阅读。如果你希望先了解「这套体系支撑起什么样的品牌生态」，也可以先读第五篇再回来。
 
 ---
 
-## 🚀 引言
+## 📁 一、模块化架构：从单体脚本到 `scripts/lib/`
 
-在系统篇中，我们介绍了 DTCG 设计令牌的三层架构和工业级质检概念。本篇将把这些概念**落地为可运行的工程代码**，完整呈现 Moongate v2.2.0 的工业级构建脚本。
-
-如果你已经完成了进阶篇的基础构建脚本，并希望进一步升级到工业级水准——支持颜色标准化、WCAG 对比度校验、循环引用检测、自动生成 CSS 变量和设计系统文档，那么本篇正是为你准备的。
-
-> 💡 **提示**：本篇内容涉及较深的工程实践，建议先完成前三篇（基础篇、进阶篇、扩展篇）再阅读。
-
----
-
-## 📁 目录结构
+当构建脚本超过 200 行时，它本身也需要架构。Moongate 将构建系统拆分为 `scripts/lib/` 下的多个单职责模块：
 
 ```text
 your-theme/
+├── scripts/
+│   ├── build.js                     # 主流程（编排者，不包含具体实现）
+│   ├── verify-scopes.js             # scope 验证 CLI
+│   ├── generate-better-comments.js  # Better Comments 配置生成器
+│   └── lib/
+│       ├── config.js                # 路径配置
+│       ├── tokens.js                # 令牌解析（resolveTokens、replaceVariables）
+│       ├── utils.js                 # 通用工具（safeLoadYaml、normalizeHex 等）
+│       ├── validators.js            # 质量验证（WCAG 对比度、结构验证、未使用令牌检测）
+│       ├── optimizers.js            # 输出优化（token 合并、语义色精简）
+│       ├── generators.js            # 多格式产物生成（CSS/SCSS/TS/设计文档）
+│       └── scope-validator.js       # scope 验证逻辑
 ├── src/
 │   ├── core/
-│   │   ├── primitives/
-│   │   │   └── colors.yaml          # 原始色值
-│   │   ├── semantics/
-│   │   │   ├── dark.yaml            # 深色语义层
-│   │   │   └── light.yaml           # 浅色语义层
-│   │   └── layout.yaml              # 布局令牌（间距、排版、断点等）
-│   ├── languages/                   # 各语言语法规则
-│   ├── workbench.yaml               # UI 颜色
-│   └── semantic.yaml                # 语义高亮规则
-├── scripts/
-│   └── build.js                     # 工业级构建脚本
-├── themes/
-│   ├── moongate-dark.json           # 生成的主题 JSON
-│   ├── moongate-light.json
-│   ├── moongate-colors.css          # 颜色令牌（自动生成）
-│   └── moongate-layout.css          # 布局令牌（自动生成）
-├── docs/
-│   └── DESIGN_SYSTEM.md             # 自动生成的设计系统文档
+│   │   ├── primitives/colors.yaml
+│   │   ├── semantics/dark.yaml + light.yaml
+│   │   └── layout.yaml
+│   ├── languages/*.yaml
+│   ├── workbench.yaml
+│   ├── semantic.yaml
+│   └── special/better-comments.yaml
+├── themes/                          # 生成产物
+├── docs/DESIGN_SYSTEM.md            # 自动生成的文档
+├── test/*.test.js                   # 自动化测试
 └── package.json
 ```
 
----
+各模块的职责：
 
-## 🎨 第一步：原始值文件
+| 模块 | 职责 | 关键导出 |
+|------|------|---------|
+| `config.js` | 集中管理所有文件路径 | `PATHS`、`ROOT_DIR` |
+| `tokens.js` | 令牌解析与变量替换 | `resolveTokens`（`{token}` 层间引用）、`replaceVariables`（`${var}` 变量替换）、`detectPrimitiveReference`（架构污染检测） |
+| `utils.js` | 通用工具函数 | `safeLoadYaml`、`normalizeHex`、`detectDuplicateColors`、`getThemeInfo` |
+| `validators.js` | 质量验证 | `checkContrast`（WCAG）、`validateThemeStructure`、`detectUnusedPrimitives` |
+| `optimizers.js` | 输出精简 | `mergeTokenColors`、`optimizeSemanticTokenColors` |
+| `generators.js` | 多格式产物 | `generateColorCss`、`generateLayoutCss`、`generateScssTokens`、`generateTsTokens`、`generateDesignSystemDoc` |
+| `scope-validator.js` | scope 验证逻辑 | `verifyAllScopes`、`formatVerificationResult` |
 
-**`src/core/primitives/colors.yaml`**
+**为什么用 ESM 而不是 CommonJS？**
 
-<details>
-<summary>查看完整原始值文件</summary>
+- 现代 Node.js（≥ 14）原生支持 ESM，无需额外构建工具。
+- `import` / `export` 是静态的，工具可以静态分析依赖关系，更容易重构和调试。
+- 项目 `package.json` 中声明 `"type": "module"`，所有 `.js` 文件默认视为 ESM。
 
-```yaml
-# ==================== 原始色值 ====================
-# 按色相-明度命名，作为所有主题的基础构建块
+`build.js` 作为主流程，只负责**编排**——加载模块、调用函数、捕获错误，不包含具体实现。
 
-# 蓝色系
-blue-500: "#3b82f6"
-blue-600: "#2563eb"
-blue-700: "#0284c7"
-blue-800: "#0369a1"
-blue-900: "#1e3a8a"
-blue-glow: "#7dd3fc"
-blue-glow-dark: "#87cefa"
+在阅读下面的代码之前，先建立一张「数据流地图」——每个关键步骤输入什么、输出什么：
 
-# 绿色系
-green-400: "#34d399"
-green-600: "#059669"
-green-700: "#10b981"
+| 步骤 | 输入 | 输出 |
+|------|------|------|
+| `loadPrimitives()` | `primitives/colors.yaml` | 标准化后的原始色值字典 |
+| `resolveTokens()` | 原始值 + `semantics/*.yaml` | 每个变体的最终语义色值字典 |
+| `loadTokenColors()` | `languages/` + `special/` 下的规则 | 合并后的 tokenColors 原始规则 |
+| `replaceVariables()` | 规则文件 + 语义色值字典 | 变量已替换为实际色值的规则 |
+| `mergeTokenColors()` / `optimizeSemanticTokenColors()` | 替换后的规则 | 精简后的产物 |
+| `generate*()` | 最终色值字典 + 布局令牌 | CSS / SCSS / TS 令牌与设计文档 |
 
-# 黄色系
-yellow-400: "#fbbf24"
-yellow-500: "#f59e0b"
-yellow-600: "#d97706"
-yellow-700: "#b45309"
-
-# 红色系
-red-400: "#f87171"
-red-500: "#ef4444"
-red-600: "#dc2626"
-red-700: "#b91c1c"
-
-# 青色系
-cyan-400: "#22d3ee"
-cyan-500: "#0891b2"
-cyan-700: "#0e7490"
-
-# 紫色系
-purple-400: "#c084fc"
-purple-500: "#9333ea"
-purple-700: "#7e22ce"
-
-# 灰阶
-gray-900: "#0f172a"
-gray-850: "#131c31"
-gray-800: "#1e293b"
-gray-750: "#252e40"
-gray-700: "#2d3748"
-gray-600: "#475569"
-gray-550: "#7a8c9e"
-gray-500: "#94a3b8"
-gray-525: "#a5b4cb"
-gray-400: "#94a3b8"
-gray-300: "#cbd5e1"
-gray-200: "#e2e8f0"
-gray-100: "#f1f5f9"
-gray-50: "#f9fafb"
-
-# 纯色
-white: "#ffffff"
-black: "#000000"
-```
-
-</details>
-
----
-
-## 🌙 第二步：语义层文件
-
-### 深色语义层 `src/core/semantics/dark.yaml`
-
-<details>
-<summary>查看完整深色语义层</summary>
-
-```yaml
-# ==================== 深色语义层 ====================
-
-primary: "{blue-500}"
-success: "{green-400}"
-warning: "{yellow-400}"
-error: "{red-400}"
-highlight: "{blue-glow}"
-cyan: "{cyan-400}"
-purple: "{purple-400}"
-
-function: "{blue-glow-dark}"
-operator: "{gray-600}"
-comment: "{gray-525}"
-variable: "{gray-200}"
-variableDim: "{gray-300}"
-textMuted: "{gray-400}"
-punctuation: "{gray-400}"
-
-bg: "{gray-900}"
-bgElevated: "{gray-850}"
-bgMuted: "{gray-800}"
-bgHover: "{blue-500}20"
-bgActive: "{blue-500}40"
-hoverBg: "{gray-750}"
-selectedBg: "{blue-600}"
-
-surfaceGround: "{gray-900}"
-surfaceRaised: "{gray-850}"
-surfaceFloating: "{gray-800}"
-surfaceTooltip: "{gray-750}"
-borderFloating: "{blue-500}40"
-
-text: "{gray-200}"
-textDim: "{gray-300}"
-textInactive: "{gray-400}"
-
-border: "{gray-700}"
-borderHover: "{blue-500}"
-borderDim: "{gray-600}"
-
-buttonHoverBg: "{blue-600}"
-white: "{white}"
-
-ansiBlack: "{gray-800}"
-ansiRed: "{red-400}"
-ansiGreen: "{green-400}"
-ansiYellow: "{yellow-400}"
-ansiBlue: "{blue-500}"
-ansiMagenta: "{purple-400}"
-ansiCyan: "{cyan-400}"
-ansiWhite: "{gray-200}"
-ansiBrightBlack: "{gray-700}"
-ansiBrightRed: "{red-400}"
-ansiBrightGreen: "{green-400}"
-ansiBrightYellow: "{yellow-400}"
-ansiBrightBlue: "{blue-500}"
-ansiBrightMagenta: "{purple-400}"
-ansiBrightCyan: "{cyan-400}"
-ansiBrightWhite: "{white}"
-
-bracket1: "{blue-glow}"
-bracket2: "{green-400}"
-bracket3: "{yellow-400}"
-bracket4: "{purple-400}"
-bracket5: "{blue-500}"
-bracket6: "{gray-400}"
-
-scrollbar: "{blue-500}"
-gitAdded: "{green-400}"
-gitModified: "{yellow-400}"
-gitDeleted: "{red-400}"
-gitUntracked: "{gray-400}"
-gitIgnored: "{gray-700}"
-debugStart: "{green-400}"
-debugPause: "{yellow-400}"
-debugStop: "{red-400}"
-```
-
-</details>
-
-### 浅色语义层 `src/core/semantics/light.yaml`
-
-<details>
-<summary>查看完整浅色语义层</summary>
-
-```yaml
-# ==================== 浅色语义层 ====================
-
-primary: "{blue-700}"
-success: "{green-600}"
-warning: "{yellow-700}"
-error: "{red-700}"
-highlight: "{blue-800}"
-cyan: "{cyan-700}"
-purple: "{purple-700}"
-
-function: "{blue-800}"
-operator: "{gray-600}"
-comment: "{gray-600}"
-variable: "{gray-900}"
-variableDim: "{gray-600}"
-textMuted: "{gray-600}"
-punctuation: "{gray-400}"
-
-bg: "{gray-50}"
-bgElevated: "{white}"
-bgMuted: "{gray-100}"
-bgHover: "{blue-700}15"
-bgActive: "{blue-700}25"
-hoverBg: "{gray-100}"
-selectedBg: "{gray-300}"
-
-surfaceGround: "{gray-50}"
-surfaceRaised: "{white}"
-surfaceFloating: "{gray-100}"
-surfaceTooltip: "{gray-200}"
-borderFloating: "{blue-700}80"
-
-text: "{gray-900}"
-textDim: "{gray-600}"
-textInactive: "{gray-400}"
-
-border: "{gray-300}"
-borderHover: "{blue-700}"
-borderDim: "{gray-400}"
-
-buttonHoverBg: "{blue-700}"
-white: "{white}"
-
-ansiBlack: "{gray-900}"
-ansiRed: "{red-700}"
-ansiGreen: "{green-600}"
-ansiYellow: "{yellow-700}"
-ansiBlue: "{blue-700}"
-ansiMagenta: "{purple-700}"
-ansiCyan: "{cyan-700}"
-ansiWhite: "{gray-200}"
-ansiBrightBlack: "{gray-500}"
-ansiBrightRed: "{red-400}"
-ansiBrightGreen: "{green-400}"
-ansiBrightYellow: "{yellow-400}"
-ansiBrightBlue: "{blue-600}"
-ansiBrightMagenta: "{purple-400}"
-ansiBrightCyan: "{cyan-400}"
-ansiBrightWhite: "{white}"
-
-bracket1: "{blue-700}"
-bracket2: "{green-600}"
-bracket3: "{yellow-700}"
-bracket4: "{purple-700}"
-bracket5: "{cyan-700}"
-bracket6: "{gray-500}"
-
-scrollbar: "{blue-700}"
-gitAdded: "{green-600}"
-gitModified: "{yellow-700}"
-gitDeleted: "{red-700}"
-gitUntracked: "{gray-500}"
-gitIgnored: "{gray-400}"
-debugStart: "{green-600}"
-debugPause: "{yellow-700}"
-debugStop: "{red-700}"
-```
-
-</details>
-
----
-
-## 📐 第三步：布局令牌文件
-
-**`src/core/layout.yaml`**
-
-<details>
-<summary>查看完整布局令牌文件</summary>
-
-```yaml
-# ==================== 布局令牌 ====================
-# 包含间距、圆角、阴影、排版、响应式断点、Z-Index
-
-spacing:
-  base: "4px"
-  xs: "4px"
-  sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
-  "2xl": "48px"
-
-radius:
-  none: "0px"
-  sm: "0px"
-  md: "0px"
-  lg: "0px"
-
-shadow:
-  none: "none"
-  border: "0 0 0 1px"
-
-typography:
-  family-mono: "'JetBrains Mono', 'Fira Code', monospace"
-  family-sans: "Inter, system-ui, -apple-system, sans-serif"
-  size-code: "13px"
-  size-body: "14px"
-  size-small: "12px"
-  line-height: "1.5"
-
-breakpoints:
-  mobile: "640px"
-  tablet: "768px"
-  desktop: "1024px"
-  wide: "1280px"
-
-z-index:
-  base: 1
-  sticky: 100
-  overlay: 500
-  modal: 1000
-  tooltip: 1500
-```
-
-</details>
-
----
-
-## 🛠️ 第四步：工业级构建脚本
-
-**`scripts/build.js`**
-
-<details>
-<summary>查看完整工业级构建脚本</summary>
+带着这张地图读代码，你会更清楚每个模块函数在整条流水线中的位置。
 
 ```javascript
-const fs = require("fs");
-const yaml = require("js-yaml");
-const path = require("path");
-const wcag = require("wcag-contrast");
+// scripts/build.js（主流程精简示意）
+import { PATHS } from "./lib/config.js"
+import { ensureFileExists, safeLoadYaml } from "./lib/utils.js"
+import { resolveTokens, replaceVariables } from "./lib/tokens.js"
+import { detectUnusedPrimitives, validateThemeStructure, checkContrast } from "./lib/validators.js"
+import { mergeTokenColors, optimizeSemanticTokenColors } from "./lib/optimizers.js"
+import { generateColorCss, generateLayoutCss, generateDesignSystemDoc, generateScssTokens, generateTsTokens } from "./lib/generators.js"
 
-const ROOT_DIR = path.resolve(__dirname, "..");
-
-// ==================== 路径配置 ====================
-const PATHS = {
-  primitives: path.join(ROOT_DIR, "src", "core", "primitives", "colors.yaml"),
-  semanticsDir: path.join(ROOT_DIR, "src", "core", "semantics"),
-  layout: path.join(ROOT_DIR, "src", "core", "layout.yaml"),
-  workbench: path.join(ROOT_DIR, "src", "workbench.yaml"),
-  semantic: path.join(ROOT_DIR, "src", "semantic.yaml"),
-  langDir: path.join(ROOT_DIR, "src", "languages"),
-  specialDir: path.join(ROOT_DIR, "src", "special"),
-  outputDir: path.join(ROOT_DIR, "themes"),
-  docsDir: path.join(ROOT_DIR, "docs"),
-};
-
-// ==================== 辅助函数 ====================
-
-function ensureFileExists(filePath, description) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`❌ 未找到 ${description} 文件: ${filePath}`);
-  }
-}
-
-function safeLoadYaml(filePath, description) {
+function main() {
+  console.log("🚀 开始构建主题 (DTCG 标准 + 工业级质检)...\n")
   try {
-    return yaml.load(fs.readFileSync(filePath, "utf8"));
+    // 1. 检查必要文件
+    // 2. 加载并标准化原始色值
+    // 3. 生成布局 CSS
+    // 4. 加载公共规则（workbench + semantic）
+    // 5. 加载语言与特殊规则
+    // 6. 扫描语义文件并检测未使用原始值
+    // 7. 为每个语义层文件构建主题
+    // 8. 生成 CSS 变量、跨平台令牌和设计系统文档
+    console.log("\n🎉 所有主题构建完毕！")
   } catch (err) {
-    console.error(`❌ 解析 ${description} 失败 (${filePath}):`, err.message);
-    return null;
+    console.error(err.message)
+    process.exit(1)
   }
 }
 
-/**
- * 十六进制颜色标准化
- */
-function normalizeHex(color, tokenName) {
-  if (typeof color !== "string" || !color.startsWith("#")) {
-    if (color && !color.startsWith("#")) {
-      console.warn(`⚠️ 跳过非十六进制色值: ${tokenName} = ${color}`);
-    }
-    return color;
-  }
+main()
+```
 
-  let hex = color.replace("#", "");
+**核心原则**：每个函数只做一件事。`main()` 中每个步骤对应一个命名清晰的函数（`loadPrimitives()`、`loadCommonRules()`、`loadTokenColors()`……），调用者一眼就能看出构建流程的每一步在做什么。
 
-  if (hex.length === 3) {
-    hex = hex
-      .split("")
-      .map((c) => c + c)
-      .join("");
-  } else if (hex.length === 4) {
-    hex = hex
-      .split("")
-      .map((c) => c + c)
-      .join("");
-  }
+模块化的骨架搭好了，接下来要解决真正的工程问题：**构建过程必须能够自我证明**。
 
-  if (!/^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/.test(hex)) {
-    console.error(
-      `❌ 致命错误: 令牌 "${tokenName}" 的色值 "${color}" 不符合工业规范。`,
-    );
-    console.error(`   要求: 6 位 (#RRGGBB) 或 8 位 (#RRGGBBAA) 十六进制`);
-    process.exit(1);
-  }
+---
 
-  return `#${hex.toLowerCase()}`;
-}
+## 🛡️ 二、质量验证：让构建过程「自我证明」
 
-/**
- * 递归解析令牌引用 {token-name}
- */
-function resolveTokens(obj, tokenMap, depth = 0, path = []) {
-  const MAX_DEPTH = 20;
-  if (depth > MAX_DEPTH) {
-    throw new Error(
-      `[ENGINEERING_FATAL] 令牌循环引用检测: ${path.join(" → ")}`,
-    );
-  }
+工业级构建脚本的核心特征：**它不仅仅生成文件，还会验证生成的文件是否正确**。验证失败时中断构建，让错误在发布之前就被发现。
 
-  if (typeof obj === "string") {
-    const resolveOne = (str) => {
-      return str.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, key) => {
-        const value = tokenMap[key];
-        if (value === undefined) {
-          console.warn(`⚠️ 警告: 令牌 "${key}" 未定义，保留原样`);
-          return match;
-        }
-        return resolveOne(value);
-      });
-    };
-    return resolveOne(obj);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => resolveTokens(item, tokenMap, depth + 1, path));
-  }
-  if (obj && typeof obj === "object") {
-    const result = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = resolveTokens(v, tokenMap, depth + 1, [...path, k]);
-    }
-    return result;
-  }
-  return obj;
-}
+### 2.1 WCAG 对比度自动校验
 
-/**
- * 标准化所有颜色值
- */
-function normalizeColors(obj, tokenName) {
-  if (typeof obj === "string") {
-    return normalizeHex(obj, tokenName);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => normalizeColors(item, tokenName));
-  }
-  if (obj && typeof obj === "object") {
-    const result = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = normalizeColors(v, `${tokenName}.${k}`);
-    }
-    return result;
-  }
-  return obj;
-}
+主题的每个颜色都必须在背景上清晰可读。Moongate 为关键文本角色设置了对 `editor.background` 的最低对比度要求：
 
-/**
- * 检测是否直接引用了原始值（如 {blue-500}）
- * 该函数用于组件层/语义层的原始值引用提醒，目前主要作为架构辅助。
- */
-function detectPrimitiveReference(value, context) {
-  if (typeof value === "string" && /\{([a-zA-Z0-9_-]+)\}/.test(value)) {
-    const match = value.match(/\{([a-zA-Z0-9_-]+)\}/)[1];
-    const primitivePrefixes = [
-      "blue-",
-      "green-",
-      "yellow-",
-      "red-",
-      "cyan-",
-      "purple-",
-      "gray-",
-      "white",
-      "black",
-    ];
-    if (primitivePrefixes.some((prefix) => match.startsWith(prefix))) {
-      console.warn(
-        `[架构提醒] ${context} 中直接引用了原始值 "${match}"，建议通过语义层引用。`,
-      );
-    }
-  }
-}
+| 角色 | 最低对比度 | 说明 |
+|------|-----------|------|
+| `text`（正文） | 4.5:1 | WCAG AA |
+| `textDim`（次要文字） | 4.0:1 | 略低于 AA，权衡视觉层次 |
+| `textMuted`（辅助文字） | 3.0:1 | 大字号/辅助信息可用 |
 
-/**
- * 替换变量 ${var} 为最终色值
- * 透明度后缀说明：透明度后缀使用两位十六进制数（00–FF），例如 20 对应约 12.5% 透明度，
- * 80 对应 50%，FF 对应完全不透明。这种表示法直接对应 CSS 的 #RRGGBBAA 格式。
- */
-function replaceVariables(obj, colors, context = "") {
-  if (typeof obj === "string") {
-    if (context) detectPrimitiveReference(obj, context);
+校验决策可用一棵简单的树来表达：
 
-    return obj.replace(
-      /\$\{([a-zA-Z0-9_-]+)\}([0-9a-fA-F]{2})?/g,
-      (match, key, alpha) => {
-        const value = colors[key];
-        if (value === undefined) {
-          console.warn(`⚠️ 警告: 变量 "${key}" 未定义，保留原样`);
-          return match;
-        }
-        if (alpha) {
-          if (/^rgba?\(/.test(value)) {
-            console.warn(
-              `⚠️ 警告: 变量 "${key}" 值 ${value} 已是 rgba 格式，忽略后缀`,
-            );
-            return value;
-          }
-          if (/^#[0-9a-fA-F]{8}$/.test(value)) {
-            console.warn(
-              `⚠️ 警告: 变量 "${key}" 值 ${value} 已包含透明度，忽略后缀 "${alpha}"`,
-            );
-            return value;
-          }
-          if (/^#[0-9a-fA-F]{6}$/.test(value)) {
-            return value + alpha;
-          }
-          console.warn(
-            `⚠️ 警告: 变量 "${key}" 值 ${value} 格式异常，无法处理透明度`,
-          );
-          return value;
-        }
-        return value;
-      },
-    );
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => replaceVariables(item, colors, context));
-  }
-  if (obj && typeof obj === "object") {
-    const result = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = replaceVariables(v, colors, context);
-    }
-    return result;
-  }
-  return obj;
-}
+```
+某个语义色 vs 背景
+   ├─ ratio < 3.0        → ❌ 构建中断（任何角色都不合格）
+   ├─ 3.0 ≤ ratio < 4.0  → ⚠️ 仅 textMuted 可接受（其余失败）
+   ├─ 4.0 ≤ ratio < 4.5  → ⚠️ 仅 textDim/comment 可接受（text 失败）
+   └─ ratio ≥ 4.5        → ✅ 全部通过（达到 WCAG AA）
+```
 
-/**
- * WCAG 对比度校验（阶梯式标准）
- */
-function checkContrast(color1, color2, role, themeType) {
-  if (!color1 || !color2) return;
-  const ratio = wcag.hex(color1, color2);
+```javascript
+// scripts/lib/validators.js（简化）
+import wcag from "wcag-contrast"
 
-  let minRatio = 4.5;
-  if (role === "textDim" || role === "comment") {
-    minRatio = 4.0;
-  }
-  if (role === "textMuted") {
-    minRatio = 3.0;
-  }
+export function checkContrast(color1, color2, role, themeType) {
+  if (!color1 || !color2) return
+  const ratio = wcag.hex(color1, color2)
+
+  let minRatio = 4.5
+  if (role === "textDim" || role === "comment") minRatio = 4.0
+  if (role === "textMuted") minRatio = 3.0
 
   if (ratio < minRatio) {
     if (role === "textMuted") {
-      console.warn(
-        `⚠️ 对比度略低: ${themeType} · ${role} (${color1}) vs 背景 (${color2}) = ${ratio.toFixed(2)}:1`,
-      );
-      console.warn(`   建议保持 ≥3.0:1，当前满足最低要求。`);
+      console.warn(`⚠️ 对比度略低: ${themeType} · ${role} = ${ratio.toFixed(2)}:1`)
     } else {
-      console.error(
-        `❌ 对比度不足: ${themeType} · ${role} (${color1}) vs 背景 (${color2}) = ${ratio.toFixed(2)}:1`,
-      );
-      console.error(`   WCAG 要求 ≥${minRatio}:1，当前值低于标准`);
-      process.exit(1);
+      throw new Error(
+        `❌ 对比度不足: ${themeType} · ${role} = ${ratio.toFixed(2)}:1` +
+        `\n   WCAG 要求 ≥${minRatio}:1`,
+      )
     }
   } else {
-    console.log(`✅ ${themeType} · ${role}: ${ratio.toFixed(2)}:1`);
-  }
-}
-
-/**
- * 生成颜色 CSS 变量文件（包含深浅模式）
- */
-function generateColorCss(lightColors, darkColors) {
-  let css = `/* ===== Moongate 颜色令牌 - 自动生成 ===== */\n`;
-  css += `/* 来源: VS Code 主题构建脚本 */\n`;
-  css += `/* 请勿手动修改，修改请编辑 primitives/ 和 semantics/ 目录 */\n\n`;
-
-  css += `/* 浅色模式 */\n:root,\n.light {\n`;
-  Object.entries(lightColors).forEach(([key, val]) => {
-    const cssKey = key.replace(/([A-Z])/g, "-$1").toLowerCase();
-    css += `  --ui-${cssKey}: ${val};\n`;
-  });
-  css += `}\n\n`;
-
-  css += `/* 深色模式 */\n.dark {\n`;
-  Object.entries(darkColors).forEach(([key, val]) => {
-    const cssKey = key.replace(/([A-Z])/g, "-$1").toLowerCase();
-    css += `  --ui-${cssKey}: ${val};\n`;
-  });
-  css += `}\n`;
-
-  const cssPath = path.join(PATHS.outputDir, "moongate-colors.css");
-  fs.writeFileSync(cssPath, css);
-  console.log(`✅ 颜色令牌已生成: ${cssPath}`);
-}
-
-/**
- * 生成布局/排版/响应式 CSS 变量文件（支持嵌套对象）
- */
-function generateLayoutCss(layoutTokens) {
-  let css = `/* ===== Moongate 布局令牌 - 自动生成 ===== */\n`;
-  css += `/* 包含：间距、圆角、阴影、排版、响应式断点、Z-Index */\n`;
-  css += `/* 请勿手动修改，修改请编辑 src/core/layout.yaml */\n\n`;
-
-  css += `:root {\n`;
-
-  function flattenObject(obj, prefix = "") {
-    Object.entries(obj).forEach(([key, val]) => {
-      const fullKey = prefix ? `${prefix}-${key}` : key;
-      if (val && typeof val === "object" && !Array.isArray(val)) {
-        flattenObject(val, fullKey);
-      } else {
-        let formattedVal = val;
-        if (typeof formattedVal === "string") {
-          if (
-            (formattedVal.startsWith("'") && formattedVal.endsWith("'")) ||
-            (formattedVal.startsWith('"') && formattedVal.endsWith('"'))
-          ) {
-            formattedVal = formattedVal.slice(1, -1);
-          }
-        }
-        css += `  --ui-${fullKey}: ${formattedVal};\n`;
-      }
-    });
-  }
-
-  flattenObject(layoutTokens);
-
-  css += `}\n`;
-
-  const cssPath = path.join(PATHS.outputDir, "moongate-layout.css");
-  fs.writeFileSync(cssPath, css);
-  console.log(`✅ 布局令牌已生成: ${cssPath}`);
-}
-
-/**
- * 生成设计系统文档（增强版）
- * 包含变量选择协议、原始色值、海拔系统、语义层对比度
- */
-function generateDesignSystemDoc(primitives, lightColors, darkColors) {
-  const md = [];
-
-  md.push("# Moongate 设计系统\n");
-  md.push("## 🧭 Moongate 变量选择协议\n");
-  md.push("为了确保设计系统的长期可维护性和语义一致性，请遵循以下决策路径：\n");
-  md.push("| 场景 | 查找位置 | 禁止行为 |");
-  md.push("|------|----------|----------|");
-  md.push(
-    "| **我需要定义新的基础色值**（如 `blue-600`） | `primitives/colors.yaml` | ❌ 不要在语义层或组件层直接写色值 |",
-  );
-  md.push(
-    "| **我需要给某个语义角色赋值**（如 `primary` 应该是什么颜色） | `semantics/*.yaml`（引用原始值） | ❌ 不要在组件层直接引用原始值 |",
-  );
-  md.push(
-    "| **我要为 UI 组件设置样式**（如 `sideBar.background`） | 引用语义层变量（如 `${surfaceRaised}`） | ❌ 不要直接使用 `${blue-500}` 或硬编码色值 |",
-  );
-  md.push(
-    "| **语义层缺少我需要的角色** | 在语义层新增一个逻辑角色（如 `actionHover`），再在组件中引用它 | ❌ 禁止在组件层发明新变量 |",
-  );
-  md.push(
-    "\n> **核心原则**：所有颜色必须经过“原始值 → 语义层 → 组件层”的传递链条，任何跨层直接引用都是**架构污染**。\n",
-  );
-
-  md.push("## 🎨 原始色值\n");
-
-  const colorGroups = {
-    blue: [
-      "blue-500",
-      "blue-600",
-      "blue-700",
-      "blue-800",
-      "blue-900",
-      "blue-glow",
-      "blue-glow-dark",
-    ],
-    green: ["green-400", "green-600", "green-700"],
-    yellow: ["yellow-400", "yellow-500", "yellow-600", "yellow-700"],
-    red: ["red-400", "red-500", "red-600", "red-700"],
-    cyan: ["cyan-400", "cyan-500", "cyan-700"],
-    purple: ["purple-400", "purple-500", "purple-700"],
-    gray: Object.keys(primitives).filter((k) => k.startsWith("gray-")),
-    special: ["white", "black"],
-  };
-
-  for (const [group, keys] of Object.entries(colorGroups)) {
-    if (keys.length === 0) continue;
-    md.push(`### ${group.charAt(0).toUpperCase() + group.slice(1)} 色系\n`);
-    md.push("| 令牌 | 色值 | 预览 |");
-    md.push("|------|------|------|");
-    for (const key of keys) {
-      if (!primitives[key]) continue;
-      const val = primitives[key];
-      const preview = `![](https://placehold.co/20x20/${val.slice(1)}/${val.slice(1)}?text=+)`;
-      md.push(`| \`--moongate-${key}\` | \`${val}\` | ${preview} |`);
-    }
-    md.push("");
-  }
-
-  md.push("## 🏔️ 海拔系统（Elevation System）\n");
-  md.push(
-    "海拔系统通过明度差异表达 UI 元素的物理深度，遵循 Material Design 海拔规范。",
-  );
-  md.push("| 变量 | 浅色模式 | 深色模式 | 说明 |");
-  md.push("|------|----------|----------|------|");
-  md.push(
-    `| \`surfaceGround\` | \`${lightColors.surfaceGround}\` | \`${darkColors.surfaceGround}\` | 地面层（0dp）—— 编辑器背景 |`,
-  );
-  md.push(
-    `| \`surfaceRaised\` | \`${lightColors.surfaceRaised}\` | \`${darkColors.surfaceRaised}\` | 隆起层（2dp）—— 侧边栏、活动栏 |`,
-  );
-  md.push(
-    `| \`surfaceFloating\` | \`${lightColors.surfaceFloating}\` | \`${darkColors.surfaceFloating}\` | 漂浮层（8dp）—— 弹窗、菜单 |`,
-  );
-  md.push(
-    `| \`surfaceTooltip\` | \`${lightColors.surfaceTooltip}\` | \`${darkColors.surfaceTooltip}\` | 提示层（12dp）—— 工具提示 |`,
-  );
-  md.push(
-    `| \`borderFloating\` | \`${lightColors.borderFloating}\` | \`${darkColors.borderFloating}\` | 浮层边框（半透明主色） |\n`,
-  );
-
-  const contrast = (color1, color2) => {
-    if (!color1 || !color2) return null;
-    try {
-      return wcag.hex(color1, color2).toFixed(2);
-    } catch {
-      return null;
-    }
-  };
-
-  md.push("## 🌙 浅色模式语义层\n");
-  md.push("| 语义变量 | 色值 | 预览 | WCAG 对比度（vs `bg`） |");
-  md.push("|----------|------|------|------------------------|");
-  const lightBg = lightColors.bg;
-  const lightImportantKeys = [
-    "text",
-    "textDim",
-    "textMuted",
-    "comment",
-    "primary",
-    "success",
-    "warning",
-    "error",
-  ];
-  for (const [key, val] of Object.entries(lightColors)) {
-    const preview = `![](https://placehold.co/20x20/${val.slice(1)}/${val.slice(1)}?text=+)`;
-    let contrastRatio = "-";
-    if (lightImportantKeys.includes(key) && lightBg) {
-      const ratio = contrast(val, lightBg);
-      if (ratio) contrastRatio = `${ratio}:1`;
-    }
-    md.push(`| \`${key}\` | \`${val}\` | ${preview} | ${contrastRatio} |`);
-  }
-
-  md.push("\n## 🌑 深色模式语义层\n");
-  md.push("| 语义变量 | 色值 | 预览 | WCAG 对比度（vs `bg`） |");
-  md.push("|----------|------|------|------------------------|");
-  const darkBg = darkColors.bg;
-  for (const [key, val] of Object.entries(darkColors)) {
-    const preview = `![](https://placehold.co/20x20/${val.slice(1)}/${val.slice(1)}?text=+)`;
-    let contrastRatio = "-";
-    if (lightImportantKeys.includes(key) && darkBg) {
-      const ratio = contrast(val, darkBg);
-      if (ratio) contrastRatio = `${ratio}:1`;
-    }
-    md.push(`| \`${key}\` | \`${val}\` | ${preview} | ${contrastRatio} |`);
-  }
-
-  const mdPath = path.join(PATHS.docsDir, "DESIGN_SYSTEM.md");
-  if (!fs.existsSync(PATHS.docsDir)) {
-    fs.mkdirSync(PATHS.docsDir, { recursive: true });
-  }
-  fs.writeFileSync(mdPath, md.join("\n"), "utf8");
-  console.log(`✅ 设计系统文档已生成: ${mdPath}`);
-}
-
-function getThemeInfo() {
-  const pkgPath = path.join(ROOT_DIR, "package.json");
-  if (!fs.existsSync(pkgPath)) {
-    return { name: "your-theme", displayName: "Your Theme" };
-  }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-    let displayName = pkg.displayName || pkg.name || "Your Theme";
-    if (displayName.startsWith("@") && displayName.includes("/")) {
-      displayName = displayName.split("/")[1];
-    }
-    return {
-      name: pkg.name || "your-theme",
-      displayName,
-    };
-  } catch {
-    return { name: "your-theme", displayName: "Your Theme" };
-  }
-}
-
-// ==================== 主流程 ====================
-function main() {
-  console.log("🚀 开始构建主题 (DTCG 标准 + 工业级质检)...\n");
-
-  try {
-    ensureFileExists(PATHS.primitives, "原始值");
-    ensureFileExists(PATHS.semanticsDir, "语义目录");
-    ensureFileExists(PATHS.layout, "布局令牌");
-    ensureFileExists(PATHS.workbench, "workbench");
-    ensureFileExists(PATHS.semantic, "semantic");
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-
-  console.log("📦 加载原始值...");
-  const primitivesRaw = safeLoadYaml(PATHS.primitives, "primitives.yaml");
-  if (!primitivesRaw) process.exit(1);
-
-  const primitives = {};
-  Object.entries(primitivesRaw).forEach(([key, val]) => {
-    primitives[key] = normalizeHex(val, `primitives.${key}`);
-  });
-
-  console.log("📦 加载布局令牌...");
-  const layoutTokens = safeLoadYaml(PATHS.layout, "layout.yaml");
-  if (layoutTokens) {
-    generateLayoutCss(layoutTokens);
-  } else {
-    console.error("❌ layout.yaml 加载失败，构建终止");
-    process.exit(1);
-  }
-
-  console.log("📦 加载公共规则...");
-  const workbenchRaw = safeLoadYaml(PATHS.workbench, "workbench.yaml");
-  const semanticRaw = safeLoadYaml(PATHS.semantic, "semantic.yaml");
-  if (!workbenchRaw || !semanticRaw) process.exit(1);
-
-  console.log("📚 加载语言规则...");
-  let tokenColorsRaw = [];
-  if (fs.existsSync(PATHS.langDir)) {
-    const langFiles = fs
-      .readdirSync(PATHS.langDir)
-      .filter((f) => f.endsWith(".yaml"))
-      .sort();
-    langFiles.forEach((file) => {
-      const filePath = path.join(PATHS.langDir, file);
-      const langRules = safeLoadYaml(filePath, `语言规则 ${file}`);
-      if (langRules?.tokenColors) {
-        tokenColorsRaw = tokenColorsRaw.concat(langRules.tokenColors);
-        console.log(`   ✅ 已加载: ${file}`);
-      }
-    });
-  }
-
-  console.log("✨ 加载特殊规则...");
-  if (fs.existsSync(PATHS.specialDir)) {
-    const specialFiles = fs
-      .readdirSync(PATHS.specialDir)
-      .filter((f) => f.endsWith(".yaml"));
-    specialFiles.forEach((file) => {
-      const filePath = path.join(PATHS.specialDir, file);
-      const specialRules = safeLoadYaml(filePath, `特殊规则 ${file}`);
-      if (specialRules?.tokenColors) {
-        tokenColorsRaw = tokenColorsRaw.concat(specialRules.tokenColors);
-        console.log(`   ✅ 已加载: ${file}`);
-      }
-    });
-  }
-
-  console.log("\n🎨 扫描语义文件...");
-  const semanticFiles = fs
-    .readdirSync(PATHS.semanticsDir)
-    .filter((f) => f.endsWith(".yaml"));
-  if (semanticFiles.length === 0) {
-    console.error("❌ semantics 目录下没有找到 .yaml 文件");
-    process.exit(1);
-  }
-
-  const themeInfo = getThemeInfo();
-  let baseName = themeInfo.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-
-  let lightSemantics, darkSemantics;
-
-  console.log(`\n🔨 开始构建主题...\n`);
-  semanticFiles.forEach((semanticFile) => {
-    const themeType = path.basename(semanticFile, ".yaml");
-    const outputFile = path.join(
-      PATHS.outputDir,
-      `${baseName}-${themeType}.json`,
-    );
-
-    const semanticsPath = path.join(PATHS.semanticsDir, semanticFile);
-    const semantics = safeLoadYaml(semanticsPath, `语义层 ${semanticFile}`);
-    if (!semantics) {
-      console.error(`   ❌ 跳过 ${semanticFile}`);
-      return;
-    }
-
-    const resolved = resolveTokens(semantics, primitives);
-    const normalized = normalizeColors(resolved, `semantics.${semanticFile}`);
-
-    if (themeType === "light") lightSemantics = normalized;
-    if (themeType === "dark") darkSemantics = normalized;
-
-    const uiColors = replaceVariables(workbenchRaw, normalized, `workbench`);
-    const semanticColors = replaceVariables(
-      semanticRaw,
-      normalized,
-      `semantic`,
-    );
-    const tokenColors = replaceVariables(
-      tokenColorsRaw,
-      normalized,
-      `tokenColors`,
-    );
-
-    const type = themeType.includes("light") ? "light" : "dark";
-    const displaySuffix = themeType === "dark" ? "Dark" : "Light";
-
-    const theme = {
-      name: `${themeInfo.displayName} ${displaySuffix}`,
-      type: type,
-      colors: uiColors,
-      tokenColors: tokenColors,
-      semanticTokenColors: semanticColors,
-    };
-
-    if (!fs.existsSync(PATHS.outputDir)) {
-      fs.mkdirSync(PATHS.outputDir, { recursive: true });
-    }
-
-    fs.writeFileSync(outputFile, JSON.stringify(theme, null, 2));
-    console.log(`   ✅ 构建完成: ${outputFile}`);
-
-    if (normalized.bg && normalized.text) {
-      checkContrast(normalized.text, normalized.bg, "text", themeType);
-    }
-    if (normalized.bg && normalized.textDim) {
-      checkContrast(normalized.textDim, normalized.bg, "textDim", themeType);
-    }
-    if (normalized.bg && normalized.textMuted) {
-      checkContrast(
-        normalized.textMuted,
-        normalized.bg,
-        "textMuted",
-        themeType,
-      );
-    }
-  });
-
-  if (lightSemantics && darkSemantics) {
-    generateColorCss(lightSemantics, darkSemantics);
-    generateDesignSystemDoc(primitives, lightSemantics, darkSemantics);
-  }
-
-  console.log("\n🎉 所有主题构建完毕！");
-}
-
-main();
-```
-
----
-
-## ⚙️ 第五步：配置 package.json
-
-```json
-{
-  "name": "moongate-theme",
-  "version": "2.2.0",
-  "scripts": {
-    "build": "node scripts/build.js",
-    "watch": "nodemon --watch src -e yaml --exec \"pnpm run build\"",
-    "prepublishOnly": "pnpm run build"
-  },
-  "devDependencies": {
-    "js-yaml": "^4.1.1",
-    "nodemon": "^3.1.14",
-    "wcag-contrast": "^3.0.0"
+    console.log(`✅ ${themeType} · ${role}: ${ratio.toFixed(2)}:1`)
   }
 }
 ```
 
-> ⚠️ **注意**：请确保执行 `pnpm install` 或 `npm install` 安装所有依赖，否则脚本将因缺少 `wcag-contrast` 而报错。
-
----
-
-## 🚀 第六步：运行构建
-
-```bash
-pnpm run build
-```
-
-构建成功后，你会看到以下输出：
+构建成功时，你会看到类似输出：
 
 ```
-🚀 开始构建主题 (DTCG 标准 + 工业级质检)...
-
-📦 加载原始值...
-📦 加载布局令牌...
-✅ 布局令牌已生成: themes/moongate-layout.css
-📦 加载公共规则...
-📚 加载语言规则...
-   ✅ 已加载: base.yaml
-   ...
-✨ 加载特殊规则...
-   ✅ 已加载: better-comments.yaml
-
-🎨 扫描语义文件...
-
-🔨 开始构建主题...
-   ✅ 构建完成: themes/moongate-dark.json
 ✅ dark · text: 14.48:1
 ✅ dark · textDim: 12.02:1
 ✅ dark · textMuted: 6.96:1
-   ✅ 构建完成: themes/moongate-light.json
 ✅ light · text: 17.08:1
 ✅ light · textDim: 7.25:1
 ✅ light · textMuted: 7.25:1
-✅ 颜色令牌已生成: themes/moongate-colors.css
-✅ 设计系统文档已生成: docs/DESIGN_SYSTEM.md
-
-🎉 所有主题构建完毕！
 ```
 
-生成的文件：
+**关键设计**：`textDim` 和 `textMuted` 使用**阶梯式标准**而非统一 4.5:1——因为「视觉退后」本身就是设计意图，只要保持最低可读性即可。如果所有辅助文字都强制 4.5:1，注释和辅助信息就无法在视觉上「退后」了。
 
-- `themes/moongate-dark.json`、`moongate-light.json`：VS Code 主题
-- `themes/moongate-colors.css`：颜色令牌（深浅模式）
-- `themes/moongate-layout.css`：布局令牌（间距、排版、断点等）
-- `docs/DESIGN_SYSTEM.md`：完整设计系统文档，包含变量选择协议
+### 2.2 结构验证：生成的文件必须自洽
+
+`validateThemeStructure` 验证生成的主题 JSON：
+
+- 必须包含 `name`、`type`、`colors`、`tokenColors`、`semanticTokenColors` 五个必需键。
+- `colors` 不能为空对象，且所有值必须是合法的 6 位或 8 位十六进制色值。
+- `tokenColors` 必须是数组。
+- **不能存在未解析的 `${var}` 或 `{token}` 残留**——如果某个变量因为拼写错误没有被替换，这里会直接报错并中断构建。
+
+验证失败时，抛出 `ThemeValidationError` 并携带是哪个输出文件出错的信息，错误处理统一由主流程捕获，而不是散落在各个函数里。
+
+### 2.3 循环引用检测
+
+语义层可能引用原始值，原始值理论上也可能引用另一个原始值。如果 `a → b → a` 形成循环，`resolveTokens` 会无限递归。
+
+`tokens.js` 的做法：**设定深度上限（20 层），超过则抛出 `[ENGINEERING_FATAL]` 错误并输出引用链**：
+
+```javascript
+export function resolveTokens(obj, tokenMap, depth = 0, path = []) {
+  const MAX_DEPTH = 20
+  if (depth > MAX_DEPTH) {
+    throw new Error(`[ENGINEERING_FATAL] 令牌循环引用检测: ${path.join(" → ")}`)
+  }
+  // ...
+}
+```
+
+20 层的上限远高于正常的令牌引用深度（正常不会超过 2-3 层），因此一旦触发，**几乎可以确定是循环引用**。
+
+### 2.4 重复色值与未使用令牌检测
+
+- **`detectDuplicateColors`**：检测原始值中是否有两个不同名字指向同一个色值。这不是错误（有时同名色值用于语义区分），但值得提醒——可能是命名混乱的信号。
+- **`detectUnusedPrimitives`**：检测哪些原始值没有被任何语义层引用。未被引用的原始值可能是「死代码」，也提示语义层可能存在缺口。
+
+### 2.5 架构污染检测
+
+设计系统篇提到：颜色必须经历「原始值 → 语义层 → 组件层」的传递链条，任何跨层直接引用都是架构污染。
+
+`tokens.js` 中的 `detectPrimitiveReference` 会在构建时检测**组件层是否直接引用了原始值**（如 `workbench.yaml` 中出现 `editor.background: "${blue-500}"` 而非 `${surfaceGround}`），并给出警告：
+
+```
+[架构提醒] workbench 中直接引用了原始值 "blue-500"，建议通过语义层引用。
+```
+
+这个功能让「架构规范」从口头约定变成了**可自动检查的工程约束**。
+
+构建必须正确，但正确还不够——**生成的产物还要精简**，否则文件会随语言增多而膨胀。
 
 ---
 
-## 📊 第七步：使用生成的资产
+## ⚙️ 三、输出优化：让生成的 JSON 更精简
 
-### CSS 变量命名规则
+工业级构建不仅要「生成正确」，还要「生成精致」。Moongate 通过两个优化步骤，让最终主题 JSON 大幅精简。
 
-生成的 CSS 变量使用 `--ui-` 前缀，并将语义层变量名（驼峰）转换为 kebab-case。例如：
+### 3.1 `mergeTokenColors`：合并相同样式的规则
 
-| 语义变量        | 生成的 CSS 变量       | 说明         |
-| --------------- | --------------------- | ------------ |
-| `bg`            | `--ui-bg`             | 编辑器背景   |
-| `surfaceRaised` | `--ui-surface-raised` | 隆起层背景   |
-| `textMuted`     | `--ui-text-muted`     | 辅助文字颜色 |
-| `spacing.md`    | `--ui-spacing-md`     | 中等间距     |
+不同语言中经常有为不同 scope 分配**完全相同样式**的规则。例如：
 
-### 在博客中使用 CSS 变量
+```yaml
+# python.yaml
+- name: Python F-string Expression
+  scope: ["meta.fstring.python"]
+  settings: { foreground: "#7dd3fc" }
 
-```html
-<link rel="stylesheet" href="/themes/moongate-colors.css" />
-<link rel="stylesheet" href="/themes/moongate-layout.css" />
+# jsx.yaml
+- name: JSX Expression Braces
+  scope: ["meta.jsx.expression"]
+  settings: { foreground: "#7dd3fc" }
 ```
 
-```css
-body {
-  background: var(--ui-bg);
-  color: var(--ui-text);
-  font-family: var(--ui-typography-family-sans);
-  font-size: var(--ui-typography-size-body);
+这两个规则的颜色相同，完全可以合并为一条规则、两个 scope。`mergeTokenColors` 自动完成这件事：
+
+- 将 `settings` 序列化为**稳定键**（按键名排序，避免 `{foreground, fontStyle}` 和 `{fontStyle, foreground}` 被当作不同规则）。
+- 相同样式的 rule 合并，scope 聚合为数组。
+- 结果按 scope 数量降序排序（更具体的规则在前）。
+
+实际效果：Moongate v2.4.0 中，`tokenColors` 规则数从约 **89 条精简至约 34 条（减少 62%）**，主题 JSON 体积减少约 16%。
+
+### 3.2 `optimizeSemanticTokenColors`：删除冗余 foreground
+
+VS Code 的语义角色支持**父级继承**：`function.declaration` 会自动继承 `function` 的样式，除非被显式覆盖。
+
+因此，当 `function.declaration` 的 `foreground` 与父级 `function` 完全相同时，可以安全删除 `foreground`，只保留额外的 `fontStyle`：
+
+```javascript
+// 优化前
+{
+  "function": "#87cefa",
+  "function.declaration": {
+    "foreground": "#87cefa",  // 冗余！与父级相同
+    "fontStyle": "bold"
+  }
 }
 
-.card {
-  background: var(--ui-surface-raised);
-  border: var(--ui-shadow-border) var(--ui-border);
-  padding: var(--ui-spacing-md);
-  border-radius: var(--ui-radius-none);
-}
-
-.button-primary:hover {
-  /* 状态复合：底色 + 遮罩 */
-  background-image: linear-gradient(
-    var(--ui-action-hover),
-    var(--ui-action-hover)
-  );
-  background-color: var(--ui-primary);
-}
-
-@media (min-width: var(--ui-breakpoint-tablet)) {
-  .container {
-    padding: var(--ui-spacing-lg);
+// 优化后
+{
+  "function": "#87cefa",
+  "function.declaration": {
+    "fontStyle": "bold"  // VS Code 自动继承 function 的颜色
   }
 }
 ```
 
-### 切换深浅模式
+这个优化需要小心：只有当父子关系确实存在、且 foreground 确实相同时才安全。`optimizeSemanticTokenColors` 精确实现这个逻辑，并在删除时计数输出。
 
-在根元素上添加/移除 `.dark` 类：
-
-```javascript
-document.documentElement.classList.toggle("dark");
-```
-
-</details>
+输出精简了，还藏着一个更深的问题：**规则本身对不对**？scope 是不是真的存在？
 
 ---
 
-## 📝 总结
+## 🔍 四、Scope 验证：让「规则写了对不上」成为历史
 
-通过本篇，你将工业级构建脚本完整落地：
+主题开发中最令人沮丧的问题之一：**精心编写的语言规则，在代码里却不生效**。
 
-- ✅ DTCG 三层架构完整实现（原始值、语义层、组件层）
-- ✅ 颜色标准化与循环检测
-- ✅ WCAG 对比度自动校验
-- ✅ 自动生成颜色 CSS 变量文件
-- ✅ 自动生成布局 CSS 变量文件（间距、排版、断点等）
-- ✅ 自动生成设计系统文档（含变量选择协议）
+原因通常是：规则里的 `scope` 并不存在于 VS Code 实际使用的 TextMate 语法中。每个语言（Python、Go、Rust……）的 scope 是**由语法文件定义的**，不同语言、不同版本之间可能有巨大差异。手动对照语法文档编写 scope 非常容易出错。
 
-这套脚本不仅服务于 Moongate 主题，更可以作为你未来所有设计系统项目的工程基石。现在，你已经拥有了一整套从“设计哲学”到“工程代码”再到“跨平台资产”的完整设计系统。
+Moongate 的解决方案是 **`scripts/verify-scopes.js`**——自动解析 VS Code 内置的 TextMate 语法文件，比对语言配置中的每个 scope，找出「写了却永远不生效」的死规则。
 
-**探索不息，编码不止。**
+### 4.1 工作原理
 
-[⬆ 返回顶部](#)
+```javascript
+// scripts/verify-scopes.js（CLI 入口）
+import { verifyAllScopes, formatVerificationResult } from "./lib/scope-validator.js"
+
+const result = verifyAllScopes({ verbose: true })
+
+console.log("🔍 验证语言配置中的 scope...\n")
+process.stdout.write(formatVerificationResult(result))
+
+if (!result.isValid) {
+  console.error(`\n❌ 发现 ${result.totalIssues} 个 scope 不匹配，验证失败！`)
+  process.exit(1)
+}
+```
+
+`scope-validator.js` 的核心流程：
+
+1. **定位语法源**：在 VS Code 安装目录中找到对应语言的 TextMate 语法 JSON 文件（如 `python.tmLanguage.json`）。
+2. **提取全部作用域**：遍历语法文件中的 `patterns`、`captures`、`repository` 等结构，收集该语言所有可用的 scope 列表。
+3. **比对语言规则**：将 `src/languages/*.yaml` 中定义的每个 scope 与语法中实际存在的 scope 比对。
+4. **输出报告**：列出每个不匹配的 scope、所在文件、是哪个语言规则定义的。
+
+### 4.2 它发现了什么？
+
+在 Moongate v2.6.0 中，`verify-scopes.js` 帮助修复了 **8 个语言文件**的 scope 问题。其中最有代表性的几个：
+
+| 语言 | 修复前（错误的 scope） | 修复后（正确的 scope） |
+|------|----------------------|----------------------|
+| Rust | `support.macro.rust` | `entity.name.function.macro.rust` |
+| Rust | `lifetime` | `entity.name.type.lifetime.rust` |
+| Go | `entity.name.package.go` | `keyword.package.go` |
+| Python | `meta.decorator.python` | `meta.function.decorator.python` |
+| Markdown | `heading.1.markdown` 等 | `markup.heading.markdown` 等 |
+
+更关键的是，**验证工具可以防止回归**——每次修改语言规则后运行一次，立刻知道哪些 scope 是「写了但永远不会生效」的。
+
+### 4.3 在 CI 中使用
+
+`verify-scopes.js` 在发现错误时以退出码 1 结束，因此可以无缝集成到 CI 流程中：
+
+```json
+{
+  "scripts": {
+    "test:scopes": "node scripts/verify-scopes.js"
+  }
+}
+```
+
+CI 中运行 `pnpm test:scopes`，一旦有人提交了错误的 scope，构建立即失败。
+
+验证工具越来越多，**验证工具自身也需要被验证**——这就是自动化测试的价值。
+
+---
+
+## 🧪 五、自动化测试：让构建系统可回归验证
+
+当构建系统承担了「生成全部产物 + 质量验证 + 架构检查」的重任后，构建系统**自身**也需要测试来防止回归。
+
+Moongate 使用 Node.js 内置的 `node --test` 测试运行器，不需要额外安装测试框架：
+
+### 5.1 测试覆盖范围
+
+```
+test/
+├── tokens.test.js        # 令牌解析、变量替换、循环检测
+├── validators.test.js    # WCAG 对比度、结构验证、架构污染检测
+├── optimizers.test.js    # token 合并、语义色精简
+├── generators.test.js    # CSS/SCSS/TS/文档生成器
+├── utils.test.js         # normalizeHex、duplicateColors 等工具
+├── scope-validator.test.js # scope 验证逻辑
+├── better-comments.test.js # Better Comments 生成器
+├── theme-output.test.js  # 构建输出的主题 JSON 完整性
+└── helpers.js            # 测试辅助（捕获 console、断言抛错）
+```
+
+85 个测试覆盖三大类：
+
+1. **纯函数逻辑**：`normalizeHex` 对 3 位/4 位/8 位色值的处理、`resolveTokens` 的循环检测、`mergeTokenColors` 的稳定键等。
+2. **边界条件**：非法色值抛错、未定义变量警告、透明度后缀的多种边界情况。
+3. **产物一致性**：生成的 CSS 变量与语义层一一对应、Better Comments 配置与深色语义层色值同步。
+
+### 5.2 测试辅助：捕获 console 输出
+
+构建工具大量使用 `console.log` / `console.warn` 输出进度和警告。测试时，`test/helpers.js` 提供统一的辅助函数来捕获这些输出并断言：
+
+```javascript
+// test/helpers.js（示意）
+export function captureConsole(fn) {
+  const logs = []
+  const originalLog = console.log
+  const originalWarn = console.warn
+  console.log = (...args) => logs.push({ type: "log", args })
+  console.warn = (...args) => logs.push({ type: "warn", args })
+  try {
+    const result = fn()
+    return { logs, result }
+  } finally {
+    console.log = originalLog
+    console.warn = originalWarn
+  }
+}
+```
+
+这个模式的优雅之处：**不需要 mock 每个函数**——只要断言 `console.warn` 被调用过，且传入了包含「警告」关键词的参数，就能验证「未定义变量时会发出警告」这类行为。
+
+### 5.3 运行测试
+
+```json
+{
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}
+```
+
+```bash
+pnpm test
+```
+
+输出示例：
+
+```
+▶ tokens.test.js
+  ✔ 解析令牌引用 {token}
+  ✔ 替换变量 ${var} 支持透明度后缀
+  ✔ 检测到循环引用时抛出错误
+  ...
+▶ validators.test.js
+  ✔ 结构验证：缺少必需键时报错
+  ✔ WCAG 对比度不足时抛出异常
+  ...
+✔ 85 tests passed
+```
+
+构建体系稳定之后，可以把这套能力伸向**生态整合**：让配色在插件生态里也不漂移。
+
+---
+
+## 🎨 六、Better Comments 双源消除
+
+主题的一个重要生态整合是 **Better Comments** 插件——它让注释中的 `TODO`、`FIXME`、`NOTE` 等标记拥有专属颜色。旧方案的问题在于：**颜色存在两处**（主题的语义层 + Better Comments 的 JSON 配置），修改一处后另一处容易忘改，导致配色漂移。
+
+Moongate 的解法：**Better Comments 配置由构建脚本自动生成**，从深色语义层读取色值。
+
+### 6.1 单源真相
+
+```javascript
+// scripts/generate-better-comments.js（核心逻辑）
+import { resolveTokens } from "./lib/tokens.js"
+
+// Better Comments 需要的语义变量 → tag 映射
+const TAG_MAP = [
+  { tag: "TODO", semanticKey: "warning", bold: true },
+  { tag: "FIXME", semanticKey: "error", bold: true, italic: true },
+  { tag: "NOTE", semanticKey: "highlight", italic: true },
+  { tag: "HACK", semanticKey: "purple", bold: true },
+  { tag: "BUG", semanticKey: "error", bold: true, underline: true },
+  { tag: "XXX", semanticKey: "warning", bold: true },
+]
+
+// 从深色语义层解析每个 tag 对应的最终色值
+const tags = TAG_MAP.map(({ tag, semanticKey, ...style }) => {
+  const color = resolveTokens(darkSemantics[semanticKey], primitives)
+  return { tag, color, ...style }
+})
+
+// 写入 extras/better-comments.json
+```
+
+当你在 `dark.yaml` 中调整 `warning` 的颜色时，运行 `pnpm run gen:better-comments`，`extras/better-comments.json` 自动同步。
+
+### 6.2 内置规则：零配置开箱即用
+
+除了生成独立预设，Moongate 还在 `src/special/better-comments.yaml` 中内置了 6 个特殊注释 scope 的规则（TODO、FIXME、NOTE、HACK、BUG、XXX）。**安装 Moongate 主题后，Better Comments 插件自动使用官方配色，无需任何手动配置。**
+
+这条「双通道」设计覆盖了两种用户：
+
+- **主题用户**：安装 Moongate 即获得完整配色（内置规则）。
+- **独立配置用户**：不使用主题、只看注释配色的人，可以单独引入 `extras/better-comments.json`。
+
+两条通道都从语义层生成，**不会产生双源漂移**。
+
+---
+
+## 📦 七、多格式产物生成：一套令牌，全平台复用
+
+设计系统篇介绍了 CSS 变量导出。Moongate 进一步将语义层导出为**四种格式**，覆盖 Web、Sass 和 TypeScript 生态：
+
+| 产物 | 格式 | 适用场景 |
+|------|------|---------|
+| `themes/moongate-colors.css` | CSS 变量 | 博客、组件库、任何 Web 项目 |
+| `themes/moongate-layout.css` | CSS 变量（布局） | 间距、排版、断点、z-index |
+| `themes/_tokens.scss` | SCSS | Sass 项目 |
+| `themes/tokens.ts` | TypeScript | 前端框架项目 |
+
+### 7.1 SCSS 令牌
+
+```scss
+// themes/_tokens.scss（自动生成）
+// 部分示意
+$ui-colors-dark: (
+  bg: #0f172a,
+  primary: #3b82f6,
+  surface-raised: #1a2538,
+  // ...
+);
+
+$ui-colors-light: (
+  bg: #f9fafb,
+  primary: #0284c7,
+  surface-raised: #ffffff,
+  // ...
+);
+
+// 深色模式便捷变量
+$ui-bg: #0f172a;
+$ui-primary: #3b82f6;
+```
+
+### 7.2 TypeScript 令牌
+
+```typescript
+// themes/tokens.ts（自动生成）
+export interface MoongateTokens {
+  dark: Record<string, string>
+  light: Record<string, string>
+}
+
+export const tokens: MoongateTokens = {
+  dark: {
+    bg: "#0f172a",
+    primary: "#3b82f6",
+    // ...
+  },
+  light: {
+    bg: "#f9fafb",
+    primary: "#0284c7",
+    // ...
+  },
+}
+
+export default tokens
+```
+
+### 7.3 设计系统文档自动生成
+
+构建脚本还会自动生成 `docs/DESIGN_SYSTEM.md`——包含变量选择协议、原始色板预览、海拔系统表格、WCAG 对比度数据。这份文档**不是手写的**，而是每次构建时从真实数据生成，保证文档永远与代码一致。
+
+---
+
+## 🔧 八、CI/发布链路：错误在发布前被发现
+
+工业级工程的最后一块拼图：**把验证融入发布流程**。
+
+```json
+{
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:scopes": "node scripts/verify-scopes.js",
+    "gen:better-comments": "node scripts/generate-better-comments.js",
+    "package": "pnpm run build && pnpm run gen:better-comments && vsce package",
+    "publish": "pnpm run build && pnpm run gen:better-comments && vsce publish",
+    "prepublishOnly": "pnpm run build && pnpm run gen:better-comments"
+  }
+}
+```
+
+发布链路逐层把关：
+
+```
+pnpm run package
+  → pnpm run build              # 构建 + WCAG 校验 + 结构验证 + 架构检测
+  → pnpm run gen:better-comments # 重新生成 Better Comments 配置
+  → vsce package                # 打包 .vsix
+```
+
+- 构建失败 → 不产生 `.vsix`。
+- 对比度不足 → 构建中断，错误信息标明是哪个主题、哪个角色、差多少。
+- scope 错误 → `pnpm run test:scopes` 退出码 1，CI 拦截。
+
+**「发布前检查清单」从手动流程升级为自动化门禁**——这正是工业级与手动的分水岭。
+
+---
+
+## 📊 九、总结
+
+至此，你的主题构建系统已经完成了从「能用」到「工业级」的跃迁：
+
+| 能力 | 工程篇 | 工业级篇 |
+|------|--------|---------|
+| 模块化 | 单体 `build.js` | `scripts/lib/` 单职责模块 |
+| 代码风格 | CommonJS | ESM |
+| WCAG 校验 | ❌ | ✅ 阶梯式对比度自动检查 |
+| 结构验证 | ❌ | ✅ 未解析变量/令牌检测 |
+| 循环引用 | ❌ | ✅ 深度上限 + 引用链输出 |
+| 架构污染 | ❌ | ✅ 原始值直接引用警告 |
+| 输出优化 | ❌ | ✅ token 合并 + 语义色精简 |
+| Scope 验证 | ❌ | ✅ `verify-scopes.js` 自动比对 |
+| 自动化测试 | ❌ | ✅ 85 个测试（`node --test`） |
+| 多格式产物 | CSS | CSS + SCSS + TypeScript + 设计文档 |
+| Better Comments | ❌ | ✅ 自动生成 + 内置规则 |
+| 发布门禁 | 手动检查 | 构建/测试/scope 验证自动拦截 |
+
+这套体系不仅是 Moongate 主题的生产工具，更是一个可以复用的**设计系统工程模板**。它验证了「零散的颜色 → 工程资产 → 全平台可复用」的完整路径。
+
+但工程能力再强，也只是「怎么做」的问题。下一个问题同样重要：**「为什么这样做」——设计哲学从何而来？如何让用户在不同硬件上获得一致的体验？如何让主题超越代码，成为品牌的组成部分？**
+
+这正是系列的最后一篇——**品牌生态篇**要回答的。
+
+[**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)

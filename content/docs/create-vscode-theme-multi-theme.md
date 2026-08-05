@@ -1,7 +1,7 @@
 ---
-title: 扩展篇：从工程化到设计系统：构建深色/浅色双主题及多主题变体
-description: 在工程化基础上，通过变量分离和重力补偿原则，一键生成深色、浅色及高对比度等多主题变体。让所有主题共享同一套规则，维护成本趋近于零。
-date: 2026-03-11 12:00:00
+title: 设计系统篇：DTCG 三层架构与昼夜双变体
+description: 用量业界标准的 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体，让「同一语义角色在不同背景下视觉重量对等」从理念变为可执行的工程架构。
+date: 2026-08-06 04:00:00
 permalink: 97e09fc8-13a0-4703-958d-44700fe20a62
 series: design-system
 level: P3
@@ -13,248 +13,413 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程：
+本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**从零到第一个 VS Code 主题：完全入门指南（入门篇）**](./create-vscode-theme-basics)
-   —— 创建、配置并发布你的第一个 VS Code 主题，掌握核心概念与基础工作流。
+1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**告别手改 JSON：用 YAML 工程化你的主题（工程篇）**](./create-vscode-theme-engineering)
-   —— 将零散的 JSON 主题重构为模块化 YAML 项目，用构建脚本实现自动化生成。
+2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**亮色、暗色与更多：多主题变体与重力补偿（多主题篇）**](./create-vscode-theme-multi-theme)
-   —— 同时构建暗色、亮色和高对比度主题变体，用重力补偿原理实现视觉重量平衡。
+3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**从主题到设计系统：视觉契约与品牌生态（设计系统篇）**](./create-vscode-theme-design-system)
+4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
+
+5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
-5. [**工业级构建脚本与 DTCG 实现（工程进阶篇）**](./create-vscode-theme-engineering-deep)
-   —— DTCG 三层架构、颜色归一化、WCAG 对比度检测、循环引用检测，自动生成 CSS 变量与设计文档。
+---
+
+在[工程篇](./create-vscode-theme-engineering)的结尾，我们指出了工程化方案的三个痛点：
+
+- `colors.yaml` 是一个**扁平的变量池**，颜色之间的层级关系完全靠命名约定，没有结构性的约束。
+- 深浅两套主题需要两套颜色变量文件，而「同一角色在深色和浅色下应该保持色相一致、明度不同」这件事完全靠手动维护。
+- 构建脚本只能做变量替换，不能自动校验颜色是否符合对比度标准。
+
+本篇将解决这些问题。我们将引入 **DTCG（Design Tokens Community Group）设计令牌标准**的三层架构，让颜色从「散乱的变量」升级为「有结构的工程资产」，并基于它构建深色/浅色双变体——这是主题迈向设计系统的关键一步。
 
 ---
 
-## 🌗 引言：为什么需要多主题？
+## 🧱 一、核心思路：从「多主题」到「设计系统」
 
-一个优秀的主题不应只有一副面孔。用户可能在不同时间段、不同环境光下使用编辑器，也可能偏爱不同的视觉风格。提供深色/浅色双主题甚至更多变体（如高对比度主题），不仅能覆盖更广泛的用户需求，更是主题迈向设计系统的关键一步。
+一个优秀的主题不应只有一副面孔。提供深色/浅色双主题，不仅能覆盖更广泛的用户需求，更是主题迈向设计系统的关键一步。
 
-在进阶篇中，我们已经将主题源码工程化——通过 YAML 管理颜色变量，通过构建脚本生成最终 JSON。现在，我们将在此基础上，轻松构建出风格一致、视觉对等的多主题家族。
+但**多主题的真正价值不是多几套颜色**，而是：**所有主题共享同一套规则，唯一不同的是颜色变量的具体值。**
+
+- 语言规则（`languages/*.yaml`）在所有变体中完全复用。
+- UI 颜色（`workbench.yaml`）和语义规则（`semantic.yaml`）只引用变量名，不写具体色值。
+- 每个变体只提供一个「语义层」，定义每个语义角色在该变体下的具体颜色。
+
+要做到这一点，需要一套能让「颜色」成为结构化工程资产的管理体系——这就是 DTCG 三层架构。
 
 ---
 
-## 🧱 一、核心思路：复用规则，分离颜色
+## 🏗️ 二、DTCG 三层架构
 
-多主题的核心思想是：**所有主题共享同一套语法规则和 UI 颜色定义，唯一不同的是颜色变量的具体值。**
+DTCG（Design Tokens Community Group）是 W3C 下属的行业标准组织，旨在为设计令牌（Design Tokens）建立统一格式。它的核心思想可以用一个简单的问题概括：**一个颜色值，应该由谁来定义、被谁引用、以什么名称存在？**
 
-因此，我们需要将颜色变量从规则文件中彻底分离，每个主题拥有独立的颜色变量文件，而所有规则文件（如 `languages/*.yaml`、`workbench.yaml`）只引用变量名。
+Moongate 采用 DTCG 推荐的三层架构：
 
-**关于语义规则**：VS Code 主题支持两种高亮方式：`tokenColors`（基于 TextMate 语法的作用域）和 `semanticTokenColors`（基于语言服务提供的语义信息）。语义规则能更精准地反映代码的语义角色（如变量、参数、属性），并支持修饰符（如斜体、下划线）。在多主题体系中，`semantic.yaml` 同样只引用颜色变量，因此深浅主题的语义高亮会自动保持一致。
-
-### 1.1 目录结构进化
-
-```text
-your-theme/
-├── src/
-│   ├── core/
-│   │   ├── colors-dark.yaml       # 深色主题变量
-│   │   ├── colors-light.yaml       # 浅色主题变量
-│   │   ├── colors-hc-black.yaml    # 高对比度深色主题
-│   │   └── colors-hc-light.yaml    # 高对比度浅色主题（可选）
-│   ├── languages/                  # 各语言规则（完全复用）
-│   ├── workbench.yaml              # UI 颜色（引用变量）
-│   └── semantic.yaml               # 语义规则（引用变量）
-├── scripts/
-│   └── build.js                    # 多主题构建脚本
-└── themes/
-    ├── your-theme-dark.json
-    ├── your-theme-light.json
-    ├── your-theme-hc-black.json
-    └── your-theme-hc-light.json
+```
+┌─────────────────────────────────────────────────┐
+│  原始值层（Primitives）                           │
+│  src/core/primitives/colors.yaml                 │
+│  按色相-明度命名：blue-500、gray-900             │
+└───────────────────────┬─────────────────────────┘
+                        │ 语义层用 {token} 引用原始值
+                        ▼
+┌─────────────────────────────────────────────────┐
+│  语义层（Semantics）                              │
+│  src/core/semantics/dark.yaml + light.yaml       │
+│  定义角色：primary、bg、surfaceGround            │
+│  primary: "{blue-500}"                           │
+└───────────────────────┬─────────────────────────┘
+                        │ 组件层用 ${variable} 引用语义层
+                        ▼
+┌─────────────────────────────────────────────────┐
+│  组件层（Components）                             │
+│  src/workbench.yaml + semantic.yaml              │
+│  映射 UI 元素                                    │
+│  editor.background: "${surfaceGround}"           │
+└─────────────────────────────────────────────────┘
 ```
 
-### 1.2 变量文件示例
+### 2.1 第一层：原始值（Primitives）
 
-**`colors-dark.yaml`**
+原始值层是**所有颜色的物理事实**——不表达任何语义，只按色相和明度命名。
 
 ```yaml
-# 深色主题
-primary: "#3b82f6"
-success: "#34d399"
-warning: "#fbbf24"
-error: "#f87171"
-bg: "#0f172a"
-text: "#e2e8f0"
-# ... 其他变量
+# src/core/primitives/colors.yaml
+# ==================== 蓝色系 ====================
+blue-500: "#3b82f6" # 深色主蓝
+blue-600: "#2563eb" # 深色按钮悬停
+blue-700: "#0284c7" # 浅色主蓝
+blue-800: "#0369a1" # 浅色高亮/函数
+
+# 发光蓝（特殊）
+blue-glow: "#7dd3fc" # 深色高亮
+blue-glow-dark: "#87cefa" # 深色函数
+
+# ==================== 灰色阶（冷调基底）====================
+gray-900: "#0f172a" # 深色编辑器背景
+gray-850: "#131c31" # 深色卡片/浮层
+gray-800: "#1e293b" # 深色侧边栏/代码块
+gray-750: "#252e40" # 深色悬停背景
+gray-700: "#2d3748" # 深色边框
+# ... 完整的色相-明度阶梯
 ```
 
-**`colors-light.yaml`**
+**命名规范**：`色相-明度`，例如 `blue-500`、`green-400`、`gray-900`。这样命名不是为了好看，而是为了让「同一个色相在不同明度下如何变化」这件事变得可追溯。
+
+**原始值的价值**：当你需要「给所有主题换一个更蓝的主色」时，只需要调整 `blue-500` 和 `blue-700` 两个原始值，所有引用它的语义色自动同步。
+
+### 2.2 第二层：语义层（Semantics）
+
+语义层定义**角色**——`primary`（主色）、`bg`（背景）、`surfaceGround`（地面层）——并为每个角色指派一个原始值。**语义层不与任何 UI 元素绑定**，它只回答一个问题：「主色应该是什么颜色？」
+
+每个变体都有一个独立的语义层文件：
 
 ```yaml
-# 浅色主题（变量名与深色版完全一致，仅色值不同）
-primary: "#0284c7"
-success: "#059669"
-warning: "#b45309"
-error: "#b91c1c"
-bg: "#f9fafb"
-text: "#1e293b"
-# ... 其他变量
+# src/core/semantics/dark.yaml（深色语义层）
+# ==================== 月语义主色 ====================
+primary: "{blue-500}"
+success: "{green-400}"
+warning: "{yellow-400}"
+error: "{red-400}"
+highlight: "{blue-glow}"
+
+# 功能色（语法）
+function: "{blue-glow-dark}"
+operator: "{gray-600}"
+comment: "{gray-525}"
+variable: "{gray-200}"
+
+# 海拔系统
+surfaceGround: "{gray-900}"
+surfaceRaised: "{gray-850}"
+surfaceFloating: "{gray-800}"
+surfaceTooltip: "{gray-750}"
 ```
-
-**关键原则**：所有颜色文件的变量名必须**完全一致**，这是实现规则复用的基础。
-
-### 1.3 变量命名最佳实践
-
-为了让主题系统易于维护和扩展，变量命名应遵循 **语义化 + 可组合** 原则：
-
-- **语义化**：变量名应描述颜色的**用途**而非具体颜色，例如使用 `primary` 而不是 `blue`，使用 `success` 而不是 `green`。这样即使未来调整主题色，变量名无需改变。
-- **可组合**：对于背景、文本等具有层级关系的变量，可以使用 `bgBase`、`bgElevated`、`textPrimary`、`textSecondary` 等命名，便于快速理解变量间的层次关系。
 
 ```yaml
-# 推荐的命名方式
-bgBase: "#0f172a" # 最底层背景
-bgElevated: "#131c31" # 浮层背景
-bgMuted: "#1e293b" # 次级背景
-textPrimary: "#e2e8f0" # 主要文字
-textMuted: "#94a3b8" # 辅助文字
+# src/core/semantics/light.yaml（浅色语义层）
+# 变量名与深色版完全一致，仅色值不同
+# ==================== 月语义主色 ====================
+primary: "{blue-700}"
+success: "{green-600}"
+warning: "{yellow-700}"
+error: "{red-700}"
+highlight: "{blue-800}"
+
+# 功能色（语法）
+function: "{blue-800}"
+operator: "{gray-600}"
+comment: "{gray-600}"
+variable: "{gray-900}"
+
+# 海拔系统
+surfaceGround: "{gray-50}"
+surfaceRaised: "{white}"
+surfaceFloating: "{gray-100}"
+surfaceTooltip: "{gray-200}"
 ```
 
-这样，在添加新主题时，只需为新颜色文件中的这些变量赋予合适的值，无需改动任何规则文件。
+**关键原则**：所有变体的语义层变量名**必须完全一致**。这是规则复用的基础——`workbench.yaml` 和 `languages/*.yaml` 不需要知道当前是深色还是浅色，它们只引用 `${primary}`、`${surfaceRaised}`，具体值交给语义层决定。
 
-> **⚠️ 透明度处理的最佳实践**  
-> 在 Moongate 的工程体系中，**颜色变量本身不应包含透明度**。透明度应统一通过后缀形式添加，例如在引用变量时使用 `${primary}20` 表示 12.5% 透明度的主色。构建脚本会自动将六位色值（如 `#3b82f6`）与透明度后缀拼接为八位色值（如 `#3b82f620`）。如果变量值本身已经是八位色值（即已包含透明度），脚本会发出警告并保留原值，忽略后缀。这可以避免意外生成非法色值，同时保持透明度处理的清晰可预测。
+### 2.3 第三层：组件层（Components）
+
+组件层**直接映射 UI 元素**和语法角色。它只引用语义层变量，不写任何具体色值：
+
+```yaml
+# src/workbench.yaml（组件层：UI 颜色）
+editor.background: "${surfaceGround}"
+editor.foreground: "${text}"
+titleBar.activeBackground: "${surfaceRaised}"
+titleBar.activeForeground: "${text}"
+statusBar.background: "${surfaceGround}"
+statusBar.foreground: "${textDim}"
+sideBar.background: "${surfaceRaised}"
+# ... 所有 UI 键
+```
+
+```yaml
+# src/semantic.yaml（组件层：语义高亮）
+variable: "${variable}"
+variable.readonly:
+  foreground: "${variableDim}"
+  fontStyle: "italic"
+function: "${function}"
+function.declaration:
+  foreground: "${function}"
+  fontStyle: "bold"
+class: "${warning}"
+# ... 语义规则
+```
+
+### 2.4 两种引用语法：`{token}` 与 `${variable}`
+
+在 Moongate 的架构中，两种「引用」有着完全不同的语义：
+
+| 语法 | 含义 | 使用位置 | 示例 |
+|------|------|---------|------|
+| `{token}` | **层间引用**：引用另一个令牌 | 语义层引用原始值 | `primary: "{blue-500}"` |
+| `${variable}` | **变量替换**：构建时替换为最终色值 | 组件层引用语义层 | `editor.background: "${surfaceGround}"` |
+
+- 语义层用 `{token}` 引用原始值，构建脚本递归解析令牌引用（支持循环检测，见工业级篇）。
+- 组件层用 `${variable}` 引用语义层变量，构建脚本替换为最终色值（支持透明度后缀，如 `${primary}20`）。
+
+这个分工不是形式主义——它让每个文件都清楚自己「属于哪一层、可以引用谁」。工业级篇中我们会看到，构建脚本甚至能检测「组件层直接引用原始值」这种架构污染并发出警告。
 
 ---
 
-## ⚖️ 二、重力补偿：让深浅主题视觉重量对等
+## ⚖️ 三、昼夜双变体与重力补偿
 
-浅色主题不是深色主题的简单反相。深色背景上，亮色是“发光体”；浅色背景上，暗色是“吸光体”。要实现视觉重量对等，必须进行 **重力补偿**——同一语义角色，在不同背景下使用同一色相、不同明度。
+有了三层架构，深色/浅色双主题的构建就变得非常自然：**所有规则文件完全复用，只有语义层不同**。但语义层的色值不是随手填的——深色和浅色之间需要一套科学的映射规则。
 
-### 补偿规则示例
+### 3.1 为什么浅色不是深色的「反相」？
 
-| 语义角色        | 深色版               | 浅色版               | 说明                               |
-| --------------- | -------------------- | -------------------- | ---------------------------------- |
-| 主色（primary） | `#3b82f6` (60% 明度) | `#0284c7` (48% 明度) | 蓝调不变，明度降低，适应白底       |
-| 成功（success） | `#34d399` (65%)      | `#059669` (40%)      | 绿色更沉稳，保证对比度             |
-| 警告（warning） | `#fbbf24` (75%)      | `#b45309` (35%)      | 从亮黄转为橙黄，避免在白底上“消失” |
-| 错误（error）   | `#f87171` (60%)      | `#b91c1c` (35%)      | 深红保持警示感                     |
+很多新手以为浅色主题就是把深色主题的颜色反相。但这是完全错误的：
 
-### 如何工程化地确定补偿值？
+- 深色背景上的亮色是**「发光体」**——它们通过「亮于背景」来获得存在感。
+- 浅色背景上的暗色是**「吸光体」**——它们通过「暗于背景」来获得存在感。
 
-手动“凭感觉”调整明度往往效率低且不一致。推荐使用 **HSL 颜色模型** 进行科学补偿：
+同样是 `primary`，在深色下用亮蓝 `#3b82f6`（明度 60%）很好看，但如果直接搬到白底上，就会因为和白色背景的对比度不足而「消失」。要实现视觉重量对等，必须进行**重力补偿**——保持色相不变，科学调整明度和饱和度。
 
-- 将 HEX 色值转换为 HSL（色相、饱和度、明度）。
-- 保持色相（H）不变，这是语义一致性的核心。
-- 适当降低饱和度（S）和明度（L）以适应浅色背景。具体降幅可参考经验值（如明度降低 20-30%），或使用工具如 [chroma.js](https://gka.github.io/chroma.js/) 进行程序化调整。
+### 3.2 Moongate 的补偿实例
 
-例如，使用 chroma.js 生成浅色版主色：
+| 语义角色 | 深色版 | 浅色版 | 调整方法 |
+|---------|--------|--------|---------|
+| 主色（primary） | `#3b82f6` (60% 明度) | `#0284c7` (48% 明度) | 蓝调不变，明度降低约 20%，适应白底 |
+| 成功（success） | `#34d399` (65%) | `#059669` (40%) | 绿色更沉稳，保证对比度 |
+| 警告（warning） | `#fbbf24` (75%) | `#b45309` (35%) | 从亮黄转为橙黄，避免在白底上「消失」 |
+| 错误（error） | `#f87171` (60%) | `#b91c1c` (35%) | 深红保持警示感 |
 
-```javascript
-const darkPrimary = chroma("#3b82f6");
-const lightPrimary = darkPrimary.set("hsl.l", 0.48); // 将明度设为 48%
-```
+**补偿规律**：
 
-**饱和度调整**：除了明度，饱和度也建议适当调整。深色背景下高饱和度颜色能产生舒适的“发光感”，但在浅色背景下同样的饱和度可能显得刺眼。通常可以将饱和度降低 10-20%，以获得更柔和的视觉效果。使用 chroma.js 可以同时调整明度和饱和度：
+- **色相（H）不变**——这是语义一致性的核心。`primary` 永远是蓝色，用户在切换主题时不需要重新学习。
+- **明度（L）降低**——深色版的亮色在白底上需要更暗才能达到同等对比度。通常降低 20-30%。
+- **饱和度（S）适当调整**——深色背景上高饱和度产生舒适的「发光感」，但在浅色背景上可能刺眼，通常降低 10-20%。
 
-```javascript
-const darkPrimary = chroma("#3b82f6");
-const lightPrimary = darkPrimary.set("hsl.l", 0.48).set("hsl.s", 0.7); // 明度降至48%，饱和度降至70%
-```
+> 💡 **如何科学地确定补偿值**：手动「凭感觉」调整明度效率低且不一致。推荐使用 **HSL 颜色模型**：把 HEX 转成 HSL，保持 H 不变，调整 L 和 S。可以用 [chroma.js](https://gka.github.io/chroma.js/) 等工具程序化调整，例如：
+>
+> ```javascript
+> const darkPrimary = chroma("#3b82f6")
+> const lightPrimary = darkPrimary.set("hsl.l", 0.48).set("hsl.s", 0.7)
+> ```
 
-通过这套映射，用户在切换主题时，同一语法元素的视觉重量几乎不变，无需重新学习。
+### 3.3 海拔系统：为 UI 注入物理深度
+
+除了语法颜色，UI 界面也需要在深浅两套主题中保持一致的「空间感」。海拔系统通过定义多级背景明度阶梯，表达 UI 元素的物理深度：
+
+- 深色模式：海拔越高表面越亮（明度递增）。
+- 浅色模式：海拔越高表面越亮（但用更高亮度的白色/浅色）。
+- 每层阶梯的步长保持一致，形成平滑的层次感。
+
+**Moongate 的四层海拔**（v2.6.0 最新值）：
+
+| 海拔层级 | 用途 | 深色模式 | 浅色模式 | 说明 |
+|---------|------|---------|---------|------|
+| `surfaceGround` | 底层背景（编辑器） | `#0f172a` | `#f9fafb` | 基准层 |
+| `surfaceRaised` | 侧边栏、活动栏、选项卡栏 | `#1a2538` | `#ffffff` | 深色 +5%，浅色纯白 |
+| `surfaceFloating` | 面板、悬浮卡片、菜单 | `#25364a` | `#f1f5f9` | 再 +5%，浅色浅灰蓝 |
+| `surfaceTooltip` | 提示框、弹窗 | `#2e3b4d` | `#e2e8f0` | 最高层 |
+
+> 📌 **注意**：浅色模式采用「越高越亮」还是「越高越暗」是一个设计选择。Moongate 选择浅色模式下浮层比背景**更亮**（更白），形成「纸张层叠」的通透感；深色模式则采用「越高越亮」，让浮层从背景中微微隆起。两种模式都遵循「海拔越高越醒目」的物理隐喻。
+
+这种设计让侧边栏微微隆起，弹窗轻盈浮现，代码区沉静深邃——编辑器从平面走向立体。
 
 ---
 
-## 🔨 三、构建脚本升级：自动生成多主题
+## 🔨 四、构建脚本自动生成双主题
 
-在进阶篇的构建脚本基础上，我们只需做少量增强，即可实现多主题自动生成。以下是核心逻辑的代码片段（完整脚本见附录）：
+有了三层架构，构建脚本只需要做一件事：**扫描 `semantics/` 目录，为每个语义层文件生成一个主题 JSON**。
 
-### 3.1 扫描颜色文件
-
-> **📁 自定义路径**：如果您的项目结构不同（例如将语言规则放在 `src/tokens/languages` 下），请修改 `PATHS` 对象中的对应路径。本脚本的路径基于推荐结构，但您可以灵活调整。
+以 `scripts/build.js` 的简化版为例：
 
 ```javascript
-const colorFiles = fs
-  .readdirSync(coreDir)
-  .filter((f) => f.startsWith("colors-") && f.endsWith(".yaml"));
+// scripts/build.js（简化版，完整版见工业级篇）
+import fs from "node:fs"
+import path from "node:path"
+import yaml from "js-yaml"
 
-colorFiles.forEach((file) => {
-  const match = file.match(/^colors-(.+)\.yaml$/);
-  if (!match) return;
-  const themeType = match[1]; // 'dark', 'light', 'hc-black', 'hc-light' 等
-  // ... 加载颜色变量并生成主题
-});
-```
+const ROOT_DIR = process.cwd()
 
-### 3.2 主题类型映射（显示名称与 uiTheme）
+// 路径配置
+const PATHS = {
+  primitives: path.join(ROOT_DIR, "src", "core", "primitives", "colors.yaml"),
+  semanticsDir: path.join(ROOT_DIR, "src", "core", "semantics"),
+  workbench: path.join(ROOT_DIR, "src", "workbench.yaml"),
+  semantic: path.join(ROOT_DIR, "src", "semantic.yaml"),
+  langDir: path.join(ROOT_DIR, "src", "languages"),
+  outputDir: path.join(ROOT_DIR, "themes"),
+}
 
-为了让生成的主题名称更友好，并正确设置 `uiTheme`，可以定义一个映射表：
+// 加载原始值
+const primitives = yaml.load(fs.readFileSync(PATHS.primitives, "utf8"))
 
-```javascript
-const themeDisplayMap = {
-  dark: { suffix: "Dark", uiTheme: "vs-dark" },
-  light: { suffix: "Light", uiTheme: "vs" },
-  "hc-black": { suffix: "High Contrast (Black)", uiTheme: "hc-black" },
-  "hc-light": { suffix: "High Contrast (Light)", uiTheme: "hc-light" },
-  // 可根据需要添加更多
-};
+// 解析令牌引用 {token}：语义层引用原始值
+function resolveTokens(obj, tokenMap, depth = 0) {
+  const MAX_DEPTH = 20
+  if (depth > MAX_DEPTH) {
+    throw new Error(`[ENGINEERING_FATAL] 令牌循环引用检测: ${JSON.stringify(obj)}`)
+  }
+  if (typeof obj === "string") {
+    return obj.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, key) => {
+      const value = tokenMap[key]
+      if (value === undefined) {
+        console.warn(`⚠️ 警告: 令牌 "${key}" 未定义，保留原样`)
+        return match
+      }
+      return resolveTokens(value, tokenMap, depth + 1)
+    })
+  }
+  if (Array.isArray(obj)) return obj.map((item) => resolveTokens(item, tokenMap, depth + 1))
+  if (obj && typeof obj === "object") {
+    const result = {}
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = resolveTokens(v, tokenMap, depth + 1)
+    }
+    return result
+  }
+  return obj
+}
 
-// 在构建每个主题时：
-const display = themeDisplayMap[themeType] || {
-  suffix: themeType,
-  uiTheme: "vs-dark",
-};
-const themeName = `${themeInfo.displayName} ${display.suffix}`;
-const uiTheme = display.uiTheme;
-// 注意：主题对象的 type 字段通常为 'dark' 或 'light'，可从 themeType 推断
-const type = themeType.includes("light") ? "light" : "dark";
-```
-
-### 3.3 增强的变量替换函数（支持透明度安全网）
-
-```javascript
+// 替换变量 ${var}：组件层引用语义层（支持透明后缀）
 function replaceVariables(obj, colors) {
   if (typeof obj === "string") {
     return obj.replace(
       /\$\{([a-zA-Z0-9_-]+)\}([0-9a-fA-F]{2})?/g,
       (match, key, alpha) => {
-        const value = colors[key];
-        if (!value) {
-          console.warn(`⚠️ 变量 ${key} 未定义`);
-          return match;
+        const value = colors[key]
+        if (value === undefined) {
+          console.warn(`⚠️ 警告: 变量 "${key}" 未定义，保留原样`)
+          return match
         }
-        // 智能处理透明度
-        if (alpha && /^#[0-9a-fA-F]{6}$/.test(value)) {
-          return value + alpha; // 6位色值 + 透明度后缀
-        }
-        if (alpha && /^#[0-9a-fA-F]{8}$/.test(value)) {
-          console.warn(`⚠️ 变量 ${key} 已包含透明度，忽略后缀`);
-          return value;
-        }
-        return value;
+        return value + (alpha || "")
       },
-    );
+    )
   }
-  // ... 处理数组和对象
+  if (Array.isArray(obj)) return obj.map((item) => replaceVariables(item, colors))
+  if (obj && typeof obj === "object") {
+    const result = {}
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = replaceVariables(v, colors)
+    }
+    return result
+  }
+  return obj
 }
+
+// 加载公共规则
+const workbenchRaw = yaml.load(fs.readFileSync(PATHS.workbench, "utf8"))
+const semanticRaw = yaml.load(fs.readFileSync(PATHS.semantic, "utf8"))
+
+// 扫描并合并语言规则
+let tokenColorsRaw = []
+fs.readdirSync(PATHS.langDir)
+  .filter((f) => f.endsWith(".yaml"))
+  .sort()
+  .forEach((file) => {
+    const rules = yaml.load(fs.readFileSync(path.join(PATHS.langDir, file), "utf8"))
+    if (rules?.tokenColors) {
+      tokenColorsRaw = tokenColorsRaw.concat(rules.tokenColors)
+    }
+  })
+
+// 读取 package.json 获取主题基础名
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "package.json"), "utf8"))
+const baseName = pkg.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase()
+
+// 为每个语义层文件构建一个主题
+const semanticFiles = fs.readdirSync(PATHS.semanticsDir).filter((f) => f.endsWith(".yaml"))
+
+semanticFiles.forEach((semanticFile) => {
+  const themeType = path.basename(semanticFile, ".yaml") // 'dark' 或 'light'
+  const semantics = yaml.load(fs.readFileSync(path.join(PATHS.semanticsDir, semanticFile), "utf8"))
+
+  // 1. 解析语义层的令牌引用 {token} -> 最终色值
+  const resolved = resolveTokens(semantics, primitives)
+
+  // 2. 组件层替换变量 ${var}
+  const uiColors = replaceVariables(workbenchRaw, resolved)
+  const semanticColors = replaceVariables(semanticRaw, resolved)
+  const tokenColors = replaceVariables(tokenColorsRaw, resolved)
+
+  // 3. 组装主题对象
+  const type = themeType.includes("light") ? "light" : "dark"
+  const theme = {
+    name: `${pkg.displayName || "My Theme"} ${themeType === "dark" ? "Dark" : "Light"}`,
+    type: type,
+    colors: uiColors,
+    tokenColors: tokenColors,
+    semanticTokenColors: semanticColors,
+  }
+
+  // 4. 写入输出文件
+  const outputFile = path.join(PATHS.outputDir, `${baseName}-${themeType}.json`)
+  if (!fs.existsSync(PATHS.outputDir)) {
+    fs.mkdirSync(PATHS.outputDir, { recursive: true })
+  }
+  fs.writeFileSync(outputFile, JSON.stringify(theme, null, 2))
+  console.log(`   ✅ 构建完成: ${outputFile}`)
+})
 ```
 
-### 3.4 从 package.json 读取主题信息
+**核心逻辑**：
 
-```javascript
-const pkg = require("../package.json");
-const baseName = pkg.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-```
+1. 加载原始值。
+2. 扫描 `semantics/` 目录，每个语义层文件（`dark.yaml` / `light.yaml`）对应一个主题。
+3. 解析语义层的 `{token}` 引用，得到该变体的最终色值字典。
+4. 组件层用 `${var}` 替换为最终色值。
+5. 输出 `${baseName}-dark.json` 和 `${baseName}-light.json`。
 
-### 3.5 调试多主题的小技巧
-
-在开发过程中，你可能希望只构建某个特定主题以加快构建速度。可以在脚本中增加命令行参数支持（可选），但在默认情况下，你可以通过以下方式快速预览所有主题：
-
-1. 运行 `npm run build` 生成所有主题 JSON。
-2. 按 `F5` 启动扩展开发宿主。
-3. 在开发宿主中打开命令面板（`Ctrl+Shift+P`），选择“首选项: 颜色主题”，即可看到所有已注册的主题（深色、浅色、高对比度等）。快速切换即可验证各主题效果。
-4. 如果修改了颜色变量文件，只需重新运行 `npm run build`，然后在开发宿主中执行“开发人员: 重新加载窗口”即可看到更新。
+**新增主题的成本**：只需在 `semantics/` 目录下添加一个新的 YAML 语义层文件（如 `sepia.yaml`），构建脚本自动扫描生成对应主题。**无需修改任何规则文件**。
 
 ---
 
-## 📦 四、注册多个主题
+## 📦 五、注册多个主题
 
 在 `package.json` 的 `contributes.themes` 中为每个主题添加一个条目，注意 `uiTheme` 字段的正确设置：
 
@@ -264,375 +429,100 @@ const baseName = pkg.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
     {
       "label": "Moongate Dark",
       "uiTheme": "vs-dark",
-      "path": "./themes/moongate-dark.json"
+      "path": "./themes/moongate-theme-dark.json"
     },
     {
       "label": "Moongate Light",
       "uiTheme": "vs",
-      "path": "./themes/moongate-light.json"
-    },
-    {
-      "label": "Moongate High Contrast (Black)",
-      "uiTheme": "hc-black",
-      "path": "./themes/moongate-hc-black.json"
-    },
-    {
-      "label": "Moongate High Contrast (Light)",
-      "uiTheme": "hc-light",
-      "path": "./themes/moongate-hc-light.json"
+      "path": "./themes/moongate-theme-light.json"
     }
   ]
 }
 ```
 
-- **`uiTheme`** 字段决定主题类型：
-  - 深色标准主题：`"vs-dark"`
-  - 浅色标准主题：`"vs"`
-  - 高对比度深色主题：`"hc-black"`
-  - 高对比度浅色主题：`"hc-light"`
-- **`label`** 将显示在 VS Code 命令面板的“颜色主题”列表中，建议与生成的主题名称保持一致或更友好。
+- **`uiTheme` 字段决定主题的基础色系**：
+  - 深色主题：`"vs-dark"`
+  - 浅色主题：`"vs"`
+- **`label`** 将显示在 VS Code 命令面板的「颜色主题」列表中。
+
+> 📌 **一个容易踩的坑**：如果浅色主题的 `uiTheme` 误设为 `"vs-dark"`，VS Code 会按照深色基础色系渲染控件（滚动条、输入框等），导致浅色主题出现深色控件——看起来很别扭。务必根据主题类型设置正确的 `uiTheme`。
 
 ---
 
-## 🌈 五、扩展更多主题变体
+## 🌐 六、跨平台资产：颜色不只是主题
 
-基于同一套规则，我们可以轻松添加更多主题：
+DTCG 三层架构还有一个额外的巨大收益：**语义层的颜色字典可以直接导出为跨平台资产**。
 
-1. **创建新的颜色文件**：如 `colors-hc-black.yaml`（高对比度深色）、`colors-hc-light.yaml`（高对比度浅色）、`colors-sepia.yaml`（复古风格）等。
-2. **在颜色文件中定义与基础主题完全一致的变量名**，但赋予不同的色值。
-3. **构建脚本自动扫描**，生成对应的 JSON 文件。
-4. **在 `package.json` 中注册**新主题，并根据主题类型设置正确的 `uiTheme`。
+构建脚本可以在生成主题 JSON 的同时，自动生成一个 CSS 变量文件：
 
-无需修改任何语言规则或 UI 颜色定义，维护成本几乎为零。
+```css
+/* themes/moongate-colors.css（自动生成） */
+:root,
+.light {
+  --ui-primary: #0284c7;
+  --ui-bg: #f9fafb;
+  --ui-surface-raised: #ffffff;
+  /* ... 浅色模式所有语义色 */
+}
 
-### 高对比度深色主题示例
-
-```yaml
-# colors-hc-black.yaml
-primary: "#ffff00" # 亮黄
-success: "#00ff00" # 亮绿
-warning: "#ff8800"
-error: "#ff0000"
-bg: "#000000"
-text: "#ffffff"
-# ... 其他变量使用极高对比度色值
+.dark {
+  --ui-primary: #3b82f6;
+  --ui-bg: #0f172a;
+  --ui-surface-raised: #1a2538;
+  /* ... 深色模式所有语义色 */
+}
 ```
 
----
+这意味着你的博客、组件库、文档站可以**直接引用主题的视觉语言**：
 
-## 🧠 六、维护建议
+```html
+<link rel="stylesheet" href="/themes/moongate-colors.css" />
+```
 
-1. **变量命名规范**：使用语义化名称，如 `primary`、`success`、`bg`、`text`，避免使用具体颜色名（如 `blue`）。这样即使主题色变化，规则文件也不需要改动。
-2. **保持规则文件与主题无关**：所有规则文件（`languages/`、`workbench.yaml`、`semantic.yaml`）中**不得出现具体色值**，只能引用变量。
-3. **利用构建脚本的“安全网”**：确保变量替换函数能处理透明度后缀、已含透明度的变量等边界情况。
-4. **版本控制**：将颜色变量文件纳入 Git，但忽略生成的 JSON 文件（除非需要发布预览）。在 `.gitignore` 中添加 `themes/*.json`，但保留 `!themes/.gitkeep` 以保持目录存在。
-5. **发布前检查**：运行构建脚本后，手动检查各主题 JSON 文件是否生成正确，颜色值是否替换无误。
+```css
+body {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+}
+```
+
+切换深浅模式只需要在根元素上添加/移除 `.dark` class：
+
+```javascript
+document.documentElement.classList.toggle("dark")
+```
+
+Moongate 正是这样做的——博客、设计系统文档与 VS Code 主题共享同一套颜色，实现「一个颜色体系，贯穿所有产品」。除了 CSS，还可以自动生成 SCSS 和 TypeScript 令牌（见工业级篇）。
 
 ---
 
 ## ⚠️ 七、常见问题与陷阱
 
-| 问题                                  | 可能原因                                          | 解决方法                                                         |
-| ------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
-| **主题未出现在颜色主题列表中**        | `package.json` 中未正确注册，或 JSON 文件路径错误 | 检查 `contributes.themes` 条目，确保 `path` 指向正确的文件。     |
-| **浅色主题显示为深色**                | `uiTheme` 字段误设为 `"vs-dark"`                  | 浅色主题应使用 `"vs"`。                                          |
-| **高对比度主题显示不正确**            | `uiTheme` 未使用 `"hc-black"` 或 `"hc-light"`     | 根据主题类型设置正确的 `uiTheme`。                               |
-| **颜色变量未替换，仍显示为 `${var}`** | 变量名拼写错误，或变量未在颜色文件中定义          | 检查变量名是否一致，确保颜色文件包含所有被引用的变量。           |
-| **透明度效果异常（颜色太深/太浅）**   | 变量本身已含透明度，同时又添加了透明度后缀        | 确保颜色变量中不预置透明度，透明度统一通过后缀 `${var}20` 添加。 |
-| **构建脚本报错“找不到文件”**          | 缺少必要的 YAML 文件                              | 确保 `src/core/`、`src/languages/` 等目录存在，且包含所需文件。  |
-| **新添加的颜色文件未被扫描**          | 文件名不符合 `colors-*.yaml` 模式                 | 检查文件名是否以 `colors-` 开头并以 `.yaml` 结尾。               |
+| 问题 | 可能原因 | 解决方法 |
+|------|---------|---------|
+| **主题未出现在颜色主题列表中** | `package.json` 中未正确注册，或 JSON 文件路径错误 | 检查 `contributes.themes` 条目，确保 `path` 指向正确的文件 |
+| **浅色主题显示为深色** | `uiTheme` 字段误设为 `"vs-dark"` | 浅色主题应使用 `"vs"` |
+| **颜色变量未替换，仍显示为 `${var}`** | 变量名拼写错误，或语义层未定义该变量 | 检查变量名是否一致，确保所有语义变量在 `dark.yaml` 和 `light.yaml` 中都有定义 |
+| **深色/浅色主题视觉差异过大** | 重力补偿不合理，明度调整幅度不均 | 遵循「色相不变、明度有规律降低、饱和度适度调整」的补偿规则 |
+| **新增语义变量后，某个主题报错** | `dark.yaml` 和 `light.yaml` 变量名不一致 | 所有变体的语义层变量名必须完全一致 |
+| **构建脚本报错「找不到文件」** | 缺少必要的 YAML 文件 | 确保 `src/core/primitives/`、`src/core/semantics/`、`src/languages/` 等目录存在，且包含所需文件 |
 
 ---
 
-## 🚀 八、从多主题到设计系统
+## 🚀 八、总结
 
-多主题的建立，标志着你的主题已经从“一套配色”升级为“可扩展的视觉系统”。接下来，你可以：
+通过引入 DTCG 三层架构，你将「多主题」升级为「设计系统」：
 
-- **定义设计哲学**：如冷调基底、语义分层、重力补偿，让颜色选择有据可依。
-- **提供视觉契约**：编写显示器校准指南，帮助用户在不同硬件上获得一致体验。
-- **建立协议索引**：将博客文章按难度分级，与主题形成品牌闭环。
+- ✅ **原始值层**：颜色按色相-明度命名，成为可追溯的物理事实。
+- ✅ **语义层**：角色与变体解耦，每个变体只定义「角色该是什么颜色」。
+- ✅ **组件层**：规则文件完全复用，不写任何具体色值。
+- ✅ **重力补偿**：同一语义角色在不同背景下视觉重量对等。
+- ✅ **海拔系统**：UI 拥有物理深度，深浅模式层次一致。
+- ✅ **一键扩展**：新增主题只需添加一个语义层文件。
+- ✅ **跨平台资产**：语义层直接导出 CSS 变量，一套颜色贯穿所有产品。
 
-这些内容将在**系统篇**中详细展开。
+但你可能已经注意到：本篇的构建脚本仍然比较简单——它只能做变量替换，**还不能验证颜色是否符合对比度标准、是否引用了未定义的变量、是否产生了架构污染**。而且随着语言数量增加（当前 Moongate 支持 15 种语言），「语言规则写了对不上」的问题也会浮现。
 
----
+工业级篇将解决这些问题——**如何让构建脚本自身成为一套可测试、可验证的工程体系**。
 
-## 📌 九、总结
-
-通过分离颜色变量、增强构建脚本，我们实现了从单主题到多主题的平滑扩展。核心收获：
-
-- **复用规则**：所有主题共享同一套语言和 UI 定义，维护成本极低。
-- **一键生成**：构建脚本自动扫描颜色文件，生成多个主题 JSON。
-- **无限扩展**：新增主题只需添加颜色文件，无需改动其他代码。
-- **重力补偿**：深浅主题视觉重量对等，切换时无需重新适应。
-- **正确注册**：通过映射表和 `uiTheme` 设置，确保各主题类型正确识别。
-
-现在，你的主题已经能够一键生成深色、浅色乃至高对比度等多个变体，并通过重力补偿保证了它们之间的视觉对等。用户可以根据自己的环境随心切换，而你的维护成本依然为零。
-
-但一个真正优秀的主题，不应只是颜色规则的集合。它应该有自己的设计哲学、与用户的沟通契约，甚至成为你技术品牌的核心资产。在系统篇中，我们将完成最后的跃迁——**从工程化到设计系统，打造完整的主题品牌体系，包括视觉契约、协议索引等原创概念**。
-
-[**系统篇：从设计系统到视觉契约，打造完整的主题品牌体系**](./create-vscode-theme-design-system.md)
-
----
-
-**探索不息，编码不止。**
-
-[⬆ 返回顶部](#)
-
----
-
-## 📎 附录：完整构建脚本参考
-
-> **📁 自定义路径**：如果您的项目结构不同（例如将语言规则放在 `src/tokens/languages` 下），请修改 `PATHS` 对象中的对应路径。本脚本的路径基于推荐结构，但您可以灵活调整。
-
-<details>
-<summary>点击完整构建脚本</summary>
-
-```javascript
-// scripts/build.js
-// 完整脚本代码，包含上述所有增强功能
-
-const fs = require("fs");
-const yaml = require("js-yaml");
-const path = require("path");
-
-const ROOT_DIR = path.resolve(__dirname, "..");
-
-// ==================== 路径配置 ====================
-const PATHS = {
-  workbench: path.join(ROOT_DIR, "src", "workbench.yaml"),
-  semantic: path.join(ROOT_DIR, "src", "semantic.yaml"),
-  langDir: path.join(ROOT_DIR, "src", "languages"),
-  specialDir: path.join(ROOT_DIR, "src", "special"),
-  coreDir: path.join(ROOT_DIR, "src", "core"),
-  outputDir: path.join(ROOT_DIR, "themes"),
-};
-
-// ==================== 辅助函数 ====================
-
-function ensureFileExists(filePath, description) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`❌ 未找到 ${description} 文件: ${filePath}`);
-  }
-}
-
-function safeLoadYaml(filePath, description) {
-  try {
-    return yaml.load(fs.readFileSync(filePath, "utf8"));
-  } catch (err) {
-    console.error(`❌ 解析 ${description} 失败 (${filePath}):`, err.message);
-    return null;
-  }
-}
-
-function replaceVariables(obj, colors) {
-  if (typeof obj === "string") {
-    return obj.replace(
-      /\$\{([a-zA-Z0-9_-]+)\}([0-9a-fA-F]{2})?/g,
-      (match, key, alpha) => {
-        const value = colors[key];
-        if (value === undefined) {
-          console.warn(`⚠️ 警告: 变量 "${key}" 未定义，保留原样`);
-          return match;
-        }
-
-        if (alpha) {
-          if (/^#[0-9a-fA-F]{8}$/.test(value)) {
-            console.warn(
-              `⚠️ 警告: 变量 "${key}" 值 ${value} 已包含透明度，忽略后缀 "${alpha}"`,
-            );
-            return value;
-          }
-          if (/^#[0-9a-fA-F]{6}$/.test(value)) {
-            return value + alpha;
-          }
-          console.warn(
-            `⚠️ 警告: 变量 "${key}" 值 ${value} 格式异常，无法处理透明度`,
-          );
-          return value;
-        }
-        return value;
-      },
-    );
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => replaceVariables(item, colors));
-  }
-  if (obj && typeof obj === "object") {
-    const result = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = replaceVariables(v, colors);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function getThemeInfo() {
-  const pkgPath = path.join(ROOT_DIR, "package.json");
-  if (!fs.existsSync(pkgPath)) {
-    return { name: "your-theme", displayName: "Your Theme" };
-  }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-    let displayName = pkg.displayName || pkg.name || "Your Theme";
-    if (displayName.startsWith("@") && displayName.includes("/")) {
-      displayName = displayName.split("/")[1];
-    }
-    return {
-      name: pkg.name || "your-theme",
-      displayName,
-    };
-  } catch {
-    return { name: "your-theme", displayName: "Your Theme" };
-  }
-}
-
-// 主题显示名称和 uiTheme 映射
-const themeDisplayMap = {
-  dark: { suffix: "Dark", uiTheme: "vs-dark" },
-  light: { suffix: "Light", uiTheme: "vs" },
-  "hc-black": { suffix: "High Contrast (Black)", uiTheme: "hc-black" },
-  "hc-light": { suffix: "High Contrast (Light)", uiTheme: "hc-light" },
-  // 可根据需要扩展
-};
-
-// ==================== 主流程 ====================
-function main() {
-  console.log("🚀 开始构建主题...\n");
-
-  // 1. 检查必需文件
-  try {
-    ensureFileExists(PATHS.workbench, "workbench");
-    ensureFileExists(PATHS.semantic, "semantic");
-    ensureFileExists(PATHS.coreDir, "core 目录");
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-
-  // 2. 加载公共规则
-  console.log("📦 加载公共规则...");
-  const workbenchRaw = safeLoadYaml(PATHS.workbench, "workbench.yaml");
-  const semanticRaw = safeLoadYaml(PATHS.semantic, "semantic.yaml");
-  if (!workbenchRaw || !semanticRaw) {
-    process.exit(1);
-  }
-
-  // 3. 收集语言规则
-  console.log("📚 加载语言规则...");
-  let tokenColorsRaw = [];
-  if (fs.existsSync(PATHS.langDir)) {
-    const langFiles = fs
-      .readdirSync(PATHS.langDir)
-      .filter((f) => f.endsWith(".yaml"))
-      .sort();
-    langFiles.forEach((file) => {
-      const filePath = path.join(PATHS.langDir, file);
-      const langRules = safeLoadYaml(filePath, `语言规则 ${file}`);
-      if (langRules?.tokenColors) {
-        tokenColorsRaw = tokenColorsRaw.concat(langRules.tokenColors);
-        console.log(`   ✅ 已加载: ${file}`);
-      }
-    });
-  } else {
-    console.warn("⚠️ languages 目录不存在，跳过语言规则加载");
-  }
-
-  // 4. 加载特殊规则
-  console.log("✨ 加载特殊规则...");
-  if (fs.existsSync(PATHS.specialDir)) {
-    const specialFiles = fs
-      .readdirSync(PATHS.specialDir)
-      .filter((f) => f.endsWith(".yaml"));
-    specialFiles.forEach((file) => {
-      const filePath = path.join(PATHS.specialDir, file);
-      const specialRules = safeLoadYaml(filePath, `特殊规则 ${file}`);
-      if (specialRules?.tokenColors) {
-        tokenColorsRaw = tokenColorsRaw.concat(specialRules.tokenColors);
-        console.log(`   ✅ 已加载: ${file}`);
-      }
-    });
-  } else {
-    console.log("ℹ️ special 目录不存在，跳过特殊规则");
-  }
-
-  // 5. 获取颜色变量文件
-  console.log("\n🎨 扫描颜色变量文件...");
-  const colorFiles = fs
-    .readdirSync(PATHS.coreDir)
-    .filter((f) => f.startsWith("colors-") && f.endsWith(".yaml"));
-
-  if (colorFiles.length === 0) {
-    console.error("❌ core 目录下没有找到 colors-*.yaml 文件");
-    process.exit(1);
-  }
-
-  // 6. 读取主题信息
-  const themeInfo = getThemeInfo();
-  let baseName = themeInfo.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-
-  // 7. 为每个颜色文件构建主题
-  console.log(`\n🔨 开始构建主题 (基础名称: ${baseName})...\n`);
-  colorFiles.forEach((colorFile) => {
-    const match = colorFile.match(/^colors-(.+)\.yaml$/);
-    if (!match) return;
-    const themeType = match[1]; // 如 'dark', 'light', 'hc-black'
-    const outputFile = path.join(
-      PATHS.outputDir,
-      `${baseName}-${themeType}.json`,
-    );
-
-    // 加载颜色变量
-    const colorsPath = path.join(PATHS.coreDir, colorFile);
-    const colors = safeLoadYaml(colorsPath, `颜色变量 ${colorFile}`);
-    if (!colors) {
-      console.error(`   ❌ 跳过 ${colorFile}`);
-      return;
-    }
-
-    // 替换变量
-    const uiColors = replaceVariables(workbenchRaw, colors);
-    const semanticColors = replaceVariables(semanticRaw, colors);
-    const tokenColors = replaceVariables(tokenColorsRaw, colors);
-
-    // 确定显示名称和 uiTheme
-    const display = themeDisplayMap[themeType] || {
-      suffix: themeType,
-      uiTheme: "vs-dark",
-    };
-    const themeName = `${themeInfo.displayName} ${display.suffix}`;
-
-    // 主题类型映射表（用于 theme.type 字段）
-    const themeTypeMap = {
-      dark: "dark",
-      light: "light",
-      "hc-black": "dark",
-      "hc-light": "light",
-      // 可根据需要扩展，例如 'sepia' 可映射为 'light'
-    };
-    const type = themeTypeMap[themeType] || "dark"; // 默认深色
-
-    const theme = {
-      name: themeName,
-      type: type,
-      colors: uiColors,
-      tokenColors: tokenColors,
-      semanticTokenColors: semanticColors,
-    };
-
-    // 确保输出目录存在
-    if (!fs.existsSync(PATHS.outputDir)) {
-      fs.mkdirSync(PATHS.outputDir, { recursive: true });
-    }
-
-    fs.writeFileSync(outputFile, JSON.stringify(theme, null, 2));
-    console.log(`   ✅ 构建完成: ${outputFile}`);
-  });
-
-  console.log("\n🎉 所有主题构建完毕！");
-}
-
-main();
-```
-
-</details>
+[**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)

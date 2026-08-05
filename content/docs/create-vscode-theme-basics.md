@@ -1,9 +1,9 @@
 ---
-title: 基础篇：从博客配色到 VS Code 主题：基础开发指南
-description: 从零开始，快速掌握 VS Code 主题开发的核心流程。学习如何创建颜色定义、配置语法高亮、调试主题，并将你的第一个主题发布到市场。
-date: 2026-02-25
+title: 基础篇：从手动 JSON 到第一个可发布的 VS Code 主题
+description: 不依赖脚手架，从零手写最小主题 JSON，理解 colors 与 tokenColors 的核心机制，掌握调试、打包与发布的完整流程，构建属于你的第一个 VS Code 主题。
+date: 2026-08-06 00:00:00
 permalink: 7a7bec85-c90e-4770-92d3-4ef537ba2960
-level: P3
+level: P1
 series: design-system
 tags: 
   - VSCode
@@ -13,206 +13,246 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程：
+本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
 
-1. [**从零到第一个 VS Code 主题：完全入门指南（入门篇）**](./create-vscode-theme-basics)
-   —— 创建、配置并发布你的第一个 VS Code 主题，掌握核心概念与基础工作流。
+1. [**基础篇：从手动 JSON 到第一个可发布的 VS Code 主题**](./create-vscode-theme-basics)
+   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
 
-2. [**告别手改 JSON：用 YAML 工程化你的主题（工程篇）**](./create-vscode-theme-engineering)
-   —— 将零散的 JSON 主题重构为模块化 YAML 项目，用构建脚本实现自动化生成。
+2. [**工程篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
+   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
 
-3. [**亮色、暗色与更多：多主题变体与重力补偿（多主题篇）**](./create-vscode-theme-multi-theme)
-   —— 同时构建暗色、亮色和高对比度主题变体，用重力补偿原理实现视觉重量平衡。
+3. [**设计系统篇：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-multi-theme)
+   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
 
-4. [**从主题到设计系统：视觉契约与品牌生态（设计系统篇）**](./create-vscode-theme-design-system)
+4. [**工业级篇：可测试、可验证的构建脚本架构**](./create-vscode-theme-engineering-deep)
+   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
+
+5. [**品牌生态篇：设计哲学、视觉契约与品牌生态**](./create-vscode-theme-design-system)
    —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
 
-5. [**工业级构建脚本与 DTCG 实现（工程进阶篇）**](./create-vscode-theme-engineering-deep)
-   —— DTCG 三层架构、颜色归一化、WCAG 对比度检测、循环引用检测，自动生成 CSS 变量与设计文档。
+---
+
+如果你有编程基础（熟悉 JavaScript、JSON、命令行），想把一套配色方案变成 VS Code 主题，但完全不知道从何下手——这篇文章正是为你准备的。
+
+Moongate 主题最初就是从个人博客的配色衍生而来。在这篇基础篇中，我们不使用任何脚手架，而是**从一个最小的 JSON 文件开始**，逐步理解主题的运作机制。等机制清楚了，你自然会发现哪些环节需要工程化——那就是整个系列接下来要做的事。
 
 ---
 
-如果你已经有一定的编程基础（熟悉 JavaScript、JSON、命令行），但对如何将自己的配色方案变成 VS Code 主题一无所知，这篇文章正是为你准备的。
+## 一、VS Code 主题的本质
 
-去年年末我为个人博客设计了一套名为 Moongate 的配色，极简科幻风格。最近突发奇想：能不能把它变成 VS Code 主题？经过几天摸索，终于成功发布。下面我把整个流程拆解成清晰的步骤，希望能帮你少踩坑。
+一个主题说到底就是一份 JSON 文件，它告诉 VS Code 两件事：
+
+- **界面长什么样**：标题栏、状态栏、侧边栏、编辑器背景……这些 UI 区域的颜色。
+- **代码怎么着色**：不同的语法元素（关键字、字符串、注释、函数……）分别用什么颜色和样式。
+
+理解文件结构本身并不难，真正难的是**知道该配置哪些键名、每个键名是什么意思**。所以这篇文章的核心目标是：带你亲手创建一个最小可用的主题，然后告诉你如何用 VS Code 自带的工具，找到任何你想调整的颜色所对应的正确键名。
 
 ---
 
-## 一、准备工作
+## 二、自定义主题的最小路径
 
-确保你已安装：
+### 1. 创建项目结构
 
-- **Node.js**（含 npm）
-- **Git**（可选，但推荐）
-
-然后全局安装 Yeoman 和 VS Code 扩展生成器：
+首先准备一个空目录，并创建 `themes/` 文件夹：
 
 ```bash
-npm install -g yo generator-code
+mkdir my-theme
+cd my-theme
+mkdir themes
 ```
 
----
+虽然 VS Code 的扩展项目通常还需要 `package.json`、`README.md` 等文件，但为了让读者先专注理解结构，这里从主题 JSON 本身开始。
 
-## 二、生成主题项目
+### 2. 编写最小主题 JSON
 
-```bash
-yo code
+在 `themes/` 下创建一个 JSON 文件，例如 `my-theme.json`：
+
+```json
+{
+  "name": "My Theme",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#0f172a",
+    "editor.foreground": "#e2e8f0"
+  },
+  "tokenColors": [
+    {
+      "name": "Comment",
+      "scope": ["comment", "punctuation.definition.comment"],
+      "settings": {
+        "fontStyle": "italic",
+        "foreground": "#a5b4cb"
+      }
+    },
+    {
+      "name": "Keyword",
+      "scope": ["keyword", "storage.type", "storage.modifier"],
+      "settings": {
+        "foreground": "#3b82f6",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "String",
+      "scope": ["string", "string.quoted.single", "string.quoted.double"],
+      "settings": {
+        "foreground": "#34d399"
+      }
+    }
+  ]
+}
 ```
 
-按提示选择：
-
-1. **New Color Theme**
-2. **No, start fresh**（不导入现有主题）
-3. 填写信息：
-   - Extension name：`你的主题名`（如 `moongate-theme`）
-   - Description：简短介绍，如 `🌙 Where Moon Meets Code - 极简科幻终端主题`
-   - Publisher name：**你的发布者ID**（需提前在 VS Code 市场注册，见后文。如果尚未注册，可以先随便填一个占位符（如 your-name），等发布前注册后，再回来修改 package.json 中的 publisher 字段。）
-4. 选择基础主题：Dark 或 Light
-5. 主题显示名称：如 `Moongate Dark`
-
-生成器会创建项目文件夹，结构如下：
-
-```text
-your-theme/
-├── themes/
-│   └── your-theme-color-theme.json
-├── package.json
-├── README.md
-├── CHANGELOG.md
-└── ...
-```
+这个文件虽然很小，但它已经包含了主题的全部核心结构。
 
 ---
 
 ## 三、核心概念：`colors` 与 `tokenColors`
 
-主题配置文件位于 `themes/` 下，主要包含两部分：
+### `colors`：编辑器界面
 
-- **`colors`**：定义编辑器 UI 的颜色（标题栏、状态栏、侧边栏等）
-- **`tokenColors`**：定义代码语法高亮（关键字、字符串、注释等）
+`colors` 对象定义编辑器 **UI 的配色**——背景、标题栏、状态栏、侧边栏、选区高亮等。它是一个扁平的对象，键名是 VS Code 预定义的接口，例如：
 
-### 🔍 如何找到正确的颜色键名？
+| 键名 | 作用 |
+|------|------|
+| `editor.background` | 编辑器背景 |
+| `editor.foreground` | 编辑器默认前景色 |
+| `titleBar.activeBackground` | 标题栏背景 |
+| `statusBar.background` | 状态栏背景 |
+| `sideBar.background` | 侧边栏背景 |
 
-VS Code 提供了两个超实用工具：
+> ⚠️ **`type` 字段**：顶级 `type` 字段决定主题是深色还是浅色，取值为 `"dark"` 或 `"light"`。它会影响 VS Code 默认控件的渲染方式（如滚动条、输入框的自适应）。
 
-1. **界面颜色**：按下 `Ctrl+Shift+P`，运行 **`Developer: Generate Color Theme From Current Settings`**。这个命令会输出当前主题所用所有 UI 颜色键名的 JSON，你可以直接复制需要的键名（如 `editor.background`），避免手动查找。
+### `tokenColors`：代码语法高亮
 
-2. **语法作用域（scope）**：打开一个代码文件，把光标放在你想着色的元素上，运行 **`Developer: Inspect Editor Tokens and Scopes`**。弹出的窗口会显示该元素的 `textmate scopes` 列表，**选择最具体的那一个**用于 `tokenColors` 规则。
+`tokenColors` 是一个**规则数组**，每条规则由 `scope` 和 `settings` 组成：
 
-### 🎨 配置示例
-
-```json
-"colors": {
-  "editor.background": "#0f172a",
-  "editor.foreground": "#e2e8f0",
-  "statusBar.background": "#0f172a",
-  // ... 更多 UI 键名
-},
-"tokenColors": [
-  {
-    "name": "Comment",
-    "scope": ["comment", "punctuation.definition.comment"],
-    "settings": {
-      "fontStyle": "italic",
-      "foreground": "#94a3b8"
-    }
-  },
-  {
-    "name": "Keyword",
-    "scope": ["keyword", "storage.type", "storage.modifier"],
-    "settings": {
-      "foreground": "#3b82f6",
-      "fontStyle": "bold"
-    }
-  }
-  // ... 其他规则
-]
-```
-
-**注意**：`tokenColors` 数组顺序很重要，后面的规则会覆盖前面相同 `scope` 的规则。
-
----
-
-## 四、本地调试
-
-1. 在 VS Code 中打开项目文件夹。
-2. 按 `F5` 启动“扩展开发主机”窗口。
-3. 在新窗口中按 `Ctrl+K Ctrl+T`，选择你的主题。
-4. 打开测试代码文件，实时查看效果。
-5. 修改主题 JSON 后，在开发主机中按 `Ctrl+R` 重新加载，修改立即生效。
-
-### 🔧 调试技巧：善用 Inspect 工具
-
-当某个语法元素颜色不对时，用 Developer: Inspect Editor Tokens and Scopes 定位它。弹出的信息会告诉你当前颜色来自哪个规则，以及可用的作用域链。优先选择最具体的作用域配置颜色，避免误伤其他元素。
-
----
-
-## 五、完善细节
-
-### 1. 状态栏、标题栏等特殊区域
-
-别忘了配置这些区域，键名参考生成的 JSON。
-
-### 2. 对比度
-
-可用工具检查文字对比度是否达标（WCAG 要求 ≥4.5:1）。
-
-### 3. 语义高亮进阶
-
-VS Code 支持语义高亮（Semantic Highlighting），它能让你根据语义（如只读变量、函数定义）而非简单语法规则来着色。
-
-要使用语义高亮，你的主题需要在 package.json 中设置 "semanticHighlighting": true，并在主题文件中提供 semanticTokenColors 对象。
-
-在你的主题中启用语义高亮后，可以在 `semanticTokenColors` 中为不同语义角色指定样式：
+- `scope`：匹配的 TextMate 作用域（scope），可以是字符串或字符串数组。
+- `settings`：该作用域应用的颜色与样式（`foreground`、`fontStyle`、`background`）。
 
 ```json
-"semanticTokenColors": {
-  "variable.readonly": {
-    "foreground": "#cbd5e1",
-    "fontStyle": "italic"
-  },
-  "function.declaration": {
-    "foreground": "#7dd3fc",
-    "fontStyle": "bold"
-  },
-  "parameter": {
-    "foreground": "#cbd5e1",
-    "fontStyle": "italic"
+{
+  "name": "Comment",
+  "scope": ["comment", "punctuation.definition.comment"],
+  "settings": {
+    "fontStyle": "italic",
+    "foreground": "#a5b4cb"
   }
 }
 ```
 
-这样可以让只读变量、函数定义等拥有独特的视觉权重，这正是 **“视觉远近法”** 的核心——让该退后的退后，该前进的前进，提升代码可读性。
+**⚠️ 重要**：`tokenColors` 数组的**顺序很重要**——后面的规则会覆盖前面相同 `scope` 的规则。这也是为什么工程化之后我们会用一个独立的 `base.yaml` 管理通用规则，再在语言文件中叠加专属规则。
+
+---
+
+## 四、如何找到正确的键名？
+
+这是所有主题开发者最常遇到的问题：「我想把状态栏文字改成蓝色，该用什么键名？」
+
+VS Code 提供了两个非常强大的内置工具，彻底解决了这个问题。
+
+### 1. UI 颜色：提取当前主题
+
+按下 `Ctrl+Shift+P`，运行命令 **`Developer: Generate Color Theme From Current Settings`**。
+
+这会在输出面板中生成一个 JSON，包含**当前主题所用到的所有 UI 颜色键名**以及它们的值。你只需要：
+
+1. 在输出中找到你关心的区域（比如 `statusBar.foreground`）。
+2. 复制这个键名，粘贴到你自己的 `colors` 对象中。
+3. 改成你自己的颜色值。
+
+这个命令生成的是「当前生效值」，即使某个键名你从未配置过（VS Code 在使用默认值），它也会出现在输出中——相当于一份完整的键名清单。
+
+### 2. 语法 scope：Inspect 工具
+
+这是定位语法高亮问题的**神器**。打开任意代码文件，把光标放在你想着色的元素上，运行 **`Developer: Inspect Editor Tokens and Scopes`**。
+
+弹出的窗口会显示：
+
+- **该元素当前的 TextMate scope 链**，从最具体到最通用。
+- **当前颜色来自哪条规则**（`foreground` 来源），以及是哪个文件定义的。
+
+使用技巧：
+
+- **选择最具体的 scope** 来精确命中目标元素，避免误伤同一族元素。
+- 例如注释既有 `comment.line` 也有 `comment.block`，如果你只想给行注释着色，就选 `comment.line`；如果想统一处理所有注释，就选 `comment`。
+- 当你发现某个元素颜色「不对」时，Inspect 窗口会直接告诉你当前颜色来自哪个规则——这排查思路清晰得多。
+
+---
+
+## 五、本地调试
+
+在确认主题文件书写正确后，下一步就是把它加载进 VS Code 实时查看。
+
+### 1. 创建 package.json
+
+要运行主题扩展，需要一个最小的 `package.json` 将它声明为扩展：
+
+```json
+{
+  "name": "my-theme",
+  "displayName": "My Theme",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": ["Themes"],
+  "contributes": {
+    "themes": [
+      {
+        "label": "My Theme",
+        "uiTheme": "vs-dark",
+        "path": "./themes/my-theme.json"
+      }
+    ]
+  }
+}
+```
+
+关键字段：
+
+- **`contributes.themes`**：声明主题列表，每项包含 `label`（在颜色主题列表中显示的名称）、`uiTheme`（基础色系：`vs-dark` 深色 / `vs` 浅色）、`path`（主题 JSON 的相对路径）。
+- **`publisher`**：你的发布者 ID。可以先填占位符，发布前注册后再回来修改。
+- **`engines`**：最低 VS Code 版本要求。
+
+### 2. F5 启动扩展开发主机
+
+1. 在 VS Code 中打开项目文件夹。
+2. 按 `F5`，启动「扩展开发主机」窗口。
+3. 在开发主机中按 `Ctrl+K Ctrl+T`，选择你的主题。
+4. 打开测试代码文件，实时查看效果。
+
+修改主题 JSON 后，在开发主机中按 `Ctrl+R` 重新加载，修改立即生效。**注意**：修改 `package.json` 中的 `contributes.themes` 后，需要重启开发主机会话才能生效。
 
 ---
 
 ## 六、准备发布
 
-### 1. 完善 `package.json`
+### 1. 完善 package.json
 
-关键字段：
+发布之前，需要补全关键字段：
 
 ```json
 {
-  "name": "your-theme-name",
-  "displayName": "Your Theme Display Name",
-  "description": "简短描述",
+  "name": "my-theme",
+  "displayName": "My Theme",
+  "description": "简短介绍你的主题",
   "version": "1.0.0",
   "publisher": "你的发布者ID",
   "engines": { "vscode": "^1.109.0" },
   "categories": ["Themes"],
-  "icon": "images/icon.png", // 128x128 PNG 图标，路径要正确
+  "icon": "images/icon.png",
   "repository": {
-    // 可选，但推荐
     "type": "git",
-    "url": "https://github.com/yourname/your-theme"
+    "url": "https://github.com/yourname/my-theme"
   }
 }
 ```
 
 ### 2. 准备截图
 
-在根目录创建 `images` 文件夹，放入至少 3-5 张不同语言的代码截图（建议 1280×640），用于 README。
+在根目录创建 `images/` 文件夹，放入至少 3-5 张不同语言的代码截图（建议 1280×640），用于 README 和商店展示。
 
 ### 3. 编写 README.md
 
@@ -224,7 +264,7 @@ VS Code 支持语义高亮（Semantic Highlighting），它能让你根据语义
 
 ### 5. 创建 `.vscodeignore`
 
-排除不需要打包的文件，例如：
+排除不需要打包的文件，**但务必保留 `images/` 文件夹**：
 
 ```bash
 .vscode/**
@@ -232,36 +272,21 @@ VS Code 支持语义高亮（Semantic Highlighting），它能让你根据语义
 node_modules
 ```
 
-**注意**：不要排除 `images/` 文件夹，否则截图会丢失。
-
 ---
 
-在“打包与发布”之前，可以插入以下检查清单段落，格式清晰易用：
-
----
-
-## 发布前检查清单
+## 七、发布前检查清单
 
 在运行 `vsce package` 之前，花两分钟核对以下事项，可以避免大部分常见的发布错误：
 
-- **`package.json` 信息**  
-   确保 `publisher`、`name`、`version` 字段正确无误（`publisher` 必须与你在市场注册的 ID 完全一致）。
+- **`package.json` 信息**：确保 `publisher`、`name`、`version` 字段正确无误（`publisher` 必须与你在市场注册的 ID 完全一致）。
+- **图标文件**：确认 `icon` 路径指向一个 **128×128 像素的 PNG 图片**，且文件确实存在于该位置。
+- **预览图**：检查 `README.md` 中是否包含了至少一张主题预览图（建议使用 `images/` 文件夹内的截图），没有预览图的主题很难吸引用户。
+- **`.vscodeignore` 配置**：确认已排除不必要的文件，但**务必保留 `images/` 文件夹**，否则截图无法随扩展一起发布。
+- **本地打包测试**：运行 `vsce package` 命令，若能成功生成 `.vsix` 文件，说明配置基本正确。如果失败，仔细阅读错误提示——最常见的原因是 `icon` 路径错误或 `publisher` 未设置。
 
-- **图标文件**  
-   确认 `icon` 路径指向一个 **128×128 像素的 PNG 图片**，且文件确实存在于该位置。
+---
 
-- **预览图**  
-   检查 `README.md` 中是否包含了至少一张主题预览图（建议使用 `images/` 文件夹内的截图），没有预览图的主题很难吸引用户。
-
-- **`.vscodeignore` 配置**  
-   确认已排除不必要的文件（如 `.vscode`、`node_modules`、`src` 等），但**务必保留 `images/` 文件夹**，否则截图无法随扩展一起发布。
-
-- **本地打包测试**  
-   运行 `vsce package` 命令，若能成功生成 `.vsix` 文件，说明配置基本正确。如果失败，仔细阅读错误提示——最常见的原因是 `icon` 路径错误或 `publisher` 未设置。
-
-核对完毕后再进行发布，成功率会大大提高。如果使用命令行发布遇到困难，也可以直接上传 `.vsix` 文件（见下一节）。
-
-## 七、打包与发布
+## 八、打包与发布
 
 ### 1. 安装发布工具
 
@@ -317,50 +342,37 @@ vsce publish
 
 ---
 
-## 八、发布后
+## 九、发布后
 
 - 查看市场页面：`https://marketplace.visualstudio.com/items?itemName=你的发布者ID.你的主题名`
 - 登录 [市场管理后台](https://marketplace.visualstudio.com/manage) 查看报表（页面浏览、安装量、转化率）。
 - 在 GitHub 仓库添加 README 徽章（如版本、下载量）。
 - 收集反馈，准备后续更新。
 
-### 🌟 进阶：建立你的“视觉契约”
+---
 
-用户看到的效果可能因显示器设置而千差万别。为了让你的主题在不同屏幕上都能准确还原，可以像 Moongate 一样准备一份 **显示器校准指南**（我们称之为《视觉契约》），帮助用户调整亮度、对比度、关闭味精功能。这不仅是对用户的负责，更是品牌专业精神的体现。
+## 十、设计哲学：从「好看」到「好用」
 
-你可以在 `extras/` 目录中放置这份指南，并在 README 中推荐用户阅读。
+很多新手以为主题就是配几个好看的颜色。但真正优秀的主题，能让代码的结构自己「浮现」出来。这就是 **「视觉远近法」** 的理念：
 
-这只是一个开始，更完整的品牌体系（包括视觉契约、协议索引等）将在系统篇中展开。
+- **操作符、标点应该退后**（亮度低一些），不干扰阅读；
+- **函数名应该发光**（亮度高一些），成为视觉锚点；
+- **只读变量应该用斜体**暗示「不可变」；
+- **废弃代码应该加上删除线**，一眼识别。
+
+这套原则在 Moongate 中落地为「语义分层」：前景（核心逻辑）、中景（普通代码）、背景（辅助信息）三个视觉层级。你可以在后续的系列文章中看到它如何演变为完整的设计体系。
 
 ---
 
-## 九、设计哲学：从“好看”到“好用”
+## 为什么手写 JSON 不可持续？
 
-很多新手以为主题就是配几个好看的颜色。但真正优秀的主题，能让代码的结构自己“浮现”出来。这就是 **“视觉远近法”** 的理念：
+现在你已经拥有一个可以手动编辑、可以发布的 VS Code 主题了。但当你认真用起来，很快就会遇到这些痛点：
 
-- 操作符、标点应该**退后**（亮度低一些），不干扰阅读；
-- 函数名应该**发光**（亮度高一些），成为视觉锚点；
-- 只读变量应该用**斜体**暗示“不可变”；
-- 废弃代码应该加上**删除线**，一眼识别。
+- 一个 JSON 文件动辄上千行，修改一个颜色需要全局搜索，容易误改。
+- 想为不同语言定制高亮，却要在同一个 `tokenColors` 数组里堆砌规则，难以维护。
+- 想尝试浅色版本，不得不复制整个文件，然后手动修改几百个颜色值。
+- 一个不小心，就会用错 scope，某个语言的高亮「规则写了对不上」。
 
-你可以基于这些原则，为你自己的配色赋予语义，让用户不仅仅是“看代码”，而是“读代码”。
+这些问题不是你的失误，而是**手写 JSON 这种工作方式的极限**。这正是我们接下来的系列要解决的问题——从工程化到设计系统，让主题维护变得轻松而优雅。
 
----
-
-## 十、一点建议：善用 AI，让创作更高效
-
-作为一名独立开发者，你可能会发现，从配色方案到语法规则，有太多细节需要打磨。这时候，**AI 可以成为你最得力的助手**。无论是生成初始的 `tokenColors` 模板、帮你调试某个 `scope` 的匹配问题，还是撰写文档、翻译 README，AI 都能在几秒钟内给出方案，节省你大量时间。
-
-但请记住：**AI 是工具，不是决策者**。最终的审美判断、设计哲学，还是要由你自己来定。你的独特性，正是 AI 无法替代的部分。
-
-## 最后
-
-从自己的配色到可分享的 VS Code 主题，整个过程并不复杂，核心就是理解 `colors` 和 `tokenColors` 的结构，并善用 VS Code 自带的开发者工具。遇到问题时，多看错误提示，多查官方文档。如果一种方法卡住，试试另一种——就像手动上传一样，总有路可走。
-
-如果你也做出了自己的主题，欢迎分享。代码世界那么大，总有人和你喜欢同一片月光。
-
----
-
-恭喜你，现在你已经拥有一个可以发布的 VS Code 主题了。但当你想要增加更多语言支持、调整颜色时，可能会发现直接修改 JSON 变得越来越吃力。这正是我们进阶篇要解决的问题——**如何用工程化的方式，让主题维护变得轻松优雅**。
-
-[**进阶篇：从单体 JSON 到模块化 YAML 工程重构**](./create-vscode-theme-engineering.md)
+[**进阶篇：告别手写 JSON，用 YAML 构建脚本自动化**](./create-vscode-theme-engineering)
