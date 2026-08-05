@@ -94,7 +94,7 @@ action = strings.TrimSpace(action)
 
 动作中可能带有 `[group:xxx]` 标记：
 
-```
+```text
 [攻击] if 包含 "攻击" -> [group:combat] 注入 "贝利亚发动了猛烈的攻击"
 ```
 
@@ -115,7 +115,7 @@ if strings.HasPrefix(action, "[group:") {
 
 互斥组可以搭配任何动作类型，不仅限于 `注入`：
 
-```
+```text
 [高堕落] if 状态.堕落指数 > 80 -> [group:escalate] 状态.情绪 = "癫狂"
 [失控] if 状态.情绪 == "癫狂" && 状态.堕落指数 > 90 -> [group:escalate] 注入 "{角色名}已完全失控"
 ```
@@ -175,7 +175,7 @@ func unquote(s string) (string, error) {
 
 完整执行流程：
 
-```
+```text
 用户输入 "我要去光之国！"
     │
     ▼

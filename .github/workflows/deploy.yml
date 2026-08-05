@@ -78,6 +78,7 @@ jobs:
             OAUTH_GITHUB_SECRET=$OAUTH_GITHUB_SECRET
             GITHUB_CALLBACK_URL=https://moongate.top/auth/github/callback
             NUXT_PUBLIC_SITE_URL=https://moongate.top
+            NUXT_PUBLIC_API_URL=https://moongate.top
             ACR_REGISTRY=$ACR_DOMAIN/$ACR_NAMESPACE
             EOF
 
