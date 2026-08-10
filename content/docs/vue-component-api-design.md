@@ -1,6 +1,6 @@
 ---
 title: Vue 3 简单组件开发实战：从 Button 组件看 API 设计
-description: 以 Button 这一简单组件为例，深入探讨 Vue 3 组件库的 API 设计哲学，涵盖 Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库的对比，为后续复杂组件设计奠定基础，揭示极简 API 背后的设计权衡。
+description: 以 Button 这一简单组件为例，深入探讨 Vue 3 组件库的 API 设计哲学，涵盖 Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库的对比，揭示极简 API 背后的设计权衡。
 date: 2026-05-07
 permalink: e6526a2f-4d33-4817-9ef0-1cbfb71ef3e7
 series: moongate-vue
@@ -20,14 +20,14 @@ tags:
 1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
    —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
 
-2. [**CSS 优先 + 组件薄封装：一个 10KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、体积分析与维护性对比，500 行代码构建 10KB 组件库。
+2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
+   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
 
 3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
    —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
 
 4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、路由同步、键盘交互、组合式函数抽离及 SSR 适配，揭示工业级细节。
+   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
 
 5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
    —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
@@ -38,9 +38,7 @@ tags:
 
 设计初期，我深度参考了 Nuxt UI v4 的设计思路。Nuxt UI v4 将对复杂样式和交互的封装收束为 `variant`/`color`/`size` 几个核心维度，这正是我想要的——把复杂逻辑**内聚于组件内部**，对外只暴露最精简的 API。
 
-下文以 Button 组件为例，一步步展示我的设计取舍和思考过程。
-
-本篇聚焦于简单组件的 API 设计，下一篇文章将探讨 Select、Pagination 等复杂组件的实现思路与状态管理。
+下文以 Button 组件为例，一步步展示我的设计取舍和思考过程。**本文基于 v1.5.0 的实际实现**——经过多个版本迭代，Button 的 API 已经比初版更完善。
 
 ## 二、从需求出发：Button 需要什么？
 
@@ -70,18 +68,21 @@ tags:
 <Button size="sm">小号</Button>
 ```
 
-经过分析，Button 组件需要支持：
+经过分析，Button 组件在 v1.5.0 支持的需求：
 
-| 需求     | 实现方式                 |
-| -------- | ------------------------ |
-| 文字内容 | 默认插槽 或 `label` prop |
-| 点击事件 | `click` 事件             |
-| 禁用状态 | `disabled` prop          |
-| 加载状态 | `loading` prop           |
-| 不同样式 | `variant` + `color`      |
-| 不同尺寸 | `size` prop              |
-| 块级宽度 | `block` prop             |
-| 图标     | `#icon` 插槽             |
+| 需求             | 实现方式                                    |
+| ---------------- | ------------------------------------------- |
+| 文字内容         | 默认插槽 或 `label` prop                    |
+| 点击事件         | `click` 事件                                |
+| 禁用状态         | `disabled` prop                             |
+| 加载状态         | `loading` prop                              |
+| 加载时保留文字   | `showLabelWhileLoading` prop                |
+| 加载时自定义文字 | `loadingLabel` prop + `#loading-label` 插槽 |
+| 不同样式         | `variant` + `color`                         |
+| 不同尺寸         | `size` prop                                 |
+| 块级宽度         | `block` prop                                |
+| 图标             | `icon` prop 或 `#icon` 插槽                 |
+| 原生按钮类型     | `type` prop（button/submit/reset）          |
 
 ## 三、Props 设计：类型、默认值、优先级
 
@@ -89,10 +90,13 @@ tags:
 
 ```typescript
 interface Props {
-  label?: string; // 按钮文字
-  disabled?: boolean; // 是否禁用
-  loading?: boolean; // 是否加载中
-  block?: boolean; // 是否为块级
+  label?: string // 按钮文字
+  disabled?: boolean // 是否禁用
+  loading?: boolean // 是否加载中
+  block?: boolean // 是否为块级
+  type?: "button" | "submit" | "reset" // 原生按钮类型
+  showLabelWhileLoading?: boolean // 加载时是否保留文字
+  loadingLabel?: string // 加载时的自定义文字
 }
 ```
 
@@ -104,16 +108,20 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   loading: false,
   block: false,
-});
+  type: "button", // 默认 button，防止表单意外提交
+  showLabelWhileLoading: false,
+})
 ```
+
+**为什么默认 `type="button"`**？这是从实际项目踩坑中学到的重要决策。如果使用原生 `<button>` 的默认类型 `submit`，当按钮放在 `<form>` 里时，点击会意外提交表单。将其显式默认为 `button` 可避免绝大多数不期望的表单行为。
 
 ### 3.2 变体系统：variant + color
 
-常见的按钮类型有：主要按钮、次要按钮、边框按钮、幽灵按钮。受 Nuxt UI v4 的 `variant` + `color` 设计启发，我选择将“视觉模式”与“语义颜色”完全解耦。
+常见的按钮类型有：主要按钮、次要按钮、边框按钮、幽灵按钮。受 Nuxt UI v4 的 `variant` + `color` 设计启发，我选择将"视觉模式"与"语义颜色"完全解耦。
 
 ```typescript
-type Variant = "filled" | "outline";
-type Color = "primary" | "success" | "warning" | "error";
+type Variant = "filled" | "outline"
+type Color = "primary" | "success" | "warning" | "error"
 ```
 
 为什么只保留 `filled` 和 `outline`，删除了 `ghost`？
@@ -137,7 +145,7 @@ type Color = "primary" | "success" | "warning" | "error";
 ### 3.3 尺寸设计
 
 ```typescript
-type Size = "sm" | "md" | "lg";
+type Size = "sm" | "md" | "lg"
 ```
 
 尺寸选项与 Nuxt UI v4 提供的五种尺寸（xs, sm, md, lg, xl）相比做了精简。我删除了 `xs` 和 `xl`，因为极小尺寸可以用 Badge 或其他非按钮组件替代，而个人博客里几乎碰不到超大尺寸的场景。
@@ -147,80 +155,148 @@ type Size = "sm" | "md" | "lg";
 ```typescript
 const props = withDefaults(defineProps<Props>(), {
   size: "sm", // 默认小号
-});
+})
 ```
 
-### 3.4 图标设计：只使用插槽
+### 3.4 图标设计：prop 与插槽共存
 
-为了保持极简，Button 组件**不提供 `icon` prop，只保留 `#icon` 插槽**。用户需要图标时，直接在插槽中放入内容即可，例如：
+初版设计时，我只提供 `#icon` 插槽，不提供 `icon` prop——理由是"保持单一职责"。但实际使用中发现两个问题：
+
+1. **简单图标（如 `✓`、emoji）用插槽太啰嗦**：`<template #icon>✓</template>` 比 `icon="✓"` 多了 20 个字符
+2. **图标库组件（如 lucide-vue-next 的 IconHome）用插槽不够直观**：需要用 `<component :is="IconHome" />` 包一层
+
+经过多版本迭代，最终同时支持两者，并建立明确的优先级：
+
+```typescript
+interface Props {
+  icon?: string | Component // 图标：字符串或 Vue 组件
+}
+```
 
 ```vue
+<!-- 使用插槽（优先级更高，更灵活） -->
 <Button>
   <template #icon>🔍</template>
   搜索
 </Button>
+
+<!-- 使用字符串 prop -->
+<Button icon="✓" label="确认" />
+
+<!-- 使用 Vue 组件 prop -->
+<Button :icon="IconHome" label="首页" />
 ```
 
-这样写虽然多几个字符，但避免了 prop 与插槽的优先级混乱，也更符合“单一职责”原则。同时，插槽可以传入任何内容（字符串、emoji、图标组件），灵活性完全不受影响。
+模板中的实现逻辑：
 
-> 设计考量：Nuxt UI v4 提供了 `icon` prop 和 `leading-icon`/`trailing-icon` 等多个图标相关属性，但在个人博客的场景下，绝大多数图标按钮仅为简单的“图标+文字”，使用插槽足以覆盖所有需求，且降低了学习和维护成本。
+```vue
+<span v-if="hasIconSlot || icon" class="mg-button-icon">
+  <!-- 插槽优先于 prop -->
+  <slot name="icon">
+    <!-- prop 是 Vue 组件时渲染组件 -->
+    <component :is="icon" v-if="typeof icon !== 'string'" />
+    <!-- prop 是字符串时直接渲染文本 -->
+    <span v-else-if="icon">{{ icon }}</span>
+  </slot>
+</span>
+```
+
+**设计原则：插槽优先于 prop**。`hasIconSlot` 检测是否传入 `#icon` 插槽，如果有则完全忽略 `icon` prop。这保证了灵活性——当用户需要自定义图标布局时，插槽总是能覆盖 prop 的默认行为。
+
+> 设计考量：Nuxt UI v4 同样支持 `icon` prop 和 `leading-icon`/`trailing-icon` 等多个图标相关属性。我合并为单个 `icon` prop（左侧图标——这是个人博客场景 90% 的需求），保留 `#icon` 插槽用于完全控制。
 
 ## 四、插槽设计：默认插槽 vs label prop
 
 为了支持快速写法和自定义内容，同时提供 `label` prop 和默认插槽：
 
 ```vue
-<span class="mg-button-label">
+<span v-if="hasLabel" class="mg-button-label">
   <slot>{{ label }}</slot>
 </span>
 ```
 
-- 如果提供了默认插槽内容，显示插槽内容
-- 否则显示 `label` prop
+`hasLabel` 的判断逻辑有一个容易忽视的细节：
 
-这样两种用法都支持：
+```typescript
+const hasLabel = computed(() => props.label !== "" || !!slots.default)
+```
+
+注意这里是 `props.label !== ""` 而不是 `!!props.label`。为什么？
+
+- `withDefaults` 会将 `undefined` 解析为默认值 `""`
+- 当外部显式传入 `label=""` 时，**我们不渲染空 label 容器**——这是「纯图标按钮」的经典场景，空容器会导致图标无法垂直居中
+- 但如果有默认插槽（无论插槽内容是否为空），仍然渲染容器
 
 ```vue
-<!-- 使用 label prop -->
-<Button label="提交" />
+<!-- 纯图标按钮：label 为空，不渲染空 label 容器 -->
+<Button icon="🔍" />
 
-<!-- 使用默认插槽 -->
-<Button>提交</Button>
+<!-- 带插槽内容：即使 label 为空也渲染 -->
+<Button><template #icon>🔍</template>搜索</Button>
 ```
+
+这解决了**纯图标按钮居中问题**——空的 `.mg-button-label` 会占据空间导致图标不居中。
 
 ## 五、状态处理
 
-### 5.1 禁用状态
+### 5.1 禁用状态与加载状态
 
-`disabled` 和 `loading` 都会禁用按钮：
+`disabled` 和 `loading` 都会禁用按钮，但**只有 `disabled` 时 `click` 事件才完全阻止**（原生 disabled 属性）；`loading` 状态我们还希望保留正确的语义——用户知道按钮在"处理中"。
 
 ```typescript
-const isDisabled = computed(() => props.disabled || props.loading);
+const handleClick = (event: MouseEvent) => {
+  if (props.disabled || props.loading) return
+  emit("click", event)
+}
 ```
 
 ```vue
-<button :disabled="isDisabled">
+<button :disabled="disabled || loading" @click="handleClick">
 ```
 
-### 5.2 加载状态
+### 5.2 加载状态增强
 
-加载时显示旋转动画，隐藏图标和文字：
+初版的 `loading` 只显示旋转动画，隐藏图标和文字。v1.5.0 增加了两个增强：
+
+- `showLabelWhileLoading`：加载时是否保留文字
+- `loadingLabel`：加载时的自定义文字（默认复用 `label`）
+- `#loading-label` 插槽：完全自定义加载文字（优先级最高）
 
 ```vue
 <template v-if="loading">
   <span class="mg-button-loading-icon" />
-</template>
-<template v-else>
-  <span v-if="hasIconSlot" class="mg-button-icon">
-    <slot name="icon" />
-  </span>
-  <span v-if="hasLabel" class="mg-button-label">
-    <slot>{{ label }}</slot>
+  <!-- 根据开关决定是否显示 label -->
+  <span v-if="showLabelWhileLoading" class="mg-button-label">
+    <!-- 插槽 > loadingLabel prop > label -->
+    <slot name="loading-label">{{ loadingLabel || label }}</slot>
   </span>
 </template>
 ```
 
-纯 CSS 实现加载动画（与你提供的 CSS 一致）：
+使用场景：
+
+```vue
+<!-- 默认：只显示加载动画 -->
+<Button loading label="保存" />
+
+<!-- 保留文字：提示用户"正在保存" -->
+<Button loading :show-label-while-loading="true" label="保存" />
+
+<!-- 自定义加载文字 -->
+<Button
+  loading
+  :show-label-while-loading="true"
+  loading-label="提交中..."
+  label="提交"
+/>
+
+<!-- 用插槽完全自定义 -->
+<Button loading :show-label-while-loading="true">
+  <template #loading-label>⏳ 拼命保存中...</template>
+</Button>
+```
+
+纯 CSS 实现加载动画：
 
 ```css
 .mg-button-loading-icon {
@@ -270,28 +346,34 @@ const isDisabled = computed(() => props.disabled || props.loading);
 | `md` | `md` / `lg` | `--ui-typography-size-body` (15px) |
 | `lg` | `lg` / `xl` | `1.125rem` (18px)                  |
 
+### 6.3 颜色变体：hover/active 状态
+
+v1.5.0 的颜色变体不仅定义了基础色，还完善了 hover/active 反馈。使用 `color-mix()` 在令牌颜色基础上混合黑色实现：
+
 ```css
-.mg-button-sm {
-  padding: var(--ui-spacing-sm) var(--ui-spacing-md);
-  font-size: var(--ui-typography-size-code);
+.mg-button-filled-primary {
+  background-color: var(--ui-primary);
+  color: white;
 }
-.mg-button-md {
-  padding: var(--ui-spacing-md) var(--ui-spacing-lg);
-  font-size: var(--ui-typography-size-body);
+.mg-button-filled-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ui-primary), black 10%);
 }
-.mg-button-lg {
-  padding: var(--ui-spacing-lg) var(--ui-spacing-xl);
-  font-size: 1.125rem;
+.mg-button-filled-primary:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ui-primary), black 20%);
+}
+
+/* outline 变体：透明背景 + 边框 */
+.mg-button-outline-primary {
+  background-color: transparent;
+  color: var(--ui-primary);
+  border: 1px solid var(--ui-primary);
+}
+.mg-button-outline-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ui-primary), transparent 90%);
 }
 ```
 
-### 6.3 块级按钮
-
-```css
-.mg-button-block {
-  width: 100%;
-}
-```
+使用 `:not(:disabled)` 确保禁用状态不触发 hover 效果。
 
 ### 6.4 图标与文字容器
 
@@ -311,59 +393,33 @@ const isDisabled = computed(() => props.disabled || props.loading);
   width: 1em;
   height: 1em;
 }
-.mg-button-label {
-  display: inline-flex;
-  align-items: center;
-}
 ```
 
-### 6.5 解决纯图标按钮居中问题
-
-当按钮只有图标没有文字时，空的 `.mg-button-label` 会占据空间导致图标不居中。通过 `:empty` 伪类隐藏空标签：
-
 ```css
+/* 空标签隐藏 - 修复只有图标时的居中问题 */
 .mg-button-label:empty {
   display: none;
 }
 ```
 
-同时在组件中判断是否有真实内容再渲染标签：
-
-```typescript
-const hasLabel = computed(() => !!props.label || !!slots.default);
-```
-
-```vue
-<span v-if="hasLabel" class="mg-button-label">
-  <slot>{{ label }}</slot>
-</span>
-```
-
-### 6.6 变体样式
-
-`filled` 和 `outline` 变体分别对应填充背景和透明背景加边框，颜色通过 `color` prop 动态组合，例如 `.mg-button-filled-primary` 使用 `--ui-primary` 作为背景色。
-
-完整样式可见你提供的 CSS 文件，这里不再赘述。
+CSS 层的 `:empty` 伪类 + 组件层的 `hasLabel` 判断共同保证了纯图标按钮的正确居中。
 
 ## 七、无障碍设计
 
-添加 ARIA 属性提升可访问性：
+当前 Button 不添加 `aria-busy` 和 `aria-disabled` 属性。无障碍策略的核心是依赖原生语义：
 
-```vue
-<button
-  :aria-busy="loading"
-  :aria-disabled="disabled || loading"
->
-```
+- **`disabled` 原生属性**已经可以让屏幕阅读器正确读出禁用状态
+- **加载状态**通过视觉反馈（旋转动画）表达，比额外的 ARIA 属性更直观
+- 移除多余的 ARIA 属性，避免和原生语义重复
 
-屏幕阅读器能正确读出按钮的加载和禁用状态。
+这不是"极简 ≠ 简陋"的妥协，而是**避免 ARIA 过度使用**——原生 HTML 语义（`<button disabled>`）本身就是最可靠的无障碍。项目真正的无障碍保障来自测试层：`a11y.test.ts` 使用 axe-core 对 12 个核心组件做自动化规范检查（`expectNoViolations`）。
 
 ## 八、属性透传
 
 使用 `v-bind="$attrs"` 透传原生属性：
 
 ```vue
-<button v-bind="$attrs">
+<button v-bind="$attrs" class="mg-button" ...>
 ```
 
 用户可以直接传入 `id`、`name`、`data-*`、`aria-*` 等属性：
@@ -374,12 +430,15 @@ const hasLabel = computed(() => !!props.label || !!slots.default);
 </Button>
 ```
 
-## 九、最终代码
+配合 `defineOptions({ inheritAttrs: false })`，外部 class 会通过 `$attrs` 暴露给用户自行处理，同时组件内部的 class 绑定不会冲突。
+
+## 九、最终代码（v1.5.0 实际实现）
 
 ```vue
 <template>
   <button
     v-bind="$attrs"
+    :type="type"
     class="mg-button"
     :class="[
       `mg-button-${variant}-${color}`,
@@ -387,17 +446,23 @@ const hasLabel = computed(() => !!props.label || !!slots.default);
       { 'mg-button-block': block, 'mg-button-loading': loading },
     ]"
     :disabled="disabled || loading"
-    :aria-busy="loading"
-    :aria-disabled="disabled || loading"
     @click="handleClick"
   >
+    <!-- 加载状态 -->
     <template v-if="loading">
       <span class="mg-button-loading-icon" />
+      <span v-if="showLabelWhileLoading" class="mg-button-label">
+        <slot name="loading-label">{{ loadingLabel || label }}</slot>
+      </span>
     </template>
 
+    <!-- 正常状态 -->
     <template v-else>
-      <span v-if="hasIconSlot" class="mg-button-icon">
-        <slot name="icon" />
+      <span v-if="hasIconSlot || icon" class="mg-button-icon">
+        <slot name="icon">
+          <component :is="icon" v-if="typeof icon !== 'string'" />
+          <span v-else-if="icon">{{ icon }}</span>
+        </slot>
       </span>
       <span v-if="hasLabel" class="mg-button-label">
         <slot>{{ label }}</slot>
@@ -407,24 +472,27 @@ const hasLabel = computed(() => !!props.label || !!slots.default);
 </template>
 
 <script setup lang="ts">
-import { useSlots, computed } from "vue";
+import { useSlots, computed } from "vue"
+import type { Component } from "vue"
+import type { Size, AddonColor } from "../types/components"
 
-const slots = useSlots();
-const hasIconSlot = computed(() => !!slots.icon);
-const hasLabel = computed(() => !!props.label || !!slots.default);
+defineOptions({ name: "Button", inheritAttrs: false })
 
-type Variant = "filled" | "outline";
-type Color = "primary" | "success" | "warning" | "error";
-type Size = "sm" | "md" | "lg";
+type Variant = "filled" | "outline"
+type ButtonType = "button" | "submit" | "reset"
 
 interface Props {
-  label?: string;
-  variant?: Variant;
-  color?: Color;
-  size?: Size;
-  disabled?: boolean;
-  loading?: boolean;
-  block?: boolean;
+  label?: string
+  variant?: Variant
+  color?: AddonColor
+  size?: Size
+  type?: ButtonType
+  disabled?: boolean
+  loading?: boolean
+  showLabelWhileLoading?: boolean
+  loadingLabel?: string
+  block?: boolean
+  icon?: string | Component
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -432,83 +500,108 @@ const props = withDefaults(defineProps<Props>(), {
   variant: "filled",
   color: "primary",
   size: "sm",
+  type: "button",
   disabled: false,
   loading: false,
+  showLabelWhileLoading: false,
   block: false,
-});
+})
 
-const emit = defineEmits<{ click: [event: MouseEvent] }>();
+defineSlots<{
+  default: () => any
+  icon: () => any
+  "loading-label": () => any
+}>()
+
+const slots = useSlots()
+const hasIconSlot = computed(() => !!slots.icon)
+const hasLabel = computed(() => props.label !== "" || !!slots.default)
+
+const emit = defineEmits<{ click: [event: MouseEvent] }>()
 
 const handleClick = (event: MouseEvent) => {
-  if (props.disabled || props.loading) return;
-  emit("click", event);
-};
+  if (props.disabled || props.loading) return
+  emit("click", event)
+}
 </script>
 ```
 
 ## 十、与其他主流 UI 库的 API 对比
 
-为了更直观地展示 Moongate UI Button 与当今主流、活跃的 UI 库在设计哲学上的异同，下表对比了 Nuxt UI v4、Naive UI 和 PrimeVue 的 API 风格。
+| API 特性            | **Moongate UI (本文)**                   | **✨ Nuxt UI v4**                                          | Naive UI (NButton)                          | PrimeVue (Button)               |
+| :------------------ | :--------------------------------------- | :--------------------------------------------------------- | :------------------------------------------ | :------------------------------ |
+| **核心风格**        | `variant` (filled/outline)               | `variant` + `color` (solid/outline/soft/subtle/ghost/link) | `type` (primary/success/warning/error/info) | `severity` + `variant`          |
+| **尺寸**            | `size` (sm/md/lg)                        | `size` (xs/sm/md/lg/xl)                                    | `size` (small/medium/large)                 | `size` (small/medium/large)     |
+| **禁用**            | `disabled`                               | `disabled`                                                 | `disabled`                                  | `disabled`                      |
+| **加载**            | `loading`                                | `loading` / `loadingAuto`                                  | `loading`                                   | `loading`                       |
+| **块级**            | `block`                                  | `block`                                                    | `block`                                     | `fluid`                         |
+| **图标**            | `icon` prop + `#icon` 插槽               | `icon` / `leading-icon` / `trailing-icon` + 插槽           | 无                                          | `icon` + `iconPos`              |
+| **加载文字**        | `showLabelWhileLoading` + `loadingLabel` | `loading` / `loadingAuto`                                  | 无                                          | `loading`                       |
+| **原生类型**        | `type` (button/submit/reset)             | 透传                                                       | 透传                                        | 透传                            |
+| **额外样式**        | 无                                       | `square`                                                   | `dashed`, `circle`, `round`                 | `rounded`, `raised`, `outlined` |
+| **Vue Router 集成** | 不支持 (由用户包装)                      | 原生支持 (`to`/`href`)                                     | 不支持                                      | 通过 `as` 属性间接支持          |
 
-| API 特性            | **Moongate UI (本章节)**   | **✨ Nuxt UI v4 (灵感之源)**                               | Naive UI (NButton)                          | PrimeVue (Button)                                                                    |
-| :------------------ | :------------------------- | :--------------------------------------------------------- | :------------------------------------------ | :----------------------------------------------------------------------------------- |
-| **核心风格**        | `variant` (filled/outline) | `variant` + `color` (solid/outline/soft/subtle/ghost/link) | `type` (primary/success/warning/error/info) | `severity` (primary/secondary/success/info/warning/danger/help/contrast) + `variant` |
-| **尺寸**            | `size` (sm/md/lg)          | `size` (xs/sm/md/lg/xl)                                    | `size` (small/medium/large)                 | `size` (small/medium/large)                                                          |
-| **禁用**            | `disabled`                 | `disabled`                                                 | `disabled`                                  | `disabled`                                                                           |
-| **加载**            | `loading`                  | `loading` / `loadingAuto`                                  | `loading`                                   | `loading`                                                                            |
-| **块级**            | `block`                    | `block`                                                    | `block`                                     | `fluid`                                                                              |
-| **图标**            | `#icon` 插槽               | `icon` / `leading-icon` / `trailing-icon` + 插槽           | 无                                          | `icon` + `iconPos`                                                                   |
-| **额外样式**        | 无                         | `square`                                                   | `dashed`, `circle`, `round`                 | `rounded`, `raised`, `outlined`                                                      |
-| **Vue Router 集成** | 不支持 (由用户包装)        | 原生支持 (`to`/`href`)                                     | 不支持                                      | 通过 `as` 属性间接支持                                                               |
+> 说明：表格中 **Nuxt UI**、**Naive UI** 和 **PrimeVue** 的 API 信息均来自其官方文档 (2026 年版本)。
 
-> 说明：表格中 **Naive UI** 和 **PrimeVue** 的 API 信息均来自其官方文档 (2026 年版本)。
+通过这张表，可以清晰地看到 Moongate 的设计取舍：
 
-通过这张表，可以清晰地看到：
+- **`variant` 与 `color` 的解耦**：关注"视觉模式"与"语义颜色"分离
+- **尺寸的精简**：3 种尺寸足够覆盖个人博客场景
+- **加载状态的精细化**：`showLabelWhileLoading`/`loadingLabel` 是对"加载时文案"需求的响应——这是其他库经常忽略的细节
+- **图标支持的灵活性**：prop 快速写法 + 插槽完全控制
 
-- **`variant` 与 `color` 的解耦**：`variant` 专注“视觉模式”，`color` 专注“语义颜色”，逻辑更清晰。
-- **尺寸的精简**：Nuxt UI 提供了 5 种尺寸选择，而在个人博客的场景下，3 种尺寸已经足够，删除 `xs` 和 `xl` 有助于简化用户选择。
-- **图标支持的灵活性**：虽然 Moongate UI 不提供 `icon` prop，但通过 `#icon` 插槽可以实现同样的效果，且更加灵活。
-- **语义化命名**：使用 `filled` 和 `outline` 来命名变体，比单纯的 `primary` 和 `secondary` 更准确地描述了视觉样式。
+## 十一、关于加载状态宽度变化的讨论
 
-## 十一、补充细节：加载状态下的宽度变化陷阱
+组件开发中有一个经典陷阱——**按钮加载时宽度变化导致布局偏移（CLS）**。
 
-使用 `loading` 属性时，有一个常见但容易被忽视的问题——“按钮加载时宽度会变化”。当加载动画（如旋转图标）出现时，会改变按钮内部的子元素，通常导致按钮容器扩宽，造成布局晃动。这其实就是 **Cumulative Layout Shift (CLS)**。
+常见的解法是 `min-width` 预留 + 加载图标绝对定位。但在 v1.5.0 的实际实现中，我**没有采用这种方式**，原因是：
 
-一个优雅的解决方案是：使用 `min-width` 预留给文字加载前后的空间，同时将加载图标绝对定位，使其不参与布局。
+1. **`min-width: 88px` 是硬编码值**，会破坏"小型组件响应不同内容宽度"的灵活性
+2. 绝对定位的加载图标在 `loading="true"` 时脱离文档流，如果按钮内有其他内容（如加载文字），布局仍可能变化
+3. 更好的性能优化是**保证加载状态的文案长度接近正常状态**（`loadingLabel` 帮助用户保持文案一致）
+
+如果你的场景确实对 CLS 要求严格（如电商下单按钮），可以在业务层手动添加：
 
 ```css
-.mg-button {
-  /* 1. 使用 min-width 预留足够空间，确保加载和正常状态宽度一致 */
-  min-width: 88px;
-}
-
-.mg-button-loading .mg-button-label {
-  opacity: 0;
-}
-
-.mg-button-loading-icon {
-  /* 2. 绝对定位加载图标居中，不影响布局 */
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+.my-order-button {
+  min-width: 120px; /* 根据你实际按钮宽度预留 */
 }
 ```
 
-这个优化可以有效防止页面布局偏移，提升用户体验。
+组件库层面保持灵活，用户按需优化。
 
 ## 十二、设计决策总结
 
-| 决策                           | 原因                           |
-| ------------------------------ | ------------------------------ |
-| 删除 `xs` 尺寸                 | 使用频率低，简化 API           |
-| 删除 `ghost` 变体              | 可用 `outline` 替代            |
-| 删除 `neutral` 颜色            | 可用 `outline` + 默认色替代    |
-| 默认尺寸为 `sm`                | 主流 UI 库默认按钮约 32px      |
-| 只使用 `#icon` 插槽            | 避免 prop 与插槽混乱，保持简洁 |
-| `label` prop + 默认插槽        | 两种写法都支持                 |
-| 隐藏空标签                     | 解决纯图标按钮居中问题         |
-| `v-bind="$attrs"`              | 透传原生属性，保持灵活性       |
-| `min-width` + 绝对定位加载图标 | 防止加载状态布局偏移           |
+| 决策                           | 原因                                       |
+| ------------------------------ | ------------------------------------------ |
+| 删除 `xs` 尺寸                 | 使用频率低，简化 API                       |
+| 删除 `ghost` 变体              | 可用 `outline` 替代                        |
+| 删除 `neutral` 颜色            | 可用 `outline` + 默认色替代                |
+| 默认尺寸为 `sm`                | 主流 UI 库默认按钮约 32px                  |
+| 默认 `type="button"`           | 防止表单意外提交                           |
+| `icon` prop + `#icon` 插槽共存 | 快速写法 + 完全控制，插槽优先              |
+| `label` prop + 默认插槽        | 两种写法都支持                             |
+| `hasLabel = label !== ''`      | 纯图标按钮不渲染空 label 容器              |
+| loading 增强                   | `showLabelWhileLoading` + `loadingLabel`   |
+| `v-bind="$attrs"`              | 透传原生属性，保持灵活性                   |
+| 不添加 aria-busy/aria-disabled | 依赖原生 disabled 语义 + axe-core 测试保障 |
+| 不做 CLS 魔法                  | 保持灵活性，用户按需优化                   |
+
+## 十三、测试保障
+
+v1.5.0 的 Button 有 **20 个组件测试**，覆盖：
+
+- 默认 props 渲染
+- variant/color/size 变体 class
+- loading 状态（自动禁用、隐藏文字、showLabelWhileLoading、loadingLabel、插槽）
+- 纯图标按钮（label 为空不渲染容器）
+- `icon` prop（字符串渲染文本、Component 渲染组件、插槽优先于 prop）
+- disabled/loading 时 click 不触发
+- 属性透传（id、data-\*）
+- `type` prop 透传
+
+以及 **axe-core 可访问性检查**（Button 无违规）和 **SSR 渲染检查**。
+
+---
 
 本篇以 Button 为例梳理了简单组件的设计要点。下一篇将深入复杂组件，涵盖数据适配、内部状态、逻辑复用等更高级的话题。

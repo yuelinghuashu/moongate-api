@@ -1,6 +1,6 @@
 ---
 title: Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计与状态管理
-description: 以 Select 和 Pagination 为例，深入探讨 Vue 3 复杂组件的 API 设计、数据格式适配、类型回溯、路由同步、键盘交互、组合式函数抽离及 SSR 适配，揭示工业级组件背后的设计权衡与实现细节。
+description: 以 Select 和 Pagination 为例，深入探讨 Vue 3 复杂组件的 API 设计、数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级组件背后的设计权衡与实现细节。
 date: 2026-05-19
 permalink: 62e1afa3-c02e-4bf8-bc52-36f3b13032e9
 series: moongate-vue
@@ -11,7 +11,7 @@ tags:
   - Engineering
 ---
 
-> 从数据格式适配到路由同步，深入复杂组件的设计要点与逻辑复用
+> 从数据格式适配到可搜索/多选，深入复杂组件的设计要点与逻辑复用
 
 ## 📚 系列导航
 
@@ -20,30 +20,23 @@ tags:
 1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
    —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
 
-2. [**CSS 优先 + 组件薄封装：一个 10KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、体积分析与维护性对比，500 行代码构建 10KB 组件库。
+2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
+   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
 
 3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
    —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
 
 4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、路由同步、键盘交互、组合式函数抽离及 SSR 适配，揭示工业级细节。
+   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
 
 5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
    —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
 
 ## 一、引言
 
-如果说写 Button 组件是在享受写 CSS 变量的“涂料之美”，那么写 Select 和 Pagination 就是在应对原生 HTML 历史包袱的“泥潭摔跤”。简单组件是单向的数据消费者，而复杂组件则是**数据适配器**（兼容多格式）与**状态同步器**（协同路由与键盘）。
+如果说写 Button 组件是在享受写 CSS 变量的"涂料之美"，那么写 Select 和 Pagination 就是在应对原生 HTML 历史包袱的"泥潭摔跤"。简单组件是单向的数据消费者，而复杂组件则是**数据适配器**（兼容多格式）与**状态协调器**（可搜索、多选、键盘导航、SSR 安全）。
 
-本文以 **Select** 和 **Pagination** 为例，展示复杂组件的开发思路，涵盖：
-
-- 灵活的数据格式支持（对象数组、字符串数组、数字数组）
-- 自定义字段映射（`labelKey` / `valueKey`）
-- 路由状态同步（页码、筛选条件与 URL 绑定）
-- 辅助功能（键盘翻页、移动端手势）
-- 逻辑抽离与复用（组合式函数）
-- 工业级细节：类型回溯、防御性编程、事件防污染、极端边界处理
+本文以 **Select** 和 **Pagination** 为例，展示 v1.5.0 实际实现的复杂组件开发思路。
 
 ## 二、Select 下拉选择框：数据适配器
 
@@ -57,395 +50,395 @@ Select 组件需要接收一组选项，并允许用户选择其中一个。真�
 - 支持数字数组 `[1, 2, 3]`
 - 提供占位符（不可选中的默认选项）
 - 支持禁用选项（`disabled: true`）
-- 支持错误状态、尺寸、禁用等常规属性
+- **可搜索模式**（filterable）：输入过滤 + 下拉面板
+- **多选模式**（multiple + filterable）：标签展示
 - **必须解决原生 `<select>` 返回字符串的类型陷阱**
-- **支持原生 `<form>` 提交（通过 `name` 属性）**
+- **完整 ARIA 键盘导航**（listbox + option + aria-activedescendant）
 
-### 2.2 API 设计与类型防腐
+### 2.2 双模式架构：原生模式 + 可搜索模式
 
-为了避免 `any` 造成类型污染，我们采用联合类型收窄。
+v1.5.0 的 Select 支持**双模式**：
+
+- **原生模式**（默认）：渲染原生 `<select>`，零 JS 开销
+- **可搜索模式**（`filterable=true`）：渲染自定义输入框 + 下拉面板，支持搜索/多选/键盘导航
+
+```vue
+<!-- 原生模式：性能最优 -->
+<Select v-model="category" :options="categories" />
+
+<!-- 可搜索模式：过滤 + 下拉 -->
+<Select v-model="fruit" :options="fruits" filterable />
+
+<!-- 可搜索 + 多选 -->
+<Select v-model="tags" :options="tags" filterable multiple />
+```
+
+### 2.3 API 设计与类型防腐
+
+为了避免 `any` 造成类型污染，我们采用联合类型收窄：
 
 ```typescript
-type SelectOption = string | number | Record<string, any>;
+export type SelectValue = string | number
+export type SelectOption = string | number | Record<string, any>
 
 interface Props {
-  modelValue?: string | number;
-  options?: SelectOption[]; // 联合类型，拒绝裸 any
-  labelKey?: string; // 默认 'label'
-  valueKey?: string; // 默认 'value'
-  placeholder?: string;
-  name?: string; // 支持原生 form 提交
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  error?: boolean;
+  options?: SelectOption[]
+  placeholder?: string
+  size?: Size
+  disabled?: boolean
+  error?: boolean
+  labelKey?: string // 默认 'label'
+  valueKey?: string // 默认 'value'
+  filterable?: boolean // 可搜索模式
+  emptyText?: string
+  maxHeight?: number // 下拉面板最大高度
+  multiple?: boolean // 多选（需 filterable）
 }
 ```
 
-### 2.3 内部实现：防御性编程 + 类型回溯
+**类型回溯**解决原生 select 总是返回字符串的问题：
 
-```vue
-<template>
-  <select
-    class="mg-select"
-    :class="[`mg-select-${size}`, { 'mg-select-error': error }]"
-    :value="modelValue"
-    :disabled="disabled"
-    :name="name"
-    v-bind="$attrs"
-    @change="handleChange"
-  >
-    <option v-if="placeholder" value="" disabled hidden>
-      {{ placeholder }}
-    </option>
-    <option
-      v-for="item in options || []"
-      :key="getValue(item)"
-      :value="getValue(item)"
-      :disabled="item.disabled"
-    >
-      {{ getLabel(item) }}
-    </option>
-  </select>
-</template>
+```typescript
+const handleNativeChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement
+  const rawValue = target.value
 
-<script setup lang="ts">
-// ... 类型定义
-
-const getLabel = (item: any): string => {
-  if (item === null || item === undefined) return "";
-  if (typeof item !== "object") return String(item);
-  const label = item[props.labelKey];
-  return label !== undefined ? String(label) : String(item);
-};
-
-const getValue = (item: any): any => {
-  if (item === null || item === undefined) return undefined;
-  if (typeof item !== "object") return item;
-  const val = item[props.valueKey];
-  return val !== undefined ? val : item;
-};
-
-// 🔥 核心：解决原生 select 总是返回字符串的致命问题
-const handleChange = (event: Event) => {
-  const target = event.target as HTMLSelectElement;
-  const rawValue = target.value;
-
-  // 尝试在原始 options 中找回原始类型（数字或对象值）
-  const originalItem = (props.options || []).find(
+  // 在原始 options 中找回原始类型（数字或对象值）
+  const originalItem = props.options?.find(
     (item) => String(getValue(item)) === rawValue,
-  );
-  const finalValue =
-    originalItem !== undefined ? getValue(originalItem) : rawValue;
+  )
+  const finalValue = originalItem !== undefined ? getValue(originalItem) : rawValue
 
-  emit("update:modelValue", finalValue);
-  emit("change", finalValue);
-};
-</script>
+  modelValue.value = finalValue
+  emit('change', finalValue)
+}
 ```
 
-**防御性编程说明**：`options || []` 确保即使外部传入 `undefined` 或延迟加载，组件也不会白屏。类型回溯逻辑保证了 `v-model` 绑定的数字值不会意外变成字符串。显式支持 `name` 属性，使 `<select>` 能够参与原生表单提交。
+这个逻辑保证 `v-model` 绑定的数字值不会意外变成字符串。
 
-### 2.4 使用示例
+### 2.4 属性透传拆分
+
+这是可搜索模式的关键细节——**哪些属性透传到原生 input，哪些保留在外层 wrapper**：
+
+```typescript
+const attrs = useAttrs()
+
+/** 透传到原生表单元素的 form/aria 属性 */
+const formAttrs = computed(() => {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key.startsWith('aria-') || ['name', 'id', 'role', 'tabindex'].includes(key)) {
+      result[key] = value
+    }
+  }
+  return result
+})
+
+/** 保留在外层 wrapper 的其余属性（class/style/事件等） */
+const wrapperAttrs = computed(() => {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(attrs)) {
+    if (!(key in formAttrs.value)) {
+      result[key] = value
+    }
+  }
+  return result
+})
+```
+
+为什么必须拆分？如果 `aria-label` 留在外层 wrapper 而未透传到实际 `<input>`，屏幕阅读器会无法识别输入框的可访问名称——在 `a11y.test.ts` 的 axe-core 检查中会报 `aria-input-field-name` 违规。
+
+### 2.5 ARIA 键盘导航（WAI-ARIA Combobox 模式）
+
+可搜索模式的键盘导航遵循 WAI-ARIA Combobox 模式：
 
 ```vue
-<!-- 对象数组（默认字段） -->
-<Select v-model="category" :options="categories" name="category" />
-
-<!-- 自定义字段名 -->
-<Select v-model="category" :options="cats" label-key="name" value-key="id" />
-
-<!-- 字符串数组（类型自动保持） -->
-<Select v-model="color" :options="['红', '绿', '蓝']" />
-
-<!-- 数字数组 -->
-<Select v-model="num" :options="[10, 20, 30]" />
-
-<!-- 禁用选项 -->
-<Select v-model="status" :options="statusOptions" />
+<!-- 下拉面板 -->
+<div
+  v-if="isOpen"
+  ref="dropdownRef"
+  class="mg-select-dropdown"
+  role="listbox"
+  :aria-label="listboxAriaLabel"
+  :aria-activedescendant="focusedIndex >= 0 ? getOptionId(focusedIndex) : undefined"
+>
+  <!-- 选项 -->
+  <div
+    v-for="(item, index) in filteredOptions"
+    :id="getOptionId(index)"
+    role="option"
+    :aria-selected="isSelected(item)"
+    :class="{ 'mg-select-option-focused': focusedIndex === index }"
+    @click="selectOption(item)"
+    @mouseenter="focusedIndex = index"
+  >
 ```
+
+支持的操作：
+- `ArrowDown` / `ArrowUp`：移动高亮（`focusedIndex`），并 `scrollIntoView` 保持可视
+- `Enter`：选中当前高亮选项
+- `Esc`：关闭下拉
+- 每个选项有唯一 `id`（基于 `useId()`），供 `aria-activedescendant` 引用
+
+### 2.6 多选模式
+
+多选（`multiple + filterable`）将 `modelValue` 变为数组：
+
+```typescript
+const modelValue = defineModel<SelectValue | SelectValue[]>({ default: '' })
+
+// 多选时：切换选中
+const selectOption = (item: SelectOption) => {
+  if (isOptionDisabled(item)) return
+  const value = getValue(item)
+
+  if (props.multiple) {
+    const current = multipleValues.value
+    const isAlreadySelected = current.some((v) => String(v) === String(value))
+    const next = isAlreadySelected
+      ? current.filter((v) => String(v) !== String(value))
+      : [...current, value]
+
+    modelValue.value = next
+    // 多选保持下拉打开，方便连续多选
+    searchText.value = ''
+    focusedIndex.value = -1
+    nextTick(() => inputRef.value?.focus())
+    return
+  }
+
+  // 单选：选择后关闭
+  modelValue.value = value
+  closeDropdown()
+}
+```
+
+多选时：
+- 已选项渲染为标签（tag），每个标签有 `aria-label="移除 {label}"` 的删除按钮
+- 选择后**下拉保持打开**（方便连续多选）
+- 输入框只显示搜索文本，已选标签在外部
 
 ## 三、Pagination 分页组件：状态同步器
 
-分页组件需要与当前页码、每页条数配合，并提供上一页/下一页按钮，支持直接输入页码跳转。在 Nuxt 项目中往往需要将页码同步到 URL，并支持键盘左右键翻页（不干扰输入框）。
-
-### 3.1 需求分析
-
-- 显示 `当前页 / 总页数`
-- 上一页/下一页按钮（边界禁用）
-- 点击当前页码变成输入框，支持直接输入跳转
-- 与路由 query 同步（页码变化时更新 URL）
-- 支持键盘左右键翻页（**必须不干扰输入框**）
-- 极端边界防御（输入框清空、超出范围等）
-- 尺寸适配
-
-### 3.2 API 设计
+### 3.1 API 设计（v1.5.0 实际）
 
 ```typescript
 interface Props {
-  currentPage: number; // v-model:current-page
-  totalPages: number;
-  size?: "sm" | "md" | "lg";
+  totalPages: number       // 总页数（必传）
+  modelValue: number       // 当前页码（v-model）
+  size?: "sm" | "md" | "lg"
+  showQuickJump?: boolean  // 首尾页快速跳转按钮（默认 true）
+  prevText?: string        // 上一页文案（走全局 i18n）
+  nextText?: string
+  firstText?: string
+  lastText?: string
 }
 ```
 
-### 3.3 核心实现（含极端边界防御）
+Pagination 使用 `defineModel<number>` 绑定当前页：
+
+```typescript
+const currentPage = defineModel<number>({ required: true })
+```
+
+### 3.2 快速跳转 + 页码编辑
 
 ```vue
-<template>
-  <nav class="mg-pagination" :class="`mg-pagination-${size}`">
-    <button
-      class="mg-pagination-btn"
-      :disabled="currentPage === 1"
-      @click="goPrev"
-    >
-      上一页
-    </button>
+<!-- 显示模式：可点击的数字 → 进入编辑 -->
+<span v-else class="mg-pagination-current" @click="startEdit">
+  {{ currentPage }}
+</span>
 
-    <span v-if="!editing" class="mg-pagination-current" @click="startEdit">
-      {{ currentPage }}
-    </span>
-    <input
-      v-else
-      ref="inputRef"
-      v-model="inputPage"
-      type="number"
-      class="mg-pagination-input"
-      :min="1"
-      :max="totalPages"
-      @blur="commit"
-      @keyup.enter="commit"
-    />
+<!-- 编辑模式：输入框 -->
+<input
+  v-if="isEditing"
+  v-model="inputPage"
+  type="number"
+  :min="1"
+  :max="totalPages"
+  @blur="commitJump"
+  @keyup.enter="commitJump"
+/>
+```
 
-    <span class="mg-pagination-sep">/</span>
-    <span class="mg-pagination-total">{{ totalPages }}</span>
+`commitJump` 的极端边界防御：
 
-    <button
-      class="mg-pagination-btn"
-      :disabled="currentPage === totalPages"
-      @click="goNext"
-    >
-      下一页
-    </button>
-  </nav>
-</template>
+```typescript
+const commitJump = () => {
+  isEditing.value = false
+  const newPage = parseInt(String(inputPage.value), 10)
 
-<script setup lang="ts">
-import { ref, nextTick } from "vue";
-
-const props = defineProps<{
-  currentPage: number;
-  totalPages: number;
-  size?: string;
-}>();
-const emit = defineEmits<{ "update:currentPage": [page: number] }>();
-
-const editing = ref(false);
-const inputPage = ref(props.currentPage);
-const inputRef = ref<HTMLInputElement>();
-
-const goPrev = () => {
-  if (props.currentPage > 1) emit("update:currentPage", props.currentPage - 1);
-};
-const goNext = () => {
-  if (props.currentPage < props.totalPages)
-    emit("update:currentPage", props.currentPage + 1);
-};
-
-const startEdit = () => {
-  editing.value = true;
-  inputPage.value = props.currentPage;
-  nextTick(() => inputRef.value?.focus());
-};
-
-const commit = () => {
-  editing.value = false;
-  const raw = inputPage.value;
-  const pageNum = parseInt(String(raw), 10);
-
-  // 非法输入直接放弃，不更新页码
-  if (isNaN(pageNum)) return;
-
-  let page = Math.min(Math.max(pageNum, 1), props.totalPages);
-  if (page !== props.currentPage) {
-    emit("update:currentPage", page);
+  // 非法输入：放弃并恢复
+  if (isNaN(newPage)) {
+    inputPage.value = currentPage.value
+    return
   }
-};
-</script>
-```
 
-### 3.4 键盘翻页逻辑（组合式函数）
+  goToPage(newPage) // clamp 到 [1, totalPages]
+}
 
-为了保持组件纯净，将键盘事件抽离为 `useKeyboardPagination`，并确保不干扰输入框。
-
-```typescript
-// composables/useKeyboardPagination.ts
-import { onMounted, onUnmounted } from "vue";
-
-export function useKeyboardPagination(onPrev: () => void, onNext: () => void) {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    // 🔥 关键：如果焦点在输入框或文本域内，不触发翻页
-    const target = e.target as HTMLElement;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-
-    if (e.key === "ArrowLeft") onPrev();
-    if (e.key === "ArrowRight") onNext();
-  };
-
-  onMounted(() => window.addEventListener("keydown", handleKeyDown));
-  onUnmounted(() => window.removeEventListener("keydown", handleKeyDown));
+const goToPage = (page: number) => {
+  let newPage = page
+  if (newPage < 1) newPage = 1
+  if (newPage > props.totalPages) newPage = props.totalPages
+  if (newPage === currentPage.value) return
+  currentPage.value = newPage
+  emit('change', newPage)
 }
 ```
 
-### 3.5 路由同步与全能 Composable
+### 3.3 全局文案（i18n）
 
-为了展示“一键装配”的优雅，我们将页码路由同步、键盘事件、翻页方法整合为一个全能组合式函数。
+v1.5.0 加入了全局文案系统。Pagination 的所有 aria-label 和按钮文字都走配置链：
 
 ```typescript
-// composables/useMoongatePagination.ts
-import { ref, type Ref } from "vue";
-import { useRouteQueryNumber } from "./useRouteQuery";
-import { useKeyboardPagination } from "./useKeyboardPagination";
+const texts = useTexts() // 响应式全局文案
 
-export function useMoongatePagination(totalPages: Ref<number>) {
-  const page = useRouteQueryNumber("page", { defaultValue: 1 });
+const prevTextValue = computed(() => props.prevText ?? texts.value.paginationPrev)
+const pageInfoLabel = computed(() =>
+  formatTemplate(texts.value.paginationPageInfo, {
+    current: currentPage.value,
+    total: props.totalPages,
+  }),
+)
+```
 
-  const goPrev = () => {
-    if (page.value > 1) page.value--;
-  };
-  const goNext = () => {
-    if (page.value < totalPages.value) page.value++;
-  };
+优先级：**组件 prop > setConfig texts > 语言内置文案**。文案支持 `{current}`/`{total}` 模板占位符。
 
-  // 内部直接装配键盘事件
-  useKeyboardPagination(goPrev, goNext);
+## 四、组合式函数抽离
 
-  return { page, goPrev, goNext };
+复杂组件往往需要抽离共享逻辑。v1.5.0 的核心 composables：
+
+### 4.1 useFormField（Input/Textarea 共享）
+
+处理 `v-model` 更新 + 原生事件透传：
+
+```typescript
+export function useFormField(modelValue, emit) {
+  const handleInput = (event: Event) => {
+    modelValue.value = (event.target as HTMLInputElement).value
+    emit('input', event)
+  }
+  // change/focus/blur 原生事件透传
+  return { handleInput, handleChange, handleBlur, handleFocus }
 }
 ```
 
-在业务页面中使用：
+### 4.2 useFloating（Popover/Tooltip 共享）
 
-```vue
-<script setup>
-const totalPages = ref(10);
-const { page, goPrev, goNext } = useMoongatePagination(totalPages);
-// 无需再单独处理键盘事件，一切自动完成
-</script>
+自研悬浮层定位引擎：视口翻转 + 边界修正 + ResizeObserver：
 
-<template>
-  <Pagination v-model:current-page="page" :total-pages="totalPages" />
-  <!-- 你也可以自定义按钮，与分页组件状态联动 -->
-  <button @click="goPrev">上一页</button>
-  <button @click="goNext">下一页</button>
-</template>
+```typescript
+export function useFloating(options: UseFloatingOptions) {
+  // 延迟显示/隐藏
+  // 位置计算（按方向定位 + 视口翻转）
+  // 滚动/窗口尺寸变化时重新定位
+  // ResizeObserver 仅监听悬浮层自身尺寸
+  // SSR 安全（isBrowser 守卫）
+  return { triggerRef, floatingRef, visible, currentPlacement, floatStyle, show, hide, ... }
+}
 ```
 
-## 四、复杂组件的数据与状态流向
+### 4.3 useOverlayBehavior（Modal/Drawer 共享，位于 useScrollLock.ts）
+
+滚动锁定 + ESC 关闭 + 焦点陷阱：
+
+```typescript
+// composables/useScrollLock.ts
+export function useOverlayBehavior(isOpen, overlayRef, onClose, options) {
+  // body 滚动锁定（模块级 lockCount 计数器，多实例安全）
+  // ESC 键关闭
+  // Tab 焦点陷阱
+}
+```
+
+该函数与滚动锁定逻辑（`lockBodyScroll`/`unlockBodyScroll`）一同定义在 **`useScrollLock.ts`** 中——滚动锁、ESC 关闭、焦点陷阱三者在语义上同属"浮层行为"这一关注点，因此放在同一个文件内。
+
+**模块级锁计数**解决多 Modal/Drawer 同时打开的滚动锁冲突——只有最后一个关闭时才恢复 body 滚动。
+
+## 五、SSR 适配：useId 与 isBrowser
+
+v1.5.0 的 SSR 适配比初版更完善，核心是两条：
+
+### 5.1 useId() 保证 hydration 安全
+
+所有需要 `id` 的组件（Modal/Drawer/Select/Tabs）使用 Vue 3 的 `useId()`：
+
+```typescript
+const selectBaseId = useId()
+const getOptionId = (index: number): string => `${selectBaseId}-option-${index}`
+```
+
+`useId()` 在服务端与客户端生成一致的 ID，避免 hydration mismatch。
+
+### 5.2 isBrowser 守卫
+
+所有 DOM 操作添加浏览器环境守卫：
+
+```typescript
+const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined'
+
+// 在 watch/onMounted/顶层代码中：
+if (!isBrowser) return
+```
+
+配合 `useScrollLock.ts` 的模块级计数器，`lockBodyScroll()` 在非浏览器环境下直接跳过 DOM 操作。
+
+### 5.3 createOverlay：命令式组件 SSR 安全
+
+```typescript
+// composables/createOverlay.ts
+export function createOverlay(component, props, containerClass) {
+  if (!isBrowser) return null // SSR 返回 null
+  // ...
+}
+```
+
+## 六、数据与状态流向
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────┐
 │ 复杂组件数据流 │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
 │ │ 外部数据 │ -> │ 数据适配器 │ -> │ 内部状态 │ │
-│ │ (options) │ │ (getLabel/ │ │ (selected) │ │
-│ └─────────────┘ │ getValue) │ └──────┬──────┘ │
-│ └─────────────┘ │ │
+│ │ (options) │ │ (getLabel/ │ │ (selected/ │ │
+│ └─────────────┘ │ getValue) │ │ searchText) │ │
+│ └─────────────┘ └──────┬──────┘ │
 │ ↓ │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
-│ │ 全局环境 │ <- │ 状态同步器 │ <- │ 用户交互 │ │
-│ │ (路由/键盘) │ │ (watch/ │ │ (click/ │ │
-│ └─────────────┘ │ event) │ │ keyboard) │ │
-│ └─────────────┘ └─────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+│ │ 全局环境 │ <- │ 状态协调器 │ <- │ 用户交互 │ │
+│ │ (i18n/SSR) │ │ (watch/event)│ │ (click/ │ │
+│ └─────────────┘ └─────────────┘ │ keyboard) │ │
+│ └─────────────┘ │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## 五、复杂组件的测试策略
+## 七、测试策略
 
-| 关注点       | 简单组件（Button）              | 复杂组件（Select / Pagination）                                                              |
-| ------------ | ------------------------------- | -------------------------------------------------------------------------------------------- |
-| **测试策略** | 快照测试、简单的 Click 事件触发 | **状态快照组合、边界值测试（第0页/超出总页数）、DOM 聚焦与键盘模拟测试、类型回溯健壮性测试** |
+v1.5.0 的 Select 有 **40+ 测试**，Pagination 有 **14 测试**，覆盖：
 
-## 六、SSR 适配：组件库的"最后一公里"
+| 关注点 | 测试内容 |
+| ------ | -------- |
+| **类型回溯** | 原生模式数字数组 `[10,20,30]` 选中后 modelValue 仍为 number |
+| **ARIA 导航** | `aria-activedescendant` 指向高亮选项、每个 option 有唯一 id |
+| **键盘操作** | ArrowDown/Up 高亮、Enter 选中、Esc 关闭、边界不越界 |
+| **多选** | 标签渲染、切换选中、tag 删除、Enter 连续多选 |
+| **边界值** | 搜索空结果、外部 modelValue 变化、blur 时下拉保持打开 |
+| **无障碍** | axe-core 对 Select（原生+可搜索）无违规 |
 
-复杂组件往往依赖浏览器 API（`document`、`window`），在 SSR 环境下会直接报错 `document is not defined`。本节以 Popover、Tooltip、Drawer 为例，展示如何系统性地适配 SSR。
+以及 **SSR 检查**：`renderToString` 确认组件在服务端不崩溃且浮层默认隐藏。
 
-### 6.1 问题根源
+## 八、总结
 
-Vue 组件在服务端渲染时，`onMounted` 不会执行，但 `watch` 的 `immediate: true` 和 `<script setup>` 顶层代码**会执行**。以下代码在 SSR 时会崩溃：
+| 关注点 | 简单组件（Button） | 复杂组件（Select / Pagination） |
+| ------ | ------------------ | ------------------------------ |
+| **Props 数量** | 较少（11） | 较多（10-15） |
+| **数据格式** | 固定（字符串） | 灵活（支持多种数组，可配置字段，类型防腐） |
+| **状态管理** | 无内部状态 | 可搜索文本、多选数组、编辑状态、下拉显隐 |
+| **无障碍** | 原生语义 | WAI-ARIA Combobox 模式（listbox/option/activedescendant） |
+| **逻辑复用** | 不需要 | 组合式函数（useFormField/useFloating/useOverlayBehavior） |
+| **SSR 适配** | 自动 | useId hydration 安全 + isBrowser 守卫 |
+| **i18n** | 少数文案 | 全局配置链（prop > setConfig > 内置） |
+| **测试策略** | 快照、事件触发 | 状态组合、边界值、键盘模拟、类型回溯、axe-core |
 
-```typescript
-// ❌ SSR 报错：document is not defined
-watch(
-  () => modelValue.value,
-  (val) => {
-    if (val) {
-      document.body.style.overflow = "hidden"; // ← 服务端没有 document
-    }
-  },
-  { immediate: true },
-);
-```
-
-### 6.2 统一解决方案
-
-**第一步：定义 `isBrowser` 守卫**
-
-```typescript
-const isBrowser =
-  typeof window !== "undefined" && typeof document !== "undefined";
-```
-
-**第二步：在所有 `document`/`window` 访问处添加守卫**
-
-```typescript
-// ✅ 正确做法
-watch(
-  () => modelValue.value,
-  (val) => {
-    if (!isBrowser) return; // SSR 安全
-    if (val) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeydown);
-    }
-  },
-  { immediate: true },
-);
-
-onMounted(() => {
-  if (!isBrowser) return;
-  // 只有浏览器环境才执行 DOM 操作
-});
-
-onBeforeUnmount(() => {
-  if (!isBrowser) return;
-  document.body.style.overflow = "";
-  window.removeEventListener("keydown", handleKeydown);
-});
-```
-
-### 6.3 需要适配的组件清单
-
-| 组件                      | 涉及的浏览器 API                                                        | 处理方式                              |
-| ------------------------- | ----------------------------------------------------------------------- | ------------------------------------- |
-| **Drawer / Modal**        | `document.body.style.overflow`、`addEventListener`                      | watch + onBeforeUnmount 加守卫        |
-| **Popover / Tooltip**     | `window.innerWidth/Height`、`getBoundingClientRect`、`MutationObserver` | 全部放在 onMounted 中                 |
-| **useToast / useMessage** | `document.createElement`、`appendChild`                                 | 命令式调用加 `if (!isBrowser) return` |
-
-### 6.4 效果验证
-
-适配后，组件库可在 **Nuxt 4**、**VitePress** 等服务端渲染框架中无缝运行，无需用户额外配置。
-
-## 七、总结
-
-| 关注点           | 简单组件（Button） | 复杂组件（Select / Pagination）                       |
-| ---------------- | ------------------ | ----------------------------------------------------- |
-| **Props 数量**   | 较少（5-8）        | 较多（10+）                                           |
-| **数据格式**     | 固定（字符串）     | 灵活（支持多种数组，可配置字段，类型防腐）            |
-| **状态管理**     | 无内部状态         | 可能有内部编辑状态、输入框显隐、极端边界防御          |
-| **外部依赖**     | 无                 | 路由、键盘事件、手势                                  |
-| **逻辑复用**     | 不需要             | 强烈推荐抽离 composable，并可整合全能函数             |
-| **防御性编程**   | 低                 | 高（需处理 undefined 数据、类型回溯、清空输入框恢复） |
-| **原生表单集成** | 自动透传 `name`    | 显式支持 `name` 属性，可参与 `<form>` 提交            |
-| **测试策略**     | 快照、事件触发     | 状态组合、边界值、键盘模拟、类型回溯                  |
-
-一个优秀的复杂组件，对内要像吸尘器一样容纳各种奇葩的后端数据格式（通过 Key 映射和类型回溯），对外要像绅士一样克制地与全局环境（路由、窗口键盘）发生耦合。**高内聚、低耦合**，在这两类组件身上体现得淋漓尽致。
+一个优秀的复杂组件，对内要像吸尘器一样容纳各种奇葩的后端数据格式（通过 Key 映射和类型回溯），对外要像绅士一样克制地与全局环境（i18n、SSR、键盘）发生耦合。**高内聚、低耦合**，在这两类组件身上体现得淋漓尽致。

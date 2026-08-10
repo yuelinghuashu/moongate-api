@@ -1,6 +1,6 @@
 ---
-title: CSS 优先 + 组件薄封装：一个 10KB 组件库的极简实践
-description: 从 UnoCSS 回归原生 CSS，一套设计令牌驱动的组件库方案。四层 CSS 架构、极简 Vue 组件、体积分析与维护性对比，展示如何用 500 行代码构建一个 10KB 的组件库。
+title: CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践
+description: 设计令牌驱动的 Vue 3 组件库架构实录。四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算自动化验证，展示如何保持组件库在 25KB (gzip) 内的工程实践。
 date: 2026-04-19
 permalink: 7b75c994-ce43-4f78-89e1-817c295f3f00
 level: P3
@@ -19,14 +19,14 @@ tags:
 1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
    —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
 
-2. [**CSS 优先 + 组件薄封装：一个 10KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、体积分析与维护性对比，500 行代码构建 10KB 组件库。
+2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
+   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
 
 3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
    —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
 
 4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、路由同步、键盘交互、组合式函数抽离及 SSR 适配，揭示工业级细节。
+   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
 
 5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
    —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
@@ -41,45 +41,53 @@ tags:
 
 那么，**不用原子化 CSS，组件库应该怎么写？**
 
-这篇文章给出答案。
+这篇文章给出答案——以及 v1.5.0 在初版方案之上的工程进化。
 
-## 最终架构：四层 CSS 文件
+## 最终架构：四层 CSS 架构
 
-整个样式系统分为四个层级，职责清晰、层层依赖：
+整个样式系统分为多个层级，职责清晰、层层依赖：
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │ 设计令牌层（自动生成） │
-│ ┌─────────────────────┐ ┌─────────────────────────────┐ │
-│ │ colors.css │ │ layout.css │ │
-│ │ 颜色令牌（40+变量） │ │ 布局令牌（间距/字体/动效） │ │
-│ │ 【组件库的API层】 │ │ │ │
-│ └──────────┬──────────┘ └─────────────┬───────────────┘ │
-│ └──────────────┬──────────────┘ │
-│ ↓ │
-│ 组件样式层（手写） │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ components/ │ │
-│ │ 各组件独立样式文件（Button.css, Card.css...） │ │
-│ │ 引用 var(--ui-\*) 令牌 │ │
-│ └──────────────────────────┬──────────────────────────┘ │
-│ ↓ │
-│ 入口层（手写） │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ main.css │ │
-│ │ 导入令牌文件 + 组件样式 + 全局重置 + 极简工具类 │ │
-│ └─────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+│ ┌─────────────────────┐ ┌──────────────────────────────┐ │
+│ │ tokens/colors.css   │ │ tokens/layout.css            │ │
+│ │ 颜色令牌（浅/深各   │ │ 间距/字体/动效/z-index 令牌  │ │
+│ │ 68 个变量）         │ │ 【组件库的核心 API 层】      │ │
+│ └──────────┬──────────┘ └─────────────┬────────────────┘ │
+│            └──────────────┬───────────┘                   │
+│                           ↓                              │
+│ 组件样式层（手写）                                         │
+│ ┌────────────────────────────────────────────────────────┐ │
+│ │ components/ 各组件独立样式文件                          │ │
+│ │ （Button.css, Card.css, ... 共 20+ 文件）               │ │
+│ │ 引用 var(--ui-*) 令牌                                   │ │
+│ └──────────────────────────┬─────────────────────────────┘ │
+│                            ↓                              │
+│ 工具层（手写）                                              │
+│ ┌────────────────────────────────────────────────────────┐ │
+│ │ utilities/ 极简语义工具类（颜色/文本/契约变量）         │ │
+│ └──────────────────────────┬─────────────────────────────┘ │
+│                            ↓                              │
+│ 入口层（手写）                                              │
+│ ┌────────────────────────────────────────────────────────┐ │
+│ │ index.css 导入令牌 + 组件样式 + 工具类                  │ │
+│ └────────────────────────────────────────────────────────┘ │
+│                                                            │
+│ reset.css（可选，独立导出，不属于层级链）                    │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### 各文件/文件夹职责
 
-| 文件/文件夹   | 职责                                          | 生成方式         |
-| ------------- | --------------------------------------------- | ---------------- |
-| `colors.css`  | 浅色/深色模式颜色令牌                         | 主题插件自动生成 |
-| `layout.css`  | 间距、字体、动效等布局令牌                    | 主题插件自动生成 |
-| `components/` | 各组件独立样式文件（Button.css, Card.css...） | 手写             |
-| `main.css`    | 入口文件 + 全局重置 + 工具类                  | 手写             |
+| 文件/文件夹         | 职责                                  | 生成方式           |
+| ------------------- | ------------------------------------- | ------------------ |
+| `tokens/colors.css` | 浅色/深色模式颜色令牌（各 68 个变量） | 主题脚本自动生成   |
+| `tokens/layout.css` | 间距、字体、动效、断点、z-index 令牌  | 主题脚本自动生成   |
+| `components/`       | 各组件独立样式文件（Button.css 等）   | 手写               |
+| `utilities/`        | 极简工具类                            | 手写               |
+| `reset.css`         | 可选全局重置（box-sizing），独立导出  | 手写，不属于层级链 |
+| `index.css`         | 总入口，导入令牌 + 组件 + 工具        | 手写               |
 
 ### 设计令牌即 API
 
@@ -87,7 +95,7 @@ tags:
 
 ### 工程红利：多框架复用
 
-这种解耦意味着，如果明天我想把项目从 Vue 迁移到 React 或 Svelte，我只需要重写一遍 ~50 行的逻辑组件，而那套核心样式可以原地复用，无需任何改动。**这是“样式绑定逻辑”的原子化方案永远无法做到的。**
+这种解耦意味着，如果明天我想把项目从 Vue 迁移到 React 或 Svelte，我只需要重写一遍 ~50 行的逻辑组件，而那套核心样式可以原地复用，无需任何改动。**这是"样式绑定逻辑"的原子化方案永远无法做到的。**
 
 ## 极简组件：Button.vue 为例
 
@@ -97,25 +105,31 @@ tags:
 2. 处理交互逻辑（click、disabled、loading）
 3. 透传插槽
 
+以 v1.5.0 的实际代码为例（已精简注释）：
+
 ```vue
 <script setup lang="ts">
-import { useSlots, computed } from "vue";
+import { useSlots, computed } from "vue"
+import type { Component } from "vue"
+import type { Size, AddonColor } from "../types/components"
 
-const slots = useSlots();
-const hasIconSlot = computed(() => !!slots.icon);
+defineOptions({ name: "Button", inheritAttrs: false })
 
-type Variant = "filled" | "outline";
-type Color = "primary" | "success" | "warning" | "error";
-type Size = "sm" | "md" | "lg";
+type Variant = "filled" | "outline"
+type ButtonType = "button" | "submit" | "reset"
 
 interface Props {
-  label?: string;
-  variant?: Variant;
-  color?: Color;
-  size?: Size;
-  disabled?: boolean;
-  loading?: boolean;
-  block?: boolean;
+  label?: string
+  variant?: Variant
+  color?: AddonColor
+  size?: Size
+  type?: ButtonType
+  disabled?: boolean
+  loading?: boolean
+  showLabelWhileLoading?: boolean
+  loadingLabel?: string
+  block?: boolean
+  icon?: string | Component
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -123,21 +137,29 @@ const props = withDefaults(defineProps<Props>(), {
   variant: "filled",
   color: "primary",
   size: "sm",
+  type: "button",
   disabled: false,
   loading: false,
+  showLabelWhileLoading: false,
   block: false,
-});
+})
 
-const emit = defineEmits<{ click: [event: MouseEvent] }>();
+const slots = useSlots()
+const hasIconSlot = computed(() => !!slots.icon)
+const hasLabel = computed(() => props.label !== "" || !!slots.default)
+
+const emit = defineEmits<{ click: [event: MouseEvent] }>()
 
 const handleClick = (event: MouseEvent) => {
-  if (props.disabled || props.loading) return;
-  emit("click", event);
-};
+  if (props.disabled || props.loading) return
+  emit("click", event)
+}
 </script>
 
 <template>
   <button
+    v-bind="$attrs"
+    :type="type"
     class="mg-button"
     :class="[
       `mg-button-${variant}-${color}`,
@@ -145,17 +167,26 @@ const handleClick = (event: MouseEvent) => {
       { 'mg-button-block': block, 'mg-button-loading': loading },
     ]"
     :disabled="disabled || loading"
-    :aria-busy="loading"
-    :aria-disabled="disabled || loading"
     @click="handleClick"
   >
-    <span v-if="loading" class="mg-button-loading-icon" />
-    <span v-if="!loading && hasIconSlot" class="mg-button-icon">
-      <slot name="icon" />
-    </span>
-    <span class="mg-button-label">
-      <slot>{{ label }}</slot>
-    </span>
+    <template v-if="loading">
+      <span class="mg-button-loading-icon" />
+      <span v-if="showLabelWhileLoading" class="mg-button-label">
+        <slot name="loading-label">{{ loadingLabel || label }}</slot>
+      </span>
+    </template>
+
+    <template v-else>
+      <span v-if="hasIconSlot || icon" class="mg-button-icon">
+        <slot name="icon">
+          <component :is="icon" v-if="typeof icon !== 'string'" />
+          <span v-else-if="icon">{{ icon }}</span>
+        </slot>
+      </span>
+      <span v-if="hasLabel" class="mg-button-label">
+        <slot>{{ label }}</slot>
+      </span>
+    </template>
   </button>
 </template>
 ```
@@ -163,154 +194,194 @@ const handleClick = (event: MouseEvent) => {
 **组件特点**：
 
 - 无 `<style>` 块，样式全部来自全局 CSS
-- 只有 ~50 行代码，极简清晰
-- 类型安全（TypeScript）
-- 支持无障碍属性（`aria-busy`、`aria-disabled`），**极简并不代表简陋**
-- 支持 7 种 props + 2 种插槽，覆盖日常使用
+- 只有 ~110 行代码，极简清晰
+- 类型安全（TypeScript），共享类型从 `src/types/components.ts` 导入
+- 支持 11 种 props + 3 种插槽，覆盖日常场景
+- `v-bind="$attrs"` 透传原生属性
 
-## 动态样式：CSS 变量局部覆盖
+## 构建架构：Vite 多入口 + 独立导出
 
-对于 Button 这种状态极多的组件，除了预设的 `filled-primary` 等组合类，还可以利用 CSS 变量局部覆盖的技巧：
+初版组件库只有一个主入口。但随着组件增多，需要支持**按需引入**——用户只想用 Button 时不应加载全部组件。
 
-```vue
-<!-- 用户自定义颜色，无需修改组件源码 -->
-<Button :style="{ '--btn-bg': '#ff6b6b' }" class="custom-button">
-  自定义颜色
-</Button>
+v1.5.0 采用 Vite library mode 的多入口构建：
+
+```ts
+// vite.config.ts（简化）
+import { componentNames } from "./scripts/component-list.js"
+
+// 每个组件独立入口（src/exports/<Name>.ts → dist/<kebab>.js）
+const componentEntries = Object.fromEntries(
+  componentNames.map((name) => {
+    const kebab = name.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()
+    return [`${kebab}`, resolve(__dirname, `src/exports/${name}.ts`)]
+  }),
+)
+
+export default defineConfig({
+  build: {
+    lib: {
+      entry: {
+        index: resolve(__dirname, "src/index.ts"),
+        ...componentEntries, // 27 个组件 + 主入口
+      },
+      formats: ["es"], // 纯 ES Module，无 CJS
+    },
+    rollupOptions: {
+      external: ["vue"], // Vue 作为 peerDependency
+      output: {
+        assetFileNames: "style.css", // CSS 统一输出
+      },
+    },
+    cssCodeSplit: false,
+  },
+})
 ```
+
+对应的 `package.json` 导出映射：
+
+```json
+{
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./reset.css": "./dist/reset.css",
+    "./button": {
+      "types": "./dist/exports/Button.d.ts",
+      "import": "./dist/button.js"
+    },
+    "./badge": { "...": "..." }
+  }
+}
+```
+
+用户既可以使用全量引入 `import { Button } from 'moongate-vue'`，也可以按需 `import Button from 'moongate-vue/button'`。
+
+## 体积控制：25KB 预算 + 自动化验证
+
+体积是组件库的生命线。为了**不让体积悄悄失控**，我在 `pnpm build` 后自动执行 `scripts/tree-shake-check.js`：
+
+- 使用 Vite JS API 将 `src/index.ts` 打包为单个 ESM bundle（minify）
+- 统计 JS + CSS 的 gzip 体积
+- 如果超过 **25KB 预算**，build 会在 CI 中断言失败
+
+```bash
+# 构建后自动输出（简化示例）
+📦 完整库 Min+Gzip：
+  ✅ 完整库: 32.50 KB (gzipped 24.80 KB)
+      ├─ JS:    22.00 KB (gzipped 9.20 KB)
+      └─ CSS:   10.50 KB (gzipped 5.60 KB)
+
+✅ 完整库 Min+Gzip 在 25KB 预算内
+```
+
+这个"预算"与文化有关：我用「25KB gzip 完整组件库」作为设计挑战来对抗组件库普遍臃肿的现状。与主流相比，Element Plus 完整引入约 100KB+ gzip，Naive UI 约 120KB+。**25KB 是一个数量级的差距。**
+
+### 为什么能这么小？
+
+1. **零运行时依赖**：peerDependencies 只有 `vue`，没有 lodash、async-validator 等
+2. **CSS 变量代替 JS 主题系统**：主题切换不需要 JS 集成
+3. **组件薄封装**：逻辑极简，组合式函数复用
+4. **极少的运行时 JS**：组合式函数复用 + 无运行时依赖
+
+## 微工具类：极简语义工具类
+
+`utilities/` 中保留了一套极简的**语义工具类**，直接引用设计令牌：
 
 ```css
-/* components/Button.css 中增加一行支持 */
-.mg-button {
-  background-color: var(--btn-bg, var(--ui-primary));
+/* 语义颜色工具类 */
+.text-primary {
+  color: var(--ui-primary);
 }
-```
-
-这样可以让组件更灵活，甚至处理用户传入的任意颜色，而不局限于预设的 4 种。
-
-## 使用示例
-
-```vue
-<template>
-  <!-- 基础用法 -->
-  <Button label="默认按钮" />
-
-  <!-- 带图标 -->
-  <Button icon="🔍" label="搜索" />
-
-  <!-- 加载状态（自动禁用点击） -->
-  <Button loading label="提交中" />
-
-  <!-- 块级按钮 -->
-  <Button block label="全宽按钮" />
-
-  <!-- 完整组合 -->
-  <Button variant="outline" color="error" size="lg" block :loading="isDeleting">
-    删除项目
-  </Button>
-</template>
-```
-
-## 体积与维护性分析
-
-### 体积数据
-
-| 类型                   | 原始大小   | Gzip 压缩后 |
-| ---------------------- | ---------- | ----------- |
-| CSS（令牌 + 组件样式） | ~15 KB     | ~4 KB       |
-| JS（Button 组件）      | ~2 KB      | ~0.8 KB     |
-| 其他组件（按需）       | ~10 KB     | ~3 KB       |
-| **总计**               | **~27 KB** | **~8 KB**   |
-
-### 维护性对比
-
-| 维度           | 原子化方案（UnoCSS 映射）                | 本方案                                         |
-| -------------- | ---------------------------------------- | ---------------------------------------------- |
-| **CSS 体积**   | 按需生成，极小                           | ~4 KB (gzip)                                   |
-| **维护成本**   | 需同步映射配置                           | 直接改 CSS                                     |
-| **心智负担**   | 记忆数百个类名及其映射逻辑               | 只需 ~20 个组件类名                            |
-| **可读性**     | 模板臃肿，难以一眼看出组件层级           | 模板极简，类名语义化清晰                       |
-| **首屏渲染**   | 需等待 JS 注入样式                       | 纯 CSS，浏览器原生渲染                         |
-| **运行环境**   | 需要 Node + PostCSS/Vite 插件 + 配置文件 | 只需浏览器支持 CSS Variables（全球 98%+ 环境） |
-| **多框架复用** | 不可能                                   | 样式文件可跨框架                               |
-
-## 微工具类：极简原子化
-
-虽然放弃了完整的原子化框架，但常用的布局工具类仍然很有价值。我在 `main.css` 中手写了一套极简工具类：
-
-```css
-/* 布局 */
-.flex {
-  display: flex;
+.text-muted {
+  color: var(--ui-text-muted);
 }
-.inline-flex {
-  display: inline-flex;
+.bg-primary {
+  background-color: var(--ui-primary);
 }
-.items-center {
-  align-items: center;
-}
-.justify-between {
-  justify-content: space-between;
+.bg-muted {
+  background-color: var(--ui-bg-muted);
 }
 
-/* 间距（基于设计令牌） */
-.gap-2 {
-  gap: var(--ui-spacing-sm);
-}
-.p-4 {
-  padding: var(--ui-spacing-lg);
-}
-.mx-auto {
-  width: fit-content;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* 尺寸 */
-.w-full {
-  width: 100%;
-}
-
-/* 响应式补丁（5 行解决 80% 移动端适配） */
-@media (max-width: 768px) {
-  .sm-hidden {
-    display: none !important;
-  }
-  .sm-flex-col {
-    flex-direction: column !important;
-  }
+/* 核心契约 */
+:root {
+  --ui-radius: 0px;
+  --ui-glow-alpha: var(--ui-physics-glow-alpha-dawn);
 }
 ```
 
 **特点**：
 
-- 只有最常用的 ~30 个类，按需添加
-- 数值绑定设计令牌（`var(--ui-spacing-*)`），保持主题一致
-- 响应式补丁仅 5 行，零依赖
+- 只有最常用的 ~20 个类，按需添加
+- 数值绑定设计令牌（`var(--ui-*)`），保持主题一致
+- 通过 `--ui-radius`/`--ui-glow-alpha` 契约变量为全局提供样式锚点
+- 附带 `.mg-lunar-halo`（月晕阴影效果）等设计系统特有的工具类
+- 布局需求在组件内部通过 scoped 样式解决，工具层不承担布局职责
 
-### 命名自由度
+## 非侵入式样式
 
-由于这些工具类是手写的，你可以根据自己的项目偏好自由命名。如果你讨厌 Tailwind 风格，甚至可以叫它 `.mobile-stack` 而不是 `.sm-flex-col`。**这种命名自由度，也是原生 CSS 方案相较于原子化框架的魅力之一。**
+组件库在 v1.5.0 明确了**样式非侵入原则**：
+
+- `style.css` 只包含组件样式，**不会重置你的全局样式**
+- 可选引入 `moongate-vue/reset.css` 统一 `box-sizing: border-box`
+
+```js
+// 只引入组件样式
+import "moongate-vue/style.css"
+
+// 或额外引入全局重置（可选）
+import "moongate-vue/reset.css"
+```
+
+## 体积与维护性分析
+
+### 体积数据（v1.5.0 实测口径）
+
+| 类型                   | 原始大小     | Gzip 压缩后  |
+| ---------------------- | ------------ | ------------ |
+| CSS（令牌 + 组件样式） | ~10.5 KB     | ~5.6 KB      |
+| JS（完整组件库）       | ~22 KB       | ~9.2 KB      |
+| **总计**               | **~32.5 KB** | **~24.8 KB** |
+
+（实际构建产物以 `pnpm build` 后的 `size-report.json` 为准）
+
+### 维护性对比
+
+| 维度           | 原子化方案（UnoCSS 映射）                | 本方案（CSS 变量 + 薄封装）               |
+| -------------- | ---------------------------------------- | ----------------------------------------- |
+| **CSS 体积**   | 按需生成，极小                           | ~5.6 KB (gzip)                            |
+| **维护成本**   | 需同步映射配置                           | 直接改 CSS                                |
+| **心智负担**   | 记忆数百个类名及其映射逻辑               | 只需 ~20 个组件类名                       |
+| **可读性**     | 模板臃肿，难以一眼看出组件层级           | 模板极简，类名语义化清晰                  |
+| **首屏渲染**   | 需等待 JS 注入样式                       | 纯 CSS，浏览器原生渲染                    |
+| **运行环境**   | 需要 Node + PostCSS/Vite 插件 + 配置文件 | 只需浏览器支持 CSS Variables（98%+ 环境） |
+| **多框架复用** | 不可能                                   | 样式文件可跨框架                          |
+| **按需引入**   | -                                        | 27 个独立导出入口（v1.5.0）               |
+| **体积预算**   | -                                        | 25KB gzip 强制验证（CI 中断）             |
 
 ## 总结
 
 ### 适用场景
 
 - ✅ 已有成熟设计令牌的项目
-- ✅ 个人博客、小型网站
-- ✅ 追求长期可维护性的组件库
+- ✅ 追求极致体积（gzip < 25KB）的组件库
+- ✅ 需要按需引入的构建场景（Vite multi-entry）
 - ✅ 不希望引入复杂工具链的场景
 
 ### 不适用场景
 
 - ❌ 从零开始、没有设计令牌的项目
-- ❌ 需要动态主题切换的大型设计系统
-- ❌ 需要极致定制化（如每个组件都要求不同样式）
+- ❌ 需要动态主题切换的大型设计系统（需 JS 主题引擎）
+- ❌ 需要大量业务组件（DatePicker、Tree 等）
 
 ### 核心收获
 
-很多时候，我们引入复杂的工具链是为了缓解“写 CSS”的焦虑。但当你真正拥有一套由设计令牌驱动的底层系统时，你会发现 CSS 不再是杂乱无章的补丁，而是一场精确、优雅的逻辑拆解。
+初版的 10KB 承诺在 v1.5.0 经过多轮功能迭代（全局 i18n 文案、可搜索 Select、多选、无障碍增强、450 测试），依然保持 **25KB gzip 预算内**——这不是偶然，而是通过**架构纪律**（零依赖 + 薄封装）和**自动化**（tree-shake-check.js 体积门禁）共同守住的。
 
-这套方案的总代码量不到 500 行（CSS + 组件），打包后不到 10KB，却完整支撑了一个组件库的核心功能。
-
-**这 10KB 不仅是体积的缩减，更是思维的减负。**
+**这 25KB 不仅是体积的缩减，更是思维的减负。**
