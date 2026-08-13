@@ -23,11 +23,16 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Go image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
+          # 显式禁用 provenance 和 SBOM attestations，
+          # 解决阿里云 ACR 不支持 OCI attestation manifest 导致的推送失败：
+          # denied: unknown manifest class for application/vnd.oci.empty.v1+json
+          provenance: false
+          sbom: false
           tags: |
             ${{ secrets.ACR_DOMAIN }}/${{ secrets.ACR_NAMESPACE }}/moongate-api:latest
             ${{ secrets.ACR_DOMAIN }}/${{ secrets.ACR_NAMESPACE }}/moongate-api:${{ github.sha }}
