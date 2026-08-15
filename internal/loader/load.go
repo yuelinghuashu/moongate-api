@@ -2,6 +2,7 @@ package loader
 
 import (
 	"fmt"
+	"io/fs"
 	"moongate-api/internal/domain"
 	"path/filepath"
 )
@@ -39,20 +40,28 @@ func LoadAll(contentDir string) (*Store, error) {
 	return store, nil
 }
 
-// loadDocs 加载 content/docs/ 目录下的所有技术文章。
+// loadDocs 递归加载 content/docs/ 目录下的所有技术文章。
+// 支持按 series 分组的子目录结构（如 content/docs/narrative-engine/xxx.md）。
 // 逐个解析 Markdown 文件，若 slug 为空则从文件名生成，
 // 解析失败时跳过该文件并继续处理其余文件。
 func loadDocs(dir string, store *Store) error {
-	files, err := filepath.Glob(filepath.Join(dir, "*.md"))
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		doc, err := ParseMarkdown[domain.Doc](file)
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			fmt.Printf("⚠️ 跳过 %s: %v\n", file, err)
-			continue
+			return err
+		}
+		// 跳过目录
+		if d.IsDir() {
+			return nil
+		}
+		// 只处理 .md 文件
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+
+		doc, err := ParseMarkdown[domain.Doc](path)
+		if err != nil {
+			fmt.Printf("⚠️ 跳过 %s: %v\n", path, err)
+			return nil
 		}
 
 		// 后处理：空字符串的 series 视为 nil
@@ -63,9 +72,8 @@ func loadDocs(dir string, store *Store) error {
 
 		store.Docs[doc.Permalink] = &doc  // 存储 permalink 索引
 		store.DocsBySlug[doc.Slug] = &doc // 存储 slug 索引
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // loadAbout 加载 content/about/ 目录下的所有关于页面。

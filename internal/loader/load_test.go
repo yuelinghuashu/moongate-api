@@ -181,6 +181,83 @@ Content.
 	}
 }
 
+func TestLoadAll_RecursiveSubdirectories(t *testing.T) {
+	dir := createTestContentDir(t)
+
+	// 创建嵌套子目录模拟按 series 分组
+	seriesDir := filepath.Join(dir, "docs", "narrative-engine")
+	if err := os.MkdirAll(seriesDir, 0755); err != nil {
+		t.Fatalf("Failed to create series dir: %v", err)
+	}
+
+	// 顶层文档
+	writeTestMarkdown(t, filepath.Join(dir, "docs"), "standalone.md", `---
+title: "Standalone"
+description: "No series"
+date: 2025-01-01 00:00:00
+permalink: /docs/standalone
+level: P1
+---
+
+Standalone content.
+`)
+
+	// 子目录文档
+	writeTestMarkdown(t, seriesDir, "narrative-part-1.md", `---
+title: "Narrative Part 1"
+description: "First part"
+date: 2025-01-02 00:00:00
+permalink: /docs/narrative-part-1
+level: P2
+series: narrative-engine
+---
+
+Part 1 content.
+`)
+
+	writeTestMarkdown(t, seriesDir, "narrative-part-2.md", `---
+title: "Narrative Part 2"
+description: "Second part"
+date: 2025-01-03 00:00:00
+permalink: /docs/narrative-part-2
+level: P2
+series: narrative-engine
+---
+
+Part 2 content.
+`)
+
+	store, err := LoadAll(dir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+
+	// 顶层 + 子目录共 3 个文档
+	if len(store.Docs) != 3 {
+		t.Errorf("Docs count = %d, want 3", len(store.Docs))
+	}
+	if len(store.DocsBySlug) != 3 {
+		t.Errorf("DocsBySlug count = %d, want 3", len(store.DocsBySlug))
+	}
+
+	// 验证子目录文档的 slug（应为文件名，而非路径）
+	if _, ok := store.DocsBySlug["narrative-part-1"]; !ok {
+		t.Error("DocsBySlug should contain slug narrative-part-1")
+	}
+	if _, ok := store.DocsBySlug["standalone"]; !ok {
+		t.Error("DocsBySlug should contain slug standalone")
+	}
+
+	// 验证 series 正确关联
+	doc := store.Docs["/docs/narrative-part-1"]
+	if doc == nil {
+		t.Fatal("Doc should exist for /docs/narrative-part-1")
+	}
+	if doc.Series == nil || *doc.Series != "narrative-engine" {
+		t.Errorf("Series = %v, want narrative-engine", doc.Series)
+	}
+}
+
 func TestLoadAll_NonExistentDir(t *testing.T) {
 	// filepath.Glob 对不存在的目录不会返回错误，而是返回空列表。
 	// LoadAll 对空目录的处理是：正常返回空 store（无错误）。

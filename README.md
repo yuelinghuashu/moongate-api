@@ -42,31 +42,31 @@ make docker-build # 构建 Docker 镜像
 
 ### 内容 API（公开）
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/docs` | 文档列表（支持分页、搜索、标签、等级筛选） |
-| GET | `/api/docs/:slug` | 文档详情 |
-| GET | `/api/about` | 关于页面列表 |
-| GET | `/api/about/:slug` | 关于页面详情 |
+| 方法 | 路径               | 说明                                       |
+| ---- | ------------------ | ------------------------------------------ |
+| GET  | `/api/docs`        | 文档列表（支持分页、搜索、标签、等级筛选） |
+| GET  | `/api/docs/:slug`  | 文档详情                                   |
+| GET  | `/api/about`       | 关于页面列表                               |
+| GET  | `/api/about/:slug` | 关于页面详情                               |
 
 ### 认证 API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/auth/github` | 发起 GitHub OAuth 登录 |
-| GET | `/auth/github/callback` | GitHub OAuth 回调 |
+| 方法 | 路径                    | 说明                   |
+| ---- | ----------------------- | ---------------------- |
+| GET  | `/auth/github`          | 发起 GitHub OAuth 登录 |
+| GET  | `/auth/github/callback` | GitHub OAuth 回调      |
 
 ### 用户 API（需要认证）
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/users/me` | 获取当前登录用户信息（Bearer token） |
+| 方法 | 路径            | 说明                                 |
+| ---- | --------------- | ------------------------------------ |
+| GET  | `/api/users/me` | 获取当前登录用户信息（Bearer token） |
 
 ### 其他
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/health` | 健康检查 |
+| 方法 | 路径      | 说明     |
+| ---- | --------- | -------- |
+| GET  | `/health` | 健康检查 |
 
 ## 内容管理
 
@@ -83,13 +83,12 @@ title: "文章标题"
 description: "简短摘要"
 date: 2025-01-15 10:00:00
 permalink: UUID
-level: P2            # P1-P5 难度等级
-series: "系列名称"    # 可选
+level: P2 # P1-P5 难度等级
+series: "系列名称" # 可选
 tags:
   - Go
   - Tutorial
 ---
-
 正文 Markdown 内容...
 ```
 
@@ -120,7 +119,7 @@ make check  # vet + test（与 CI 一致）
 
 ## 项目结构
 
-```
+```text
 ├── main.go              # 入口：环境变量、DB、路由注册
 ├── db/                  # PostgreSQL 连接
 ├── internal/
@@ -130,3 +129,4 @@ make check  # vet + test（与 CI 一致）
 ├── models/              # GORM 数据库模型
 ├── pkg/                 # JWT 工具
 └── content/             # Markdown 内容源
+```
