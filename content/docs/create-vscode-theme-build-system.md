@@ -5,7 +5,7 @@ date: 2026-08-06 06:00:00
 permalink: ef9e2761-be41-4778-8552-22cb86ed3407
 level: P4
 series: design-system
-tags: 
+tags:
   - VSCode
   - Theme
   - Design System
@@ -15,22 +15,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
+本系列共五篇：
 
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
-   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
-
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
-   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
-
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
-   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
-
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
-   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
-
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
-   —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
 
 ---
 
@@ -94,15 +85,15 @@ your-theme/
 
 各模块的职责：
 
-| 模块 | 职责 | 关键导出 |
-|------|------|---------|
-| `config.js` | 集中管理所有文件路径 | `PATHS`、`ROOT_DIR` |
-| `tokens.js` | 令牌解析与变量替换 | `resolveTokens`（`{token}` 层间引用）、`replaceVariables`（`${var}` 变量替换）、`detectPrimitiveReference`（架构污染检测） |
-| `utils.js` | 通用工具函数 | `safeLoadYaml`、`normalizeHex`、`detectDuplicateColors`、`getThemeInfo` |
-| `validators.js` | 质量验证 | `checkContrast`（WCAG）、`validateThemeStructure`、`detectUnusedPrimitives` |
-| `optimizers.js` | 输出精简 | `mergeTokenColors`、`optimizeSemanticTokenColors` |
-| `generators.js` | 多格式产物 | `generateColorCss`、`generateLayoutCss`、`generateScssTokens`、`generateTsTokens`、`generateDesignSystemDoc` |
-| `scope-validator.js` | scope 验证逻辑 | `verifyAllScopes`、`formatVerificationResult` |
+| 模块                 | 职责                 | 关键导出                                                                                                                   |
+| -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `config.js`          | 集中管理所有文件路径 | `PATHS`、`ROOT_DIR`                                                                                                        |
+| `tokens.js`          | 令牌解析与变量替换   | `resolveTokens`（`{token}` 层间引用）、`replaceVariables`（`${var}` 变量替换）、`detectPrimitiveReference`（架构污染检测） |
+| `utils.js`           | 通用工具函数         | `safeLoadYaml`、`normalizeHex`、`detectDuplicateColors`、`getThemeInfo`                                                    |
+| `validators.js`      | 质量验证             | `checkContrast`（WCAG）、`validateThemeStructure`、`detectUnusedPrimitives`                                                |
+| `optimizers.js`      | 输出精简             | `mergeTokenColors`、`optimizeSemanticTokenColors`                                                                          |
+| `generators.js`      | 多格式产物           | `generateColorCss`、`generateLayoutCss`、`generateScssTokens`、`generateTsTokens`、`generateDesignSystemDoc`               |
+| `scope-validator.js` | scope 验证逻辑       | `verifyAllScopes`、`formatVerificationResult`                                                                              |
 
 **为什么用 ESM 而不是 CommonJS？**
 
@@ -116,14 +107,14 @@ your-theme/
 
 在阅读下面的代码之前，先建立一张「数据流地图」——每个关键步骤输入什么、输出什么：
 
-| 步骤 | 输入 | 输出 |
-|------|------|------|
-| `loadPrimitives()` | `primitives/colors.yaml` | 标准化后的原始色值字典 |
-| `resolveTokens()` | 原始值 + `semantics/*.yaml` | 每个变体的最终语义色值字典 |
-| `loadTokenColors()` | `languages/` + `special/` 下的规则 | 合并后的 tokenColors 原始规则 |
-| `replaceVariables()` | 规则文件 + 语义色值字典 | 变量已替换为实际色值的规则 |
-| `mergeTokenColors()` / `optimizeSemanticTokenColors()` | 替换后的规则 | 精简后的产物 |
-| `generate*()` | 最终色值字典 + 布局令牌 | CSS / SCSS / TS 令牌与设计文档 |
+| 步骤                                                   | 输入                               | 输出                           |
+| ------------------------------------------------------ | ---------------------------------- | ------------------------------ |
+| `loadPrimitives()`                                     | `primitives/colors.yaml`           | 标准化后的原始色值字典         |
+| `resolveTokens()`                                      | 原始值 + `semantics/*.yaml`        | 每个变体的最终语义色值字典     |
+| `loadTokenColors()`                                    | `languages/` + `special/` 下的规则 | 合并后的 tokenColors 原始规则  |
+| `replaceVariables()`                                   | 规则文件 + 语义色值字典            | 变量已替换为实际色值的规则     |
+| `mergeTokenColors()` / `optimizeSemanticTokenColors()` | 替换后的规则                       | 精简后的产物                   |
+| `generate*()`                                          | 最终色值字典 + 布局令牌            | CSS / SCSS / TS 令牌与设计文档 |
 
 带着这张地图读代码，你会更清楚每个模块函数在整条流水线中的位置。
 
@@ -132,9 +123,22 @@ your-theme/
 import { PATHS } from "./lib/config.js"
 import { ensureFileExists, safeLoadYaml } from "./lib/utils.js"
 import { resolveTokens, replaceVariables } from "./lib/tokens.js"
-import { detectUnusedPrimitives, validateThemeStructure, checkContrast } from "./lib/validators.js"
-import { mergeTokenColors, optimizeSemanticTokenColors } from "./lib/optimizers.js"
-import { generateColorCss, generateLayoutCss, generateDesignSystemDoc, generateScssTokens, generateTsTokens } from "./lib/generators.js"
+import {
+  detectUnusedPrimitives,
+  validateThemeStructure,
+  checkContrast,
+} from "./lib/validators.js"
+import {
+  mergeTokenColors,
+  optimizeSemanticTokenColors,
+} from "./lib/optimizers.js"
+import {
+  generateColorCss,
+  generateLayoutCss,
+  generateDesignSystemDoc,
+  generateScssTokens,
+  generateTsTokens,
+} from "./lib/generators.js"
 
 function main() {
   console.log("🚀 开始构建主题 (DTCG 标准 + 工业级质检)...\n")
@@ -171,11 +175,11 @@ main()
 
 主题的每个颜色都必须在背景上清晰可读。Moongate 为关键文本角色设置了对 `editor.background` 的最低对比度要求：
 
-| 角色 | 最低对比度 | 说明 |
-|------|-----------|------|
-| `text`（正文） | 4.5:1 | WCAG AA |
-| `textDim`（次要文字） | 4.0:1 | 略低于 AA，权衡视觉层次 |
-| `textMuted`（辅助文字） | 3.0:1 | 大字号/辅助信息可用 |
+| 角色                    | 最低对比度 | 说明                    |
+| ----------------------- | ---------- | ----------------------- |
+| `text`（正文）          | 4.5:1      | WCAG AA                 |
+| `textDim`（次要文字）   | 4.0:1      | 略低于 AA，权衡视觉层次 |
+| `textMuted`（辅助文字） | 3.0:1      | 大字号/辅助信息可用     |
 
 校验决策可用一棵简单的树来表达：
 
@@ -201,11 +205,13 @@ export function checkContrast(color1, color2, role, themeType) {
 
   if (ratio < minRatio) {
     if (role === "textMuted") {
-      console.warn(`⚠️ 对比度略低: ${themeType} · ${role} = ${ratio.toFixed(2)}:1`)
+      console.warn(
+        `⚠️ 对比度略低: ${themeType} · ${role} = ${ratio.toFixed(2)}:1`,
+      )
     } else {
       throw new Error(
         `❌ 对比度不足: ${themeType} · ${role} = ${ratio.toFixed(2)}:1` +
-        `\n   WCAG 要求 ≥${minRatio}:1`,
+          `\n   WCAG 要求 ≥${minRatio}:1`,
       )
     }
   } else {
@@ -348,7 +354,10 @@ Moongate 的解决方案是 **`scripts/verify-scopes.js`**——自动解析 VS 
 
 ```javascript
 // scripts/verify-scopes.js（CLI 入口）
-import { verifyAllScopes, formatVerificationResult } from "./lib/scope-validator.js"
+import {
+  verifyAllScopes,
+  formatVerificationResult,
+} from "./lib/scope-validator.js"
 
 const result = verifyAllScopes({ verbose: true })
 
@@ -372,13 +381,13 @@ if (!result.isValid) {
 
 在 Moongate v2.6.0 中，`verify-scopes.js` 帮助修复了 **8 个语言文件**的 scope 问题。其中最有代表性的几个：
 
-| 语言 | 修复前（错误的 scope） | 修复后（正确的 scope） |
-|------|----------------------|----------------------|
-| Rust | `support.macro.rust` | `entity.name.function.macro.rust` |
-| Rust | `lifetime` | `entity.name.type.lifetime.rust` |
-| Go | `entity.name.package.go` | `keyword.package.go` |
-| Python | `meta.decorator.python` | `meta.function.decorator.python` |
-| Markdown | `heading.1.markdown` 等 | `markup.heading.markdown` 等 |
+| 语言     | 修复前（错误的 scope）   | 修复后（正确的 scope）            |
+| -------- | ------------------------ | --------------------------------- |
+| Rust     | `support.macro.rust`     | `entity.name.function.macro.rust` |
+| Rust     | `lifetime`               | `entity.name.type.lifetime.rust`  |
+| Go       | `entity.name.package.go` | `keyword.package.go`              |
+| Python   | `meta.decorator.python`  | `meta.function.decorator.python`  |
+| Markdown | `heading.1.markdown` 等  | `markup.heading.markdown` 等      |
 
 更关键的是，**验证工具可以防止回归**——每次修改语言规则后运行一次，立刻知道哪些 scope 是「写了但永远不会生效」的。
 
@@ -534,12 +543,12 @@ const tags = TAG_MAP.map(({ tag, semanticKey, ...style }) => {
 
 设计系统介绍了 CSS 变量导出，Moongate 进一步将语义层导出为**四种格式**，覆盖 Web、Sass 和 TypeScript 生态：
 
-| 产物 | 格式 | 适用场景 |
-|------|------|---------|
-| `themes/moongate-colors.css` | CSS 变量 | 博客、组件库、任何 Web 项目 |
-| `themes/moongate-layout.css` | CSS 变量（布局） | 间距、排版、断点、z-index |
-| `themes/_tokens.scss` | SCSS | Sass 项目 |
-| `themes/tokens.ts` | TypeScript | 前端框架项目 |
+| 产物                         | 格式             | 适用场景                    |
+| ---------------------------- | ---------------- | --------------------------- |
+| `themes/moongate-colors.css` | CSS 变量         | 博客、组件库、任何 Web 项目 |
+| `themes/moongate-layout.css` | CSS 变量（布局） | 间距、排版、断点、z-index   |
+| `themes/_tokens.scss`        | SCSS             | Sass 项目                   |
+| `themes/tokens.ts`           | TypeScript       | 前端框架项目                |
 
 ### 7.1 SCSS 令牌
 
@@ -549,15 +558,13 @@ const tags = TAG_MAP.map(({ tag, semanticKey, ...style }) => {
 $ui-colors-dark: (
   bg: #0f172a,
   primary: #3b82f6,
-  surface-raised: #1a2538,
-  // ...
+  surface-raised: #1a2538, // ...
 );
 
 $ui-colors-light: (
   bg: #f9fafb,
   primary: #0284c7,
-  surface-raised: #ffffff,
-  // ...
+  surface-raised: #ffffff, // ...
 );
 
 // 深色模式便捷变量
@@ -635,20 +642,20 @@ pnpm run package
 
 至此，你的主题构建系统已经完成了从「能用」到「工业级」的跃迁：
 
-| 能力 | 主题工程化 | 构建体系 |
-|------|--------|---------|
-| 模块化 | 单体 `build.js` | `scripts/lib/` 单职责模块 |
-| 代码风格 | CommonJS | ESM |
-| WCAG 校验 | ❌ | ✅ 阶梯式对比度自动检查 |
-| 结构验证 | ❌ | ✅ 未解析变量/令牌检测 |
-| 循环引用 | ❌ | ✅ 深度上限 + 引用链输出 |
-| 架构污染 | ❌ | ✅ 原始值直接引用警告 |
-| 输出优化 | ❌ | ✅ token 合并 + 语义色精简 |
-| Scope 验证 | ❌ | ✅ `verify-scopes.js` 自动比对 |
-| 自动化测试 | ❌ | ✅ 85 个测试（`node --test`） |
-| 多格式产物 | CSS | CSS + SCSS + TypeScript + 设计文档 |
-| Better Comments | ❌ | ✅ 自动生成 + 内置规则 |
-| 发布门禁 | 手动检查 | 构建/测试/scope 验证自动拦截 |
+| 能力            | 主题工程化      | 构建体系                           |
+| --------------- | --------------- | ---------------------------------- |
+| 模块化          | 单体 `build.js` | `scripts/lib/` 单职责模块          |
+| 代码风格        | CommonJS        | ESM                                |
+| WCAG 校验       | ❌              | ✅ 阶梯式对比度自动检查            |
+| 结构验证        | ❌              | ✅ 未解析变量/令牌检测             |
+| 循环引用        | ❌              | ✅ 深度上限 + 引用链输出           |
+| 架构污染        | ❌              | ✅ 原始值直接引用警告              |
+| 输出优化        | ❌              | ✅ token 合并 + 语义色精简         |
+| Scope 验证      | ❌              | ✅ `verify-scopes.js` 自动比对     |
+| 自动化测试      | ❌              | ✅ 85 个测试（`node --test`）      |
+| 多格式产物      | CSS             | CSS + SCSS + TypeScript + 设计文档 |
+| Better Comments | ❌              | ✅ 自动生成 + 内置规则             |
+| 发布门禁        | 手动检查        | 构建/测试/scope 验证自动拦截       |
 
 这套体系不仅是 Moongate 主题的生产工具，更是一个可以复用的**设计系统工程模板**。它验证了「零散的颜色 → 工程资产 → 全平台可复用」的完整路径。
 

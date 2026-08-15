@@ -14,25 +14,14 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇，覆盖从静态网站到生产级 Docker 部署及服务集成的全流程：
+本系列共六篇：
 
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy)
-   —— 纯前端资源的自动化发布，Caddy 自动 HTTPS 和 SPA 路由支持。
-
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy)
-   —— 后端服务进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理。
-
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy)
-   —— 从零开始用 Docker + GitHub Actions 实现 CI/CD 流水线。
-
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy)
-   —— 多容器编排、健康检查、数据库迁移、自动 HTTPS，打造可靠的生产环境。
-
-5. [**自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）**](./umami-integration-auto-deploy)
-   —— 在现有 Docker 生产环境中集成 Umami 分析服务，实现自动化数据跟踪与安全加固。
-
-6. [**VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment)
-   —— 将 VitePress 静态文档站作为子域名接入现有 Docker 基础设施，复用 Caddy 反向代理与网络。
+1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
+2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
+3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
+4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
+5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
+6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
 
 本篇将在进阶篇的基础上，详细讲解如何将 Umami 分析服务集成到现有 Docker 化部署的 Nuxt 项目中。
 
@@ -40,20 +29,14 @@ tags:
 
 ## 📌 版本声明
 
-本文档所有工具均采用 **2026 年最新稳定版**：
+Node.js、pnpm、Docker Engine、Docker Compose、Caddy、GitHub Actions 的版本信息与[入门篇](./docker-quickstart-auto-deploy)一致。本文额外涉及：
 
 | 组件           | 版本              | 说明                                                        |
 | -------------- | ----------------- | ----------------------------------------------------------- |
 | Nuxt           | 4.x               | 前端框架，兼容 Nuxt 3                                       |
 | nuxt-umami     | 3.2.1             | Umami 集成模块                                              |
-| Node.js        | 24.x              | 最新 LTS 版本                                               |
-| pnpm           | 10.x              | 高性能包管理器                                              |
-| Docker Engine  | 29.x              | 支持 BuildKit 和多阶段构建                                  |
-| Docker Compose | v5                | 新版 Compose 规范，支持 `name` 项目                         |
-| Caddy          | 2.8+              | 自动 HTTPS 的反向代理                                       |
 | PostgreSQL     | alpine 最新       | Umami 数据库                                                |
 | Umami          | postgresql-latest | 分析服务（生产环境建议固定具体版本，如 `postgresql-3.0.3`） |
-| GitHub Actions | 最新              | CI/CD 平台                                                  |
 
 ---
 
@@ -393,68 +376,41 @@ ENV NUXT_PUBLIC_UMAMI_HOST=$NUXT_PUBLIC_UMAMI_HOST
 
 ### 7.2 在 SSH 部署脚本中写入 `.env` 文件
 
-确保 `appleboy/ssh-action` 步骤包含 Umami 数据库变量，并将它们写入服务器的 `.env`。**注意**：`envs` 列表需包含所有新增变量，并保持一行内逗号分隔。
+在[进阶篇](./docker-production-auto-deploy)的 `appleboy/ssh-action` 步骤基础上，**新增以下 Umami 变量**（`env` 和 `envs` 两部分都需添加）。`SCRIPT` 中基础变量写入逻辑与进阶篇相同，只需在 `cat > .env` 中**追加 Umami 变量段落**，并在拉取/重启命令中**追加 umami 服务**：
 
 ```yaml
-- name: Deploy to Server via SSH
-  uses: appleboy/ssh-action@v1.0.0
-  env:
-    # 原有变量...
-    UMAMI_DB_NAME: ${{ secrets.UMAMI_DB_NAME }}
-    UMAMI_DB_USER: ${{ secrets.UMAMI_DB_USER }}
-    UMAMI_DB_PASSWORD: ${{ secrets.UMAMI_DB_PASSWORD }}
-    UMAMI_APP_SECRET: ${{ secrets.UMAMI_APP_SECRET }}
-    NUXT_PUBLIC_UMAMI_ID: ${{ secrets.NUXT_PUBLIC_UMAMI_ID }}
-    NUXT_PUBLIC_UMAMI_HOST: ${{ secrets.NUXT_PUBLIC_UMAMI_HOST }}
-  with:
-    host: ${{ secrets.SERVER_HOST }}
-    username: ${{ secrets.SERVER_USER }}
-    key: ${{ secrets.SSH_PRIVATE_KEY }}
-    envs: "ACR_REGISTRY,ACR_USERNAME,ACR_PASSWORD,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,NUXT_PUBLIC_SITE_URL,NUXT_SESSION_PASSWORD,NUXT_OAUTH_GITHUB_CLIENT_ID,NUXT_OAUTH_GITHUB_CLIENT_SECRET,UMAMI_DB_NAME,UMAMI_DB_USER,UMAMI_DB_PASSWORD,UMAMI_APP_SECRET,NUXT_PUBLIC_UMAMI_ID,NUXT_PUBLIC_UMAMI_HOST"
-    script: |
-      set -e
-      cd /var/www/my-app
+# 新增到 env（与进阶篇原有变量并列）
+UMAMI_DB_NAME: ${{ secrets.UMAMI_DB_NAME }}
+UMAMI_DB_USER: ${{ secrets.UMAMI_DB_USER }}
+UMAMI_DB_PASSWORD: ${{ secrets.UMAMI_DB_PASSWORD }}
+UMAMI_APP_SECRET: ${{ secrets.UMAMI_APP_SECRET }}
+NUXT_PUBLIC_UMAMI_ID: ${{ secrets.NUXT_PUBLIC_UMAMI_ID }}
+NUXT_PUBLIC_UMAMI_HOST: ${{ secrets.NUXT_PUBLIC_UMAMI_HOST }}
 
-      # 此操作将完全覆盖 .env 文件，请确保所有必要变量已包含在 envs 列表中。
-      cat > .env << EOF
-      # 原有变量...
-      POSTGRES_DB=$POSTGRES_DB
-      POSTGRES_USER=$POSTGRES_USER
-      POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-      NUXT_PUBLIC_SITE_URL=$NUXT_PUBLIC_SITE_URL
-      NUXT_SESSION_PASSWORD=$NUXT_SESSION_PASSWORD
-      NUXT_OAUTH_GITHUB_CLIENT_ID=$NUXT_OAUTH_GITHUB_CLIENT_ID
-      NUXT_OAUTH_GITHUB_CLIENT_SECRET=$NUXT_OAUTH_GITHUB_CLIENT_SECRET
+# envs 列表在原有基础上追加：
+# UMAMI_DB_NAME, UMAMI_DB_USER, UMAMI_DB_PASSWORD, UMAMI_APP_SECRET,
+# NUXT_PUBLIC_UMAMI_ID, NUXT_PUBLIC_UMAMI_HOST
 
-      # Umami 变量
-      UMAMI_DB_NAME=$UMAMI_DB_NAME
-      UMAMI_DB_USER=$UMAMI_DB_USER
-      UMAMI_DB_PASSWORD=$UMAMI_DB_PASSWORD
-      UMAMI_APP_SECRET=$UMAMI_APP_SECRET
-      NUXT_PUBLIC_UMAMI_ID=$NUXT_PUBLIC_UMAMI_ID
-      NUXT_PUBLIC_UMAMI_HOST=$NUXT_PUBLIC_UMAMI_HOST
-      EOF
+# script 中的差异化部分：
+cat > .env << EOF
+# (原有变量，与进阶篇相同：POSTGRES_*、ACR_REGISTRY、NUXT_*)
 
-      chmod 600 .env
+# Umami 变量（追加）
+UMAMI_DB_NAME=$UMAMI_DB_NAME
+UMAMI_DB_USER=$UMAMI_DB_USER
+UMAMI_DB_PASSWORD=$UMAMI_DB_PASSWORD
+UMAMI_APP_SECRET=$UMAMI_APP_SECRET
+NUXT_PUBLIC_UMAMI_ID=$NUXT_PUBLIC_UMAMI_ID
+NUXT_PUBLIC_UMAMI_HOST=$NUXT_PUBLIC_UMAMI_HOST
+EOF
 
-      # 登录 ACR
-      echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
+chmod 600 .env
 
-      # 拉取最新镜像（请将 app 替换为您实际的主应用服务名）
-      docker compose pull app
-      docker compose pull umami
+# ★ 差异化：额外拉取 umami 镜像
+docker compose pull umami
 
-      # 重启应用容器（带构建参数的新镜像）
-      docker compose up -d --force-recreate app
-
-      # 如需更新 Umami 容器，可手动执行以下命令（会导致短暂停机）：
-      # docker compose up -d --force-recreate umami
-
-      # 重启 Caddy
-      docker compose up -d --force-recreate caddy
-
-      # 清理旧镜像
-      docker image prune -f --filter "until=24h"
+# ★ 差异化：可选手动更新 Umami 容器（会导致短暂停机）
+# docker compose up -d --force-recreate umami
 ```
 
 **说明**：
@@ -610,8 +566,6 @@ log {
 | **本地开发环境报 `id is missing`**                                     | 本地未设置环境变量                                         | 可忽略，或使用 `enabled: process.env.NODE_ENV !== 'development'` 禁用                                                                                            |
 | **IP 白名单不生效，所有 IP 均可访问**                                  | Caddy 未重新加载配置 / `remote_ip` 匹配器语法错误          | 重启 Caddy 容器；检查 `@allowed` 定义中 IP 格式是否正确                                                                                                          |
 | **Basic Auth 配置后页面转圈**                                          | `Authorization` 头干扰 Umami 会话 / 浏览器缓存             | 添加 `header_up -Authorization` 到 `reverse_proxy`；清除浏览器缓存                                                                                               |
-| **Docker 拉取镜像超时**                                                | 网络问题或未配置镜像加速器                                 | 配置镜像加速器并重启 Docker                                                                                                                                      |
-| **`.env` 文件写入后权限错误**                                          | 文件权限设置不当                                           | 确保 `chmod 600 .env`，属主为运行 Docker 的用户                                                                                                                  |
 | **Caddy 无法写入日志文件**                                             | 宿主机目录权限不足                                         | 确保目录存在且 UID 1000 有写权限：`sudo chown 1000:1000 /var/log/caddy`                                                                                          |
 
 ---
@@ -620,16 +574,9 @@ log {
 
 ### 11.1 常用命令
 
+`docker compose ps`、`logs -f`、`exec` 等基础命令请参见[入门篇 附录](./docker-quickstart-auto-deploy)。本文特有的运维命令：
+
 ```bash
-# 查看所有服务状态
-docker compose ps
-
-# 查看 Umami 实时日志
-docker compose logs -f umami
-
-# 进入 Umami 容器
-docker exec -it my-app-umami sh
-
 # 备份 Umami 数据库（确保 backups 目录存在）
 mkdir -p backups
 docker exec my-app-umami-db pg_dump -U umami umami > backups/umami_$(date +%Y%m%d).sql

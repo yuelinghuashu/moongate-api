@@ -5,7 +5,7 @@ date: 2026-03-16 23:00:00
 permalink: 947f4f24-fc9b-4c71-8fe5-cc85d2a7a794
 series: deployment
 level: P4
-tags: 
+tags:
   - Caddy
   - Docker
   - CI/CD
@@ -13,43 +13,20 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇，覆盖从静态网站到生产级 Docker 部署及服务集成的全流程：
+本系列共六篇：
 
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy)
-   —— 纯前端资源的自动化发布，Caddy 自动 HTTPS 和 SPA 路由支持。
-
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy)
-   —— 后端服务进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理。
-
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy)
-   —— 从零开始用 Docker + GitHub Actions 实现 CI/CD 流水线。
-
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy)
-   —— 多容器编排、健康检查、数据库迁移、自动 HTTPS，打造可靠的生产环境。
-
-5. [**自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）**](./umami-integration-auto-deploy)
-   —— 在现有 Docker 生产环境中集成 Umami 分析服务，实现自动化数据跟踪与安全加固。
-
-6. [**VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment)
-   —— 将 VitePress 静态文档站作为子域名接入现有 Docker 基础设施，复用 Caddy 反向代理与网络。
+1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
+2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
+3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
+4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
+5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
+6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
 
 ---
 
 ## 📌 版本声明
 
-本文档所有工具均采用 **2026 年最新稳定版**：
-
-| 工具           | 版本        | 说明                                                |
-| -------------- | ----------- | --------------------------------------------------- |
-| Node.js        | 24.x        | 最新 LTS 版本                                       |
-| pnpm           | 10.x        | 高性能包管理器                                      |
-| Docker Engine  | 29.x        | 支持 BuildKit 和多阶段构建                          |
-| Docker Compose | v5          | 新版 Compose 规范，支持 `name` 项目和健康检查依赖   |
-| Caddy          | 2.8+        | 自动 HTTPS 的反向代理                               |
-| PostgreSQL     | 17 (alpine) | 轻量级数据库                                        |
-| Drizzle ORM    | 0.30+       | TypeScript ORM，支持迁移                            |
-| PM2            | 5+          | 进程守护工具                                        |
-| GitHub Actions | 最新        | CI/CD 平台（`checkout@v4`, `ssh-action@v1.0.0` 等） |
+所有工具的版本信息与[入门篇](./docker-quickstart-auto-deploy)一致（Docker Engine 29.x、Docker Compose v5、PostgreSQL 17 alpine、Drizzle ORM 0.30+、PM2 5+、Node.js 24.x、Caddy 2.8+）。
 
 ---
 
@@ -142,6 +119,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    # logging 为入门篇没有的生产增强，所有服务统一使用：
     logging:
       driver: "json-file"
       options:
@@ -251,14 +229,13 @@ your-domain.com {
 
 ### 2.1 GitHub Secrets 完整列表
 
+`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY` 的配置方法与[入门篇 第三步](./docker-quickstart-auto-deploy)一致。此外需要：
+
 | Secret 名称                       | 说明                                                                    |
 | --------------------------------- | ----------------------------------------------------------------------- |
 | `ACR_REGISTRY`                    | 阿里云镜像仓库地址（如 `crpi-xxx.cn-beijing.personal.cr.aliyuncs.com`） |
 | `ACR_USERNAME`                    | 阿里云账号邮箱                                                          |
 | `ACR_PASSWORD`                    | ACR 固定密码                                                            |
-| `SERVER_HOST`                     | 服务器 IP                                                               |
-| `SERVER_USER`                     | SSH 用户名                                                              |
-| `SSH_PRIVATE_KEY`                 | SSH 私钥（包含 `BEGIN` 和 `END` 行，保持完整换行）                      |
 | `POSTGRES_DB`                     | 数据库名                                                                |
 | `POSTGRES_USER`                   | 数据库用户                                                              |
 | `POSTGRES_PASSWORD`               | 数据库密码                                                              |
@@ -292,97 +269,50 @@ NUXT_OAUTH_GITHUB_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
 
 ## ⚙️ 第三部分：GitHub Actions 工作流（进阶版）
 
-<details>
-<summary>点击展开完整代码</summary>
+以下增量配置是在[入门篇第四步](./docker-quickstart-auto-deploy)的完整 workflow 基础上添加的。`checkout@v4`、`Login to ACR`、`Build and push` 等基础步骤与入门篇一致，此处仅展示**差异化部分**：
 
 ```yaml
-name: Production Deploy
+# 在入门篇 workflow 基础上：
+# 1) Build and push 步骤增加多标签推送与缓存加速
+- name: Build and push
+  uses: docker/build-push-action@v5
+  with:
+    push: true
+    tags: |
+      ${{ secrets.ACR_REGISTRY }}/my-app:latest
+      ${{ secrets.ACR_REGISTRY }}/my-app:${{ github.sha }}
+    cache-from: type=gha
+    cache-to: type=gha,mode=max
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch: # 允许手动触发
+# 2) Deploy 步骤的 .env 写入逻辑中，将基础变量替换为环境变量引用展开（与入门篇相同），并追加 NUXT_* 变量
+#    完整 ssh-action 步骤中的 envs 列表需包含：ACR_REGISTRY, ACR_USERNAME, ACR_PASSWORD,
+#    POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, NUXT_PUBLIC_SITE_URL,
+#    NUXT_SESSION_PASSWORD, NUXT_OAUTH_GITHUB_CLIENT_ID, NUXT_OAUTH_GITHUB_CLIENT_SECRET
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+# 3) 服务器远程脚本中的差异化命令：
+set -e
+cd /var/www/my-app
 
-      - name: Login to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+# 基础 .env 写入（与入门篇相同：POSTGRES_* + ACR_REGISTRY）
+# 追加 NUXT_* 变量到 .env
+chmod 600 .env
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: |
-            ${{ secrets.ACR_REGISTRY }}/my-app:latest
-            ${{ secrets.ACR_REGISTRY }}/my-app:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+# 登录 ACR
+echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
+docker compose pull app
 
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.0
-        env:
-          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          NUXT_PUBLIC_SITE_URL: ${{ secrets.NUXT_PUBLIC_SITE_URL }}
-          NUXT_SESSION_PASSWORD: ${{ secrets.NUXT_SESSION_PASSWORD }}
-          NUXT_OAUTH_GITHUB_CLIENT_ID: ${{ secrets.NUXT_OAUTH_GITHUB_CLIENT_ID }}
-          NUXT_OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.NUXT_OAUTH_GITHUB_CLIENT_SECRET }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: ACR_REGISTRY, ACR_USERNAME, ACR_PASSWORD, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, NUXT_PUBLIC_SITE_URL, NUXT_SESSION_PASSWORD, NUXT_OAUTH_GITHUB_CLIENT_ID, NUXT_OAUTH_GITHUB_CLIENT_SECRET
-          script: |
-            set -e
-            cd /var/www/my-app
+# ★ 差异化：执行数据库迁移（容器内安装 drizzle-kit 后运行）
+docker compose run --rm app sh -c "npm install -g drizzle-kit && drizzle-kit migrate"
 
-            # 写入环境变量（注意用 EOF 不加引号，确保变量展开）
-            cat > .env << EOF
-            POSTGRES_DB=$POSTGRES_DB
-            POSTGRES_USER=$POSTGRES_USER
-            POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-            ACR_REGISTRY=$ACR_REGISTRY
-            NUXT_PUBLIC_SITE_URL=$NUXT_PUBLIC_SITE_URL
-            NUXT_SESSION_PASSWORD=$NUXT_SESSION_PASSWORD
-            NUXT_OAUTH_GITHUB_CLIENT_ID=$NUXT_OAUTH_GITHUB_CLIENT_ID
-            NUXT_OAUTH_GITHUB_CLIENT_SECRET=$NUXT_OAUTH_GITHUB_CLIENT_SECRET
-            EOF
+# ★ 差异化：重启应用 + Caddy（--force-recreate 强制替换容器）
+docker compose up -d --force-recreate app
+docker compose up -d --force-recreate caddy
 
-            chmod 600 .env
-
-            # 登录 ACR
-            echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
-
-            # 拉取最新镜像
-            docker compose pull app
-
-            # 执行数据库迁移（确保容器内有 drizzle-kit 或临时安装）
-            # 方案：使用 npm 全局安装 drizzle-kit 后执行迁移
-            docker compose run --rm app sh -c "npm install -g drizzle-kit && drizzle-kit migrate"
-
-            # 重启应用（强制重新创建容器，避免端口冲突）
-            docker compose up -d --force-recreate app
-
-            # 重启 Caddy（如有更新）
-            docker compose up -d --force-recreate caddy
-
-            # 清理旧镜像（保留最近24小时）
-            docker image prune -f --filter "until=24h"
+# ★ 差异化：清理 24 小时前的旧镜像
+docker image prune -f --filter "until=24h"
 ```
 
-</details>
+> **完整可复制版本**：将上述差异化命令合并进入门篇的 workflow，替换对应的 `Deploy to server` 步骤脚本，并在 `envs` 列表中追加所有 NUXT_* 变量即可。
 
 **进阶要点**：
 
@@ -398,25 +328,19 @@ jobs:
 
 ### 4.1 安装 Docker 并配置镜像加速器
 
-若加速器无效，可使用 ACR 的海外源镜像同步功能或自行推送镜像至私有仓库。
+Docker 安装与基础加速器配置请参见[入门篇 5.1](./docker-quickstart-auto-deploy)。生产环境额外推荐配置日志切割，在 `daemon.json` 中追加：
 
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# 重新登录或执行 newgrp docker 使组生效
-
-sudo tee /etc/docker/daemon.json <<-'EOF'
+```json
 {
-  "registry-mirrors": ["https://your-mirror-id.mirror.aliyuncs.com"],
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "10m",
     "max-file": "3"
   }
 }
-EOF
-sudo systemctl restart docker
 ```
+
+> 若加速器无效，可使用 ACR 的海外源镜像同步功能或自行推送镜像至私有仓库。
 
 ### 4.2 创建项目目录并上传文件
 
@@ -452,16 +376,11 @@ curl -I https://your-domain.com # 应返回 200（通过 Caddy）
 
 | 现象                                                              | 可能原因                                       | 解决方案                                                                             |
 | ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Actions 中 SSH 连接失败**                                       | 私钥格式错误 / 安全组未开放 22 端口            | 检查 Secrets 中的私钥是否包含完整换行；检查安全组入方向规则                          |
 | **Caddy 容器无法启动，端口 80/443 被占用**                        | 宿主机有其他 Web 服务（如系统级 Caddy、Nginx） | `sudo lsof -i :80 -i :443` 找到并停止进程；或修改端口映射                            |
 | **应用无法连接数据库，日志显示 `getaddrinfo EAI_AGAIN postgres`** | 容器间网络问题 / 数据库服务名错误              | 确认 `app` 和 `postgres` 在同一网络；检查 `DATABASE_URL` 中的主机名是否为 `postgres` |
 | **数据库迁移失败，提示 `drizzle-kit: not found`**                 | 容器内未安装 drizzle-kit                       | 已改为使用 `npm install -g drizzle-kit`，确保网络通畅；也可在 Dockerfile 中预装      |
 | **应用容器不断重启**                                              | 健康检查失败 / 依赖服务未就绪                  | 查看日志：`docker logs my-app --tail 50`；检查 `depends_on` 条件                     |
-| **HTTPS 证书未自动生成**                                          | 域名解析未生效 / 80 端口未开放                 | 检查 DNS 解析；确保 Caddy 能访问外网                                                 |
-| **镜像拉取慢**                                                    | 未配置镜像加速器                               | 按 4.1 配置加速器并重启 Docker                                                       |
 | **部署后网站未更新**                                              | 容器未重启 / 镜像标签未更新                    | 检查 Actions 日志；手动执行 `docker compose pull && docker compose up -d`            |
-| **宿主机重启后容器未自动恢复**                                    | 未设置 Docker 开机自启                         | `sudo systemctl enable docker`；容器已设置 `restart: always`，会自动启动             |
-| **`.env` 文件权限导致 Secrets 泄露风险**                          | 权限设置不当                                   | 确保 `.env` 权限为 `600`，属主为运行 Docker 的用户                                   |
 
 ---
 
@@ -469,27 +388,17 @@ curl -I https://your-domain.com # 应返回 200（通过 Caddy）
 
 ### 6.1 常用命令
 
+`docker compose ps`、`logs -f`、`exec` 等基础命令请参见[入门篇 附录](./docker-quickstart-auto-deploy)。本文特有的运维命令：
+
 ```bash
-# 查看所有服务状态
-docker compose ps
-
-# 查看实时日志
-docker compose logs -f app
-
-# 进入容器
-docker exec -it my-app sh
-
 # 备份数据库
 docker exec my-app-db pg_dump -U postgres myapp > backups/backup_$(date +%Y%m%d).sql
 
 # 恢复数据库
 cat backups/backup.sql | docker exec -i my-app-db psql -U postgres -d myapp
 
-# 清理未使用的镜像
-docker image prune -f
-
-# 清理未使用的卷（谨慎操作）
-docker volume prune -f
+# 查看容器健康状态
+docker inspect --format='{{.State.Health.Status}}' my-app
 ```
 
 ### 6.2 自动备份（可选）

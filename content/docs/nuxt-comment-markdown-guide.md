@@ -10,6 +10,16 @@ tags:
   - Security
 ---
 
+## 📚 系列导航
+
+本系列共三篇：
+
+1. [**从零到一：多级引用评论区**](./nuxt-multi-level-replies) —— 评论区基础实现（多级引用、时间线、组件）
+2. [**评论区完美支持 Markdown**](./nuxt-comment-markdown-guide) —— Markdown 安全渲染（marked + Shiki + DOMPurify）
+3. [**评论区内容过滤与安全防护**](./nuxt-comment-security) —— 敏感词过滤与归属验证
+
+---
+
 > 内含与 Nuxt Content 配色保持一致的技巧，让你的评论区和文档浑然一体
 
 ---

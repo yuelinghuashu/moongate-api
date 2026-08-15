@@ -14,22 +14,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从设计令牌到 npm 发布的 Vue 3 组件库开发全流程：
+本系列共五篇：
 
-1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
-   —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
-
-2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
-
-3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
-   —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
-
-4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
-
-5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
-   —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
+1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
+2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
+3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
+4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
+5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
 
 ## 回顾：第一篇文章的结论
 

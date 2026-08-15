@@ -12,6 +12,16 @@ tags:
   - Performance
 ---
 
+## 📚 系列导航
+
+本系列共三篇：
+
+1. [**Nuxt 4 国际化完整配置**](./nuxt-i18n-config-guide) —— 基础配置与中文痛点（locales、路由策略、占位符插值）
+2. [**Nuxt Content + i18n 终极集成**](./nuxt-content-i18n-ultimate-integration) —— 单语言内容多语言界面（路径转换中间层）
+3. [**Nuxt i18n 的 $tm 函数**](./nuxt-i18n-tm-function-guide) —— 环境差异问题与解决方案（useI18nSafe 封装）
+
+---
+
 > **适用版本**：`@nuxtjs/i18n` v10.x  
 > _如果你使用其他版本，核心思路仍可参考，但具体行为可能略有差异。_
 
@@ -146,5 +156,3 @@ const { tm } = useI18nSafe();
 ## 总结
 
 `$tm` 环境差异是 `@nuxtjs/i18n` 模块为了兼顾开发体验和生产优化而产生的副作用。通过封装一个环境自适应的 `useI18nSafe` 组合式函数，可以优雅地解决此问题，让代码在不同环境下都能稳定运行。
-
-如果你在使用中遇到其他问题，欢迎留言交流。

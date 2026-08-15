@@ -24,19 +24,12 @@ tags:
 
 ## 📚 系列导航
 
-本系列共四篇，覆盖 Nuxt 中 URL 与状态双向同步的全流程：
+本系列共四篇：
 
-1. [Nuxt 中 URL 与状态双向绑定的终极指南（原理篇）](./nuxt-url-state-guide)
-   —— 讲解 URL 与状态双向同步的原理与手写方案。
-
-2. [手写一个更适合 Nuxt 的 useRouteQuery（封装篇）](./nuxt-use-route-query-composables)
-   —— 将重复逻辑封装成开箱即用的 composable。
-
-3. [从零到一：构建一个功能完备的文档列表页（实战篇）](./nuxt-docs-list-page-complete-guide)
-   —— 综合运用前两篇的知识，实现完整的文档列表页。
-
-4. [Nuxt + Go 全栈实践：从 URL 状态到后端 API 的完整闭环](./nuxt-go-fullstack-closed-loop)
-   —— 将前端 URL 状态与 Go 后端 API 打通，形成完整的数据流闭环。
+1. [**Nuxt 中 URL 与状态双向绑定（原理篇）**](./nuxt-url-state-guide) —— URL 状态同步原理与手写方案
+2. [**手写 useRouteQuery（封装篇）**](./nuxt-use-route-query-composables) —— 封装成开箱即用的 composable
+3. [**文档列表页完整指南（实战篇）**](./nuxt-docs-list-page-complete-guide) —— 实现完整的文档列表页
+4. [**Nuxt + Go 全栈实践**](./nuxt-go-fullstack-closed-loop) —— 前端 URL 状态与 Go API 打通
 
 
 ## 一、前置阅读

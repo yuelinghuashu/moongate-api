@@ -15,25 +15,14 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇，覆盖从静态网站到生产级 Docker 部署及服务集成的全流程：
+本系列共六篇：
 
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy)
-   —— 纯前端资源的自动化发布，Caddy 自动 HTTPS 和 SPA 路由支持。
-
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy)
-   —— 后端服务进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理。
-
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy)
-   —— 从零开始用 Docker + GitHub Actions 实现 CI/CD 流水线。
-
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy)
-   —— 多容器编排、健康检查、数据库迁移、自动 HTTPS，打造可靠的生产环境。
-
-5. [**自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）**](./umami-integration-auto-deploy)
-   —— 在现有 Docker 生产环境中集成 Umami 分析服务，实现自动化数据跟踪与安全加固。
-
-6. [**VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment)
-   —— 将 VitePress 静态文档站作为子域名接入现有 Docker 基础设施，复用 Caddy 反向代理与网络。
+1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
+2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
+3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
+4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
+5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
+6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
 
 ## 📌 前置说明
 
@@ -62,14 +51,11 @@ tags:
 
 ## 📌 版本声明
 
-| 工具           | 版本  | 说明                      |
-| -------------- | ----- | ------------------------- |
-| Node.js        | 24.x  | 最新 LTS                  |
-| pnpm           | 10.x  | 高性能包管理器            |
-| VitePress      | 1.6.x | 文档生成器                |
-| Docker         | 29.x  | 容器运行时                |
-| Caddy          | 2.8+  | 静态文件服务器 + 反向代理 |
-| GitHub Actions | 最新  | CI/CD 平台                |
+Node.js、pnpm、Docker、Caddy、GitHub Actions 的版本信息与[入门篇](./docker-quickstart-auto-deploy)一致。本文额外涉及：
+
+| 工具      | 版本  | 说明         |
+| --------- | ----- | ------------ |
+| VitePress | 1.6.x | 文档生成器   |
 
 ## 🏗️ 系统架构（接入现有基础设施）
 
@@ -224,12 +210,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Aliyun ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+      # ⚙️ Login to ACR 步骤与[入门篇第四步](./docker-quickstart-auto-deploy)完全一致，此处省略。
+      # 使用相同的 docker/login-action@v3 + ACR_REGISTRY/ACR_USERNAME/ACR_PASSWORD。
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -257,9 +239,10 @@ jobs:
           script: |
             set -e
 
-            # 登录 ACR
+            # 登录 ACR（与入门篇 ssh-action 相同）
             echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin
 
+            # ★ 差异化：独立 docker run 部署（不使用 docker-compose）
             # 拉取最新镜像
             docker pull $ACR_REGISTRY/moongate/moongate-vue:latest
 
@@ -360,14 +343,13 @@ docker exec my-blog-caddy wget -qO- http://moongate-vue:80 | head -5
 
 ### GitHub Secrets
 
-| Secret            | 说明                |
-| ----------------- | ------------------- |
-| `ACR_REGISTRY`    | 阿里云 ACR 仓库地址 |
-| `ACR_USERNAME`    | 阿里云用户名        |
-| `ACR_PASSWORD`    | ACR 固定密码        |
-| `SERVER_HOST`     | 服务器 IP           |
-| `SERVER_USER`     | SSH 用户名          |
-| `SSH_PRIVATE_KEY` | SSH 私钥            |
+`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY` 的配置方法与[静态篇 第二部分](./static-site-auto-deploy)一致。本文额外需要：
+
+| Secret         | 说明                |
+| -------------- | ------------------- |
+| `ACR_REGISTRY` | 阿里云 ACR 仓库地址 |
+| `ACR_USERNAME` | 阿里云用户名        |
+| `ACR_PASSWORD` | ACR 固定密码        |
 
 ### 服务器端命令速查
 

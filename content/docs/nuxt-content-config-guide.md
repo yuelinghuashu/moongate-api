@@ -11,6 +11,16 @@ tags:
   - Performance
 ---
 
+## 📚 系列导航
+
+本系列共三篇，覆盖 Nuxt 性能优化相关实践：
+
+1. [**Nuxt Content 渲染问题解决指南**](./nuxt-content-config-guide) —— @nuxt/content 配置与渲染
+2. [**Nuxt 图片引用：\<NuxtImg\> 实践**](./nuxt-image-best-practice) —— 图片优化与路径问题
+3. [**Nuxt 4 状态持久化**](./nuxt-state-persistence-guide) —— SSR 水合失败根治
+
+---
+
 ## 概述
 
 这篇文档记录了我从零开始配置 Nuxt Content 模块，渲染 Markdown 内容的完整过程。如果你也厌倦了在配置上耗费数小时却一行业务代码都没写的挫败感，这篇实战指南或许能帮你少走弯路。

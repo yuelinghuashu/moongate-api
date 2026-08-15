@@ -15,22 +15,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从设计令牌到 npm 发布的 Vue 3 组件库开发全流程：
+本系列共五篇：
 
-1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
-   —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
-
-2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
-
-3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
-   —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
-
-4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
-
-5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
-   —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
+1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
+2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
+3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
+4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
+5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
 
 ## 一、引言
 
@@ -52,15 +43,15 @@ v1.5.0 的 `build` 脚本是一条自动化验证流水线：
 
 每一步的职责：
 
-| 脚本 | 作用 |
-| ---- | ---- |
-| `vite build` | 打包 JS + CSS 产物（27 组件多入口） |
-| `build:types` | vue-tsc 生成 `.d.ts` 类型声明 |
-| `clean:dts` | 清理产物中的冗余类型文件 |
-| `copy:reset` | 复制 `reset.css` 到 dist |
-| `verify:build` | 验证**每个组件入口**的 .js / .d.ts / style.css / reset.css 存在 + 导出名正确 |
-| `check:size` | 体积预算检查（Min+Gzip ≤ 25KB） |
-| `prepublishOnly` | 发布前强制 build + test |
+| 脚本             | 作用                                                                         |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `vite build`     | 打包 JS + CSS 产物（27 组件多入口）                                          |
+| `build:types`    | vue-tsc 生成 `.d.ts` 类型声明                                                |
+| `clean:dts`      | 清理产物中的冗余类型文件                                                     |
+| `copy:reset`     | 复制 `reset.css` 到 dist                                                     |
+| `verify:build`   | 验证**每个组件入口**的 .js / .d.ts / style.css / reset.css 存在 + 导出名正确 |
+| `check:size`     | 体积预算检查（Min+Gzip ≤ 25KB）                                              |
+| `prepublishOnly` | 发布前强制 build + test                                                      |
 
 `verify-build.js` 的核心逻辑——防止漏发布某个组件入口：
 
@@ -68,7 +59,7 @@ v1.5.0 的 `build` 脚本是一条自动化验证流水线：
 // 每个组件：dist/<kebab>.js 存在 + dist/exports/<Name>.d.ts 存在 + 导出名正确
 for (const [componentName, kebabName] of Object.entries(componentEntries)) {
   const jsPath = join(distDir, `${kebabName}.js`)
-  const dtsPath = join(distDir, 'exports', `${componentName}.d.ts`)
+  const dtsPath = join(distDir, "exports", `${componentName}.d.ts`)
   if (!existsSync(jsPath)) {
     errors.push(`缺少组件产物: ${kebabName}.js`)
   }
@@ -164,11 +155,11 @@ npm 强制要求发布时开启双重认证。npm 已全面拥抱 **安全密钥
 
 > **⚠️ 工业级避坑警告**：npm 的 WebAuthn 验证会尝试与 Google 验证服务联动。在国内网络环境下，使用 Chrome/Edge 弹出密钥窗口时**极易由于网络超时而无响应或报错**。
 
-| 浏览器 | 是否需要全局代理 | 成功率 | 建议 |
-| --- | --- | --- | --- |
-| **Chrome** | ✅ 必须开启 | 极高 | **首选** |
-| **Edge** | ❌ 不需要 | 高 | 次选 |
-| **Firefox** | ❌ 不需要 | 极低 | **不建议** |
+| 浏览器      | 是否需要全局代理 | 成功率 | 建议       |
+| ----------- | ---------------- | ------ | ---------- |
+| **Chrome**  | ✅ 必须开启      | 极高   | **首选**   |
+| **Edge**    | ❌ 不需要        | 高     | 次选       |
+| **Firefox** | ❌ 不需要        | 极低   | **不建议** |
 
 ### 3.2 CI/CD 备选：Granular Access Token
 

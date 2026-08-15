@@ -5,11 +5,21 @@ date: 2025-12-11
 permalink: ba590c8a-5f7f-40ab-8492-e071b8f8731f
 series: i18n
 level: P1
-tags: 
+tags:
   - Nuxt
   - i18n
   - Engineering
   - Performance
+---
+
+## 📚 系列导航
+
+本系列共三篇：
+
+1. [**Nuxt 4 国际化完整配置**](./nuxt-i18n-config-guide) —— 基础配置与中文痛点（locales、路由策略、占位符插值）
+2. [**Nuxt Content + i18n 终极集成**](./nuxt-content-i18n-ultimate-integration) —— 单语言内容多语言界面（路径转换中间层）
+3. [**Nuxt i18n 的 $tm 函数**](./nuxt-i18n-tm-function-guide) —— 环境差异问题与解决方案（useI18nSafe 封装）
+
 ---
 
 本文档基于 `@nuxtjs/i18n` 模块，版本为10.2.1，详细讲解在 Nuxt 4 项目中实现国际化的完整流程，并特别指出中文配置中的常见“痛点”及解决方案。
@@ -83,7 +93,7 @@ export default defineNuxtConfig({
       redirectOn: "root",
     },
   },
-});
+})
 ```
 
 ### 1.3 语言文件结构
@@ -95,15 +105,15 @@ project-root/
 ├── i18n/
 │   └── locales/
 │       ├── zh_cn.json    # 简体中文
-│       ├── en.json    # 英文
-│       └── ja.json    # 日文
+│       ├── en.json       # 英文
+│       └── ja.json       # 日文
 ├── nuxt.config.ts
 └── app.vue
 ```
 
 ### 1.4 创建语言文件
 
-#### locales/zh_cn.json
+以 `locales/zh_cn.json` 为例（en、ja 文件结构相同，仅内容翻译不同）：
 
 ```json
 {
@@ -116,65 +126,25 @@ project-root/
 }
 ```
 
-#### locales/en.json
+### 1.5 动态区域与方向设置
 
-```json
-{
-  "welcome": "Welcome to our app",
-  "about": "About Us",
-  "user": {
-    "profile": "User Profile",
-    "settings": "Settings"
-  }
-}
-```
-
-#### locales/ja.json
-
-```json
-{
-  "welcome": "アプリへようこそ",
-  "about": "会社概要",
-  "user": {
-    "profile": "ユーザープロフィール",
-    "settings": "設定"
-  }
-}
-```
-
-### 1.5 动态区域设置
+根据当前语言动态设置 UI 区域（locale）和 HTML 的 `lang`、`dir` 属性：
 
 ```vue
 <script setup lang="ts">
-import * as locales from "@nuxt/ui/locale";
+import * as locales from "@nuxt/ui/locale"
 
-const { locale } = useI18n();
-</script>
+const { locale } = useI18n()
 
-<template>
-  <UApp :locale="locales[locale]">
-    <NuxtPage />
-  </UApp>
-</template>
-```
-
-### 1.6 动态方向设置
-
-```vue
-<script setup lang="ts">
-import * as locales from "@nuxt/ui/locale";
-
-const { locale } = useI18n();
-
-const lang = computed(() => locales[locale.value].code);
-const dir = computed(() => locales[locale.value].dir);
+const lang = computed(() => locales[locale.value].code)
+const dir = computed(() => locales[locale.value].dir)
 
 useHead({
   htmlAttrs: {
     lang,
     dir,
   },
-});
+})
 </script>
 
 <template>
@@ -186,39 +156,15 @@ useHead({
 
 ## 二、中文配置的特别痛点与解决方案
 
-### 3.1 痛点一：语言标识符不一致
+### 2.1 痛点一：语言标识符不一致与默认语言配置错误
 
-**问题**：中文有多种标识符格式（`zh`、`zh-CN`、`zh_CN`、`zh_cn`），容易混淆。
-
-**解决方案**：
-
-- **`code`字段**：用于URL路径和程序内部标识，推荐使用 **`zh_cn`**（全小写下划线）
-
-```typescript
-{ code: 'zh_cn', name: '简体中文' }
-```
-
-**`language`字段**：用于HTML `lang`属性和SEO，使用标准 **`zh-CN`**（连字符格式）
-
-```typescript
-{ code: 'zh_cn', language: 'zh-CN' }
-```
-
-**`defaultLocale`**：必须与 `code` 值**完全一致**
-
-```typescript
-defaultLocale: "zh_cn"; // 正确
-defaultLocale: "zh-CN"; // 错误！会导致配置不匹配
-```
-
-### 3.2 痛点二：默认语言配置错误
-
-**问题**：`defaultLocale` 设置错误导致只有中文页面报错。
+**问题**：中文有多种标识符格式（`zh`、`zh-CN`、`zh_CN`、`zh_cn`），容易混淆，导致 `defaultLocale` 配置不匹配、页面报错。
 
 **解决方案**：
 
-1. **严格匹配**：确保 `defaultLocale` 值与中文配置的 `code` 值**一字不差**
-2. **配置验证**：
+- **`code` 字段**：用于URL路径和程序内部标识，推荐使用 **`zh_cn`**（全小写下划线）
+- **`language` 字段**：用于HTML `lang` 属性和SEO，使用标准 **`zh-CN`**（连字符格式）
+- **`defaultLocale`**：必须与 `code` 值**完全一致**
 
 ```typescript
 // 正确的完整示例
@@ -229,7 +175,12 @@ defaultLocale: 'zh_cn', // 必须与上面的code完全相同
 strategy: 'prefix_except_default'
 ```
 
-### 3.3 痛点三：语言文件加载失败
+```typescript
+defaultLocale: "zh_cn" // 正确
+defaultLocale: "zh-CN" // 错误！会导致配置不匹配
+```
+
+### 2.2 痛点二：语言文件加载失败
 
 **问题**：控制台报错 `Cannot find module './locales/zh.json'`。
 
@@ -252,9 +203,9 @@ strategy: 'prefix_except_default'
 { "welcome": "欢迎", }
 ```
 
-## 四、高级配置
+## 三、高级配置
 
-### 4.1 子域名国际化（像Vue官网一样）
+### 3.1 子域名国际化（像Vue官网一样）
 
 ```typescript
 i18n: {
@@ -278,9 +229,9 @@ i18n: {
 }
 ```
 
-### 4.2 翻译占位符（参数插值）
+### 3.2 翻译占位符（参数插值）
 
-在实际项目中，经常需要动态替换翻译文本中的变量，例如“共 {count} 条记录”。`@nuxtjs/i18n` 支持在翻译字符串中使用 `{key}` 占位符，并在组件中传入对应的值。
+在实际项目中，经常需要动态替换翻译文本中的变量，例如"共 {count} 条记录"。`@nuxtjs/i18n` 支持在翻译字符串中使用 `{key}` 占位符，并在组件中传入对应的值。
 
 #### 语言文件示例
 
@@ -311,16 +262,16 @@ i18n: {
 ```vue
 <template>
   <div>
-    <p>{{ t('findCount', { count: totalDocs }) }}</p>
-    <p>{{ t('greeting', { name: userName }) }}</p>
-    <p>{{ t('balance', { amount: userBalance }) }}</p>
+    <p>{{ t("findCount", { count: totalDocs }) }}</p>
+    <p>{{ t("greeting", { name: userName }) }}</p>
+    <p>{{ t("balance", { amount: userBalance }) }}</p>
   </div>
 </template>
 
 <script setup>
 const { t } = useI18n()
 const totalDocs = ref(25)
-const userName = ref('张三')
+const userName = ref("张三")
 const userBalance = ref(12345.67)
 </script>
 ```
@@ -329,7 +280,7 @@ const userBalance = ref(12345.67)
 
 - 占位符键名必须**严格匹配**（区分大小写），如 `{count}` 不能写成 `{Count}`。
 - 如果某个占位符未传入值，它会原样输出（如 `{count}`）。
-- 对于需要复数处理的场景（如“1 条评论 / 2 条评论”），请使用 `vue-i18n` 的复数机制，而非手动拼接。
+- 对于需要复数处理的场景（如"1 条评论 / 2 条评论"），请使用 `vue-i18n` 的复数机制，而非手动拼接。
 
 ## 总结
 
@@ -338,9 +289,9 @@ const userBalance = ref(12345.67)
 1. **版本差异巨大**  
    v10 与 v8 不兼容，务必以本文和官方文档为准，摒弃旧版认知。
 
-2. **语言标识符规范化**  
-   - `code`：全小写下划线（如 `zh_cn`）  
-   - `language`：标准连字符格式（如 `zh-CN`）  
+2. **语言标识符规范化**
+   - `code`：全小写下划线（如 `zh_cn`）
+   - `language`：标准连字符格式（如 `zh-CN`）
    - `defaultLocale`：必须与 `code` **严格一致**
 
 3. **语言文件维护**  
@@ -353,6 +304,6 @@ const userBalance = ref(12345.67)
    小型项目推荐 `prefix_except_default`，大型多站点可启用 `differentDomains`。
 
 6. **性能与 SEO**  
-   - 通过 `useHead` 动态设置 `lang` 和 `dir` 提升可访问性
+   通过 `useHead` 动态设置 `lang` 和 `dir` 提升可访问性。
 
 > 国际化的核心目标是让不同语言的用户获得一致的体验，希望本文能帮助你少走弯路，快速构建高质量的 Nuxt 多语言应用。

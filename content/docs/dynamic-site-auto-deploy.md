@@ -12,25 +12,14 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇，覆盖从静态网站到生产级 Docker 部署及服务集成的全流程：
+本系列共六篇：
 
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy)
-   —— 纯前端资源的自动化发布，Caddy 自动 HTTPS 和 SPA 路由支持。
-
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy)
-   —— 后端服务进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理。
-
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy)
-   —— 从零开始用 Docker + GitHub Actions 实现 CI/CD 流水线。
-
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy)
-   —— 多容器编排、健康检查、数据库迁移、自动 HTTPS，打造可靠的生产环境。
-
-5. [**自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）**](./umami-integration-auto-deploy)
-   —— 在现有 Docker 生产环境中集成 Umami 分析服务，实现自动化数据跟踪与安全加固。
-
-6. [**VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment)
-   —— 将 VitePress 静态文档站作为子域名接入现有 Docker 基础设施，复用 Caddy 反向代理与网络。
+1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
+2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
+3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
+4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
+5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
+6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
 
 ---
 
@@ -42,20 +31,13 @@ tags:
 
 ## 📌 版本声明
 
-本文档所有工具均采用 **2026 年最新稳定版**，具体版本如下：
+Node.js、pnpm、Caddy、GitHub Actions、阿里云 ACR 的版本信息与[静态篇](./static-site-auto-deploy)一致。本文额外涉及：
 
-| 工具           | 版本        | 说明                                                                                 |
-| -------------- | ----------- | ------------------------------------------------------------------------------------ |
-| Node.js        | 24.x        | 最新的主要版本，支持所有现代 JavaScript 特性                                         |
-| pnpm           | 10.x        | 高性能包管理器，与 Node.js 24 完美兼容                                               |
-| Caddy          | 2.8+        | 自动 HTTPS 的反向代理服务器                                                          |
-| PostgreSQL     | 17 (alpine) | 轻量级关系型数据库，alpine 版本镜像小巧                                              |
-| Drizzle ORM    | 0.30+       | TypeScript 原生 ORM，支持迁移和类型安全查询                                          |
-| PM2            | 5+          | 生产级 Node.js 进程管理工具                                                          |
-| GitHub Actions | 最新        | CI/CD 平台，所有 Action 均为当前最新版本（如 `checkout@v4`、`ssh-action@v1.0.0` 等） |
-| 阿里云 ACR     | –           | 容器镜像服务，需使用固定密码进行认证                                                 |
-
-> **注意**：请根据你的项目实际需求调整具体版本号。若使用其他技术栈（如 Python、Java 等），请替换对应的运行时版本。
+| 工具        | 版本        | 说明                                            |
+| ----------- | ----------- | ----------------------------------------------- |
+| PostgreSQL  | 17 (alpine) | 轻量级关系型数据库，alpine 版本镜像小巧         |
+| Drizzle ORM | 0.30+       | TypeScript 原生 ORM，支持迁移和类型安全查询     |
+| PM2         | 5+          | 生产级 Node.js 进程管理工具                     |
 
 ---
 
@@ -212,49 +194,12 @@ postgresql://用户名:密码@主机:端口/数据库名
 
 ## 🔐 第二部分：配置 SSH 密钥对与 GitHub Secrets
 
-### 2.1 在本地生成 SSH 密钥对
+SSH 密钥生成、公钥部署、私钥配置的完整流程请参见[静态篇 第二部分](./static-site-auto-deploy)。本文额外需要：
 
-在你的**本地电脑**执行：
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_github_actions_dynamic -N ""
-```
-
-### 2.2 将公钥部署到服务器
-
-复制公钥内容：
-
-```bash
-cat ~/.ssh/id_github_actions_dynamic.pub
-```
-
-登录服务器，将公钥添加到 `~/.ssh/authorized_keys`：
-
-```bash
-echo '你的公钥内容' >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-chmod 700 ~/.ssh
-```
-
-### 2.3 将私钥配置为 GitHub Secrets
-
-复制私钥内容（**务必包含 `-----BEGIN OPENSSH PRIVATE KEY-----` 和 `-----END OPENSSH PRIVATE KEY-----` 行，保持完整格式**）：
-
-```bash
-cat ~/.ssh/id_github_actions_dynamic
-```
-
-进入 GitHub 仓库 → **Settings** → **Secrets and variables** → **Actions**，点击 **New repository secret**，添加以下 Secrets：
-
-| Secret 名称       | 说明                                                         |
-| ----------------- | ------------------------------------------------------------ |
-| `SERVER_HOST`     | 服务器公网 IP                                                |
-| `SERVER_USER`     | SSH 用户名（如 `ubuntu`）                                    |
-| `SSH_PRIVATE_KEY` | 上面复制的私钥全文（保持换行）                               |
-| `DATABASE_URL`    | 数据库连接字符串                                             |
-| 其他环境变量      | 如 `NUXT_SESSION_PASSWORD`、`NUXT_OAUTH_GITHUB_CLIENT_ID` 等 |
-
-> **💡 提示**：如果私钥内容在 GitHub Secrets 中粘贴后丢失换行，会导致 SSH 连接失败。请确保原样粘贴。
+| Secret 名称 | 说明                                      |
+| ----------- | ----------------------------------------- |
+| `DATABASE_URL` | 数据库连接字符串                      |
+| 其他环境变量 | 如 `NUXT_SESSION_PASSWORD`、`NUXT_OAUTH_GITHUB_CLIENT_ID` 等 |
 
 ---
 
@@ -459,14 +404,12 @@ git push origin main
 ### 5.5 关键问题排查清单
 
 | 现象                             | 可能原因                                                             | 解决方案                                                                                                       |
-| -------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| **Actions 日志卡在 SSH 连接**    | SSH 密钥格式错误、安全组未开放 22 端口、服务器 `sshd_config` 限制    | 检查 Secrets 中的私钥是否包含完整换行；检查安全组入方向规则；查看服务器 `/var/log/auth.log` 寻找原因           |
+| -------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | **Caddy 返回 502 Bad Gateway**   | 后端应用未运行、Caddy 配置端口错误、应用绑定地址不是 127.0.0.1       | 检查 `pm2 status`；确认 Caddyfile 中的端口；确保应用监听 `127.0.0.1`                                           |
-| **应用启动失败**                 | 依赖未安装、环境变量缺失、端口被占用、入口文件路径错误               | 登录服务器手动运行 `pnpm install`；检查 `.env` 文件；`netstat -tlnp                                            | grep 3000`查看端口占用；确认`.output/server/index.mjs` 是否存在 |
+| **应用启动失败**                 | 依赖未安装、环境变量缺失、端口被占用、入口文件路径错误               | 登录服务器手动运行 `pnpm install`；检查 `.env` 文件；`netstat -tlnp \| grep 3000` 查看端口占用；确认 `.output/server/index.mjs` 是否存在 |
 | **数据库迁移失败**               | 数据库连接串错误、迁移文件缺失、数据库服务未启动、drizzle-kit 未安装 | 检查 `DATABASE_URL` 是否正确；确认迁移目录（如 `.drizzle`）存在；检查数据库服务状态；确保 `drizzle-kit` 已安装 |
 | **迁移目录找不到**               | rsync 排除了点开头的目录                                             | 检查 rsync 命令的 `--exclude` 参数，确保没有排除 `.drizzle` 或你的自定义迁移目录                               |
 | **pnpm 命令未找到**              | 服务器未安装 pnpm，或 PATH 未设置                                    | 检查远程脚本中是否正确安装了 pnpm，并设置了 `PATH`                                                             |
-| **网站 HTTPS 证书未自动生成**    | 域名 DNS 未生效、Caddy 版本过旧、80/443 端口未开放                   | 检查 DNS 解析；升级 Caddy 到最新版；检查安全组端口                                                             |
 | **PM2 进程在服务器重启后未恢复** | 未执行 `pm2 startup` 后的 sudo 命令                                  | 登录服务器，重新执行 `pm2 startup` 并根据提示运行 sudo 命令                                                    |
 
 ### 5.6 查看日志

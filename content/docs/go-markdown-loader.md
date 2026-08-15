@@ -14,10 +14,10 @@ tags:
 **适用读者**：想通过真实项目学 Go 的开发者，以及想从 Nuxt Content 迁移出来的用户。
 
 **你将学到**：
+
 - 如何用 Go 实现 Markdown 加载与 API 服务（核心逻辑 ~200 行，完整项目 ~400-500 行）
 - Go 项目结构设计、接口使用、文件处理的核心实践
 - 一种可复制的"项目驱动学习"方法论
-
 
 ## 一、为什么用 Go？
 
@@ -36,7 +36,6 @@ tags:
 
 所以这篇文章不只是技术方案，也是一个前端开发者从 Go 新手到 Go 实践者的完整成长记录。
 
-
 ## 二、背景：我需要一个学习项目
 
 我之前用 Nuxt Content 管理博客的 39 篇技术文章，整体体验还不错，但也遇到了一些让我想"动一动"的问题。
@@ -46,14 +45,14 @@ tags:
 **`content.config.ts`——集合定义**
 
 ```typescript
-import { defineContentConfig, defineCollection } from '@nuxt/content'
-import { z } from 'zod'
+import { defineContentConfig, defineCollection } from "@nuxt/content"
+import { z } from "zod"
 
 export default defineContentConfig({
   collections: {
     docs: defineCollection({
-      type: 'page',
-      source: 'docs/*.md',
+      type: "page",
+      source: "docs/*.md",
       schema: z.object({
         title: z.string(),
         description: z.string(),
@@ -62,19 +61,19 @@ export default defineContentConfig({
         level: z.string(),
         series: z.string(),
         tags: z.array(z.string()),
-      })
+      }),
     }),
     about: defineCollection({
-      type: 'page',
-      source: 'about/*.md',
+      type: "page",
+      source: "about/*.md",
       schema: z.object({
         permalink: z.string(),
         title: z.string(),
         description: z.string(),
         date: z.date(),
-      })
-    })
-  }
+      }),
+    }),
+  },
 })
 ```
 
@@ -82,39 +81,50 @@ export default defineContentConfig({
 
 ```typescript
 const bundledLangs = [
-  'bash', 'css', 'docker', 'go', 'html',
-  'javascript', 'json', 'markdown', 'shell',
-  'sql', 'typescript', 'vue', 'xml', 'yaml'
-];
+  "bash",
+  "css",
+  "docker",
+  "go",
+  "html",
+  "javascript",
+  "json",
+  "markdown",
+  "shell",
+  "sql",
+  "typescript",
+  "vue",
+  "xml",
+  "yaml",
+]
 
 export default defineNuxtConfig({
   content: {
     build: {
       markdown: {
         highlight: {
-          langs: bundledLangs,      // 所有语言
+          langs: bundledLangs, // 所有语言
         },
         toc: {
           depth: 4,
-          searchDepth: 3
+          searchDepth: 3,
         },
         theme: {
-          default: 'vitesse-light',
-          light: 'vitesse-light',
-          dark: 'vitesse-dark'
-        }
+          default: "vitesse-light",
+          light: "vitesse-light",
+          dark: "vitesse-dark",
+        },
       },
     },
     shiki: {
-      bundledThemes: ['vitesse-light', 'vitesse-dark'],
+      bundledThemes: ["vitesse-light", "vitesse-dark"],
       bundledLangs: bundledLangs,
-      defaultTheme: 'material-theme-lighter',
-      dynamic: true,  // 懒加载语言
+      defaultTheme: "material-theme-lighter",
+      dynamic: true, // 懒加载语言
     },
     experimental: {
-      nativeSqlite: true
-    }
-  }
+      nativeSqlite: true,
+    },
+  },
 })
 ```
 
@@ -130,14 +140,12 @@ export default defineNuxtConfig({
 
 **不是 Nuxt Content 不好，是我需要写 Go。**
 
-
 ## 三、项目目标
 
 1. **学习 Go**：在实战中掌握 Go 的核心特性
 2. **内容与代码分离**：改内容不需要重新构建前端
 3. **技术透明**：每一行代码都在自己掌控中
 4. **轻量依赖**：按需引入，不背全家桶
-
 
 ## 四、整体设计
 
@@ -172,12 +180,11 @@ export default defineNuxtConfig({
 
 ### 4.2 技术选型
 
-| 组件 | 选择 | 说明 |
-|------|------|------|
-| Web 框架 | Gin | 轻量、性能好、适合初学者 |
-| YAML 解析 | `gopkg.in/yaml.v3` | Go 标准实践 |
-| Markdown 渲染 | `gomarkdown` | 纯 Go，无 CGO 依赖 |
-
+| 组件          | 选择               | 说明                     |
+| ------------- | ------------------ | ------------------------ |
+| Web 框架      | Gin                | 轻量、性能好、适合初学者 |
+| YAML 解析     | `gopkg.in/yaml.v3` | Go 标准实践              |
+| Markdown 渲染 | `gomarkdown`       | 纯 Go，无 CGO 依赖       |
 
 ## 五、项目结构
 
@@ -203,7 +210,6 @@ moongate-api/
 ```
 
 这个结构是我参考 Go 社区常见实践设计的。`cmd/` 放入口，`internal/` 放内部包，`domain/` 放领域模型——第一次真正理解"项目结构"为什么这样组织。
-
 
 ## 六、数据模型
 
@@ -261,7 +267,6 @@ func (d *Doc) SetContent(content string) {
 ```
 
 `ParseMarkdown` 需要同时支持 `Doc` 和 `About` 两种类型。如果为每个类型单独写解析函数，代码会重复。但用接口，只需要定义"你能设置 Content 和 Slug"这个能力，任何类型只要实现了这两个方法，就能被 `ParseMarkdown` 处理。
-
 
 ## 七、核心解析逻辑
 
@@ -352,7 +357,6 @@ func mdToHTML(body string) string {
 }
 ```
 
-
 ## 八、加载与内存存储
 
 ### 8.1 Store 结构
@@ -408,7 +412,6 @@ func loadDocs(dir string, store *Store) error {
 
 单个文件解析失败时，跳过它继续处理其他文件，而不是直接退出。这样即使有某篇文章格式有问题，整个服务仍然可以启动。
 
-
 ## 九、我在写这段代码时真正理解的事
 
 ### 9.1 接口是能力验证
@@ -447,7 +450,6 @@ func ParseMarkdown[T any](filePath string) (T, error)
 ```
 
 没有泛型的话，我要么为 Doc 和 About 各写一个解析函数（代码重复），要么用 `interface{}` 然后到处做类型断言（不优雅且不安全）。泛型让代码既安全又简洁。
-
 
 ## 十、提供 HTTP API
 
@@ -501,7 +503,6 @@ func main() {
 }
 ```
 
-
 ## 十一、这个项目的运行数据
 
 ```
@@ -514,7 +515,6 @@ func main() {
 ├── 部署时间: ~10 秒（仅同步文件）
 └── 核心代码: ~200 行（完整项目 ~400-500 行）
 ```
-
 
 ## 十二、给想用项目学 Go 的人
 
@@ -533,7 +533,6 @@ func main() {
 - 用 Go 写一个日志收集和查询服务
 
 核心原则：**从小处着手，让项目驱动学习。** 一个能跑起来、能解决问题的小项目，比看 10 本教程都管用。
-
 
 ## 十三、结语
 

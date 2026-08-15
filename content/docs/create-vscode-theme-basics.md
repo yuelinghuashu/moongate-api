@@ -5,7 +5,7 @@ date: 2026-08-06 00:00:00
 permalink: 7a7bec85-c90e-4770-92d3-4ef537ba2960
 level: P1
 series: design-system
-tags: 
+tags:
   - VSCode
   - Theme
   - Engineering
@@ -13,22 +13,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
+本系列共五篇：
 
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
-   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
-
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
-   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
-
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
-   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
-
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
-   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
-
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
-   —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
 
 ---
 
@@ -113,13 +104,13 @@ mkdir themes
 
 `colors` 对象定义编辑器 **UI 的配色**——背景、标题栏、状态栏、侧边栏、选区高亮等。它是一个扁平的对象，键名是 VS Code 预定义的接口，例如：
 
-| 键名 | 作用 |
-|------|------|
-| `editor.background` | 编辑器背景 |
-| `editor.foreground` | 编辑器默认前景色 |
-| `titleBar.activeBackground` | 标题栏背景 |
-| `statusBar.background` | 状态栏背景 |
-| `sideBar.background` | 侧边栏背景 |
+| 键名                        | 作用             |
+| --------------------------- | ---------------- |
+| `editor.background`         | 编辑器背景       |
+| `editor.foreground`         | 编辑器默认前景色 |
+| `titleBar.activeBackground` | 标题栏背景       |
+| `statusBar.background`      | 状态栏背景       |
+| `sideBar.background`        | 侧边栏背景       |
 
 > ⚠️ **`type` 字段**：顶级 `type` 字段决定主题是深色还是浅色，取值为 `"dark"` 或 `"light"`。它会影响 VS Code 默认控件的渲染方式（如滚动条、输入框的自适应）。
 

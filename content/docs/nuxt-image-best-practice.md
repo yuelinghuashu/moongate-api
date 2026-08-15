@@ -11,6 +11,16 @@ tags:
   - Performance
 ---
 
+## 📚 系列导航
+
+本系列共三篇，覆盖 Nuxt 性能优化相关实践：
+
+1. [**Nuxt Content 渲染问题解决指南**](./nuxt-content-config-guide) —— @nuxt/content 配置与渲染
+2. [**Nuxt 图片引用：\<NuxtImg\> 实践**](./nuxt-image-best-practice) —— 图片优化与路径问题
+3. [**Nuxt 4 状态持久化**](./nuxt-state-persistence-guide) —— SSR 水合失败根治
+
+---
+
 ## 从一次诡异的图片 404 错误说起
 
 如果你在 Nuxt 项目中使用原生 `<img>` 标签引用图片，比如：

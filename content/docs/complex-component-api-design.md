@@ -15,22 +15,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从设计令牌到 npm 发布的 Vue 3 组件库开发全流程：
+本系列共五篇：
 
-1. [**设计令牌 vs 原子化 CSS：失败整合与融合之道（理念篇）**](./design-tokens-vs-atomic-css)
-   —— 用 UnoCSS 映射设计令牌的失败经历，量化对比后得出设计令牌优先的结论。
-
-2. [**CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践（架构篇）**](./css-first-component-library)
-   —— 四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算验证，单组件极简实现。
-
-3. [**Vue 3 简单组件开发实战：从 Button 组件看 API 设计（简单组件篇）**](./vue-component-api-design)
-   —— Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库对比。
-
-4. [**Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计（复杂组件篇）**](./complex-component-api-design)
-   —— 数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级细节。
-
-5. [**从代码到 npm：Vue 3 组件库发布实战与避坑指南（发布篇）**](./component-library-publishing)
-   —— nrm 源管理、2FA 配置、WebAuthn 网络代理避坑、本地链接测试、自动化脚本及工业级发布检查清单。
+1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
+2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
+3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
+4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
+5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
 
 ## 一、引言
 
@@ -107,10 +98,11 @@ const handleNativeChange = (event: Event) => {
   const originalItem = props.options?.find(
     (item) => String(getValue(item)) === rawValue,
   )
-  const finalValue = originalItem !== undefined ? getValue(originalItem) : rawValue
+  const finalValue =
+    originalItem !== undefined ? getValue(originalItem) : rawValue
 
   modelValue.value = finalValue
-  emit('change', finalValue)
+  emit("change", finalValue)
 }
 ```
 
@@ -127,7 +119,10 @@ const attrs = useAttrs()
 const formAttrs = computed(() => {
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(attrs)) {
-    if (key.startsWith('aria-') || ['name', 'id', 'role', 'tabindex'].includes(key)) {
+    if (
+      key.startsWith("aria-") ||
+      ["name", "id", "role", "tabindex"].includes(key)
+    ) {
       result[key] = value
     }
   }
@@ -175,6 +170,7 @@ const wrapperAttrs = computed(() => {
 ```
 
 支持的操作：
+
 - `ArrowDown` / `ArrowUp`：移动高亮（`focusedIndex`），并 `scrollIntoView` 保持可视
 - `Enter`：选中当前高亮选项
 - `Esc`：关闭下拉
@@ -185,7 +181,7 @@ const wrapperAttrs = computed(() => {
 多选（`multiple + filterable`）将 `modelValue` 变为数组：
 
 ```typescript
-const modelValue = defineModel<SelectValue | SelectValue[]>({ default: '' })
+const modelValue = defineModel<SelectValue | SelectValue[]>({ default: "" })
 
 // 多选时：切换选中
 const selectOption = (item: SelectOption) => {
@@ -201,7 +197,7 @@ const selectOption = (item: SelectOption) => {
 
     modelValue.value = next
     // 多选保持下拉打开，方便连续多选
-    searchText.value = ''
+    searchText.value = ""
     focusedIndex.value = -1
     nextTick(() => inputRef.value?.focus())
     return
@@ -214,6 +210,7 @@ const selectOption = (item: SelectOption) => {
 ```
 
 多选时：
+
 - 已选项渲染为标签（tag），每个标签有 `aria-label="移除 {label}"` 的删除按钮
 - 选择后**下拉保持打开**（方便连续多选）
 - 输入框只显示搜索文本，已选标签在外部
@@ -224,11 +221,11 @@ const selectOption = (item: SelectOption) => {
 
 ```typescript
 interface Props {
-  totalPages: number       // 总页数（必传）
-  modelValue: number       // 当前页码（v-model）
+  totalPages: number // 总页数（必传）
+  modelValue: number // 当前页码（v-model）
   size?: "sm" | "md" | "lg"
-  showQuickJump?: boolean  // 首尾页快速跳转按钮（默认 true）
-  prevText?: string        // 上一页文案（走全局 i18n）
+  showQuickJump?: boolean // 首尾页快速跳转按钮（默认 true）
+  prevText?: string // 上一页文案（走全局 i18n）
   nextText?: string
   firstText?: string
   lastText?: string
@@ -283,7 +280,7 @@ const goToPage = (page: number) => {
   if (newPage > props.totalPages) newPage = props.totalPages
   if (newPage === currentPage.value) return
   currentPage.value = newPage
-  emit('change', newPage)
+  emit("change", newPage)
 }
 ```
 
@@ -294,7 +291,9 @@ v1.5.0 加入了全局文案系统。Pagination 的所有 aria-label 和按钮�
 ```typescript
 const texts = useTexts() // 响应式全局文案
 
-const prevTextValue = computed(() => props.prevText ?? texts.value.paginationPrev)
+const prevTextValue = computed(
+  () => props.prevText ?? texts.value.paginationPrev,
+)
 const pageInfoLabel = computed(() =>
   formatTemplate(texts.value.paginationPageInfo, {
     current: currentPage.value,
@@ -317,7 +316,7 @@ const pageInfoLabel = computed(() =>
 export function useFormField(modelValue, emit) {
   const handleInput = (event: Event) => {
     modelValue.value = (event.target as HTMLInputElement).value
-    emit('input', event)
+    emit("input", event)
   }
   // change/focus/blur 原生事件透传
   return { handleInput, handleChange, handleBlur, handleFocus }
@@ -376,7 +375,8 @@ const getOptionId = (index: number): string => `${selectBaseId}-option-${index}`
 所有 DOM 操作添加浏览器环境守卫：
 
 ```typescript
-const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined'
+const isBrowser =
+  typeof window !== "undefined" && typeof document !== "undefined"
 
 // 在 watch/onMounted/顶层代码中：
 if (!isBrowser) return
@@ -417,28 +417,28 @@ export function createOverlay(component, props, containerClass) {
 
 v1.5.0 的 Select 有 **40+ 测试**，Pagination 有 **14 测试**，覆盖：
 
-| 关注点 | 测试内容 |
-| ------ | -------- |
-| **类型回溯** | 原生模式数字数组 `[10,20,30]` 选中后 modelValue 仍为 number |
+| 关注点        | 测试内容                                                    |
+| ------------- | ----------------------------------------------------------- |
+| **类型回溯**  | 原生模式数字数组 `[10,20,30]` 选中后 modelValue 仍为 number |
 | **ARIA 导航** | `aria-activedescendant` 指向高亮选项、每个 option 有唯一 id |
-| **键盘操作** | ArrowDown/Up 高亮、Enter 选中、Esc 关闭、边界不越界 |
-| **多选** | 标签渲染、切换选中、tag 删除、Enter 连续多选 |
-| **边界值** | 搜索空结果、外部 modelValue 变化、blur 时下拉保持打开 |
-| **无障碍** | axe-core 对 Select（原生+可搜索）无违规 |
+| **键盘操作**  | ArrowDown/Up 高亮、Enter 选中、Esc 关闭、边界不越界         |
+| **多选**      | 标签渲染、切换选中、tag 删除、Enter 连续多选                |
+| **边界值**    | 搜索空结果、外部 modelValue 变化、blur 时下拉保持打开       |
+| **无障碍**    | axe-core 对 Select（原生+可搜索）无违规                     |
 
 以及 **SSR 检查**：`renderToString` 确认组件在服务端不崩溃且浮层默认隐藏。
 
 ## 八、总结
 
-| 关注点 | 简单组件（Button） | 复杂组件（Select / Pagination） |
-| ------ | ------------------ | ------------------------------ |
-| **Props 数量** | 较少（11） | 较多（10-15） |
-| **数据格式** | 固定（字符串） | 灵活（支持多种数组，可配置字段，类型防腐） |
-| **状态管理** | 无内部状态 | 可搜索文本、多选数组、编辑状态、下拉显隐 |
-| **无障碍** | 原生语义 | WAI-ARIA Combobox 模式（listbox/option/activedescendant） |
-| **逻辑复用** | 不需要 | 组合式函数（useFormField/useFloating/useOverlayBehavior） |
-| **SSR 适配** | 自动 | useId hydration 安全 + isBrowser 守卫 |
-| **i18n** | 少数文案 | 全局配置链（prop > setConfig > 内置） |
-| **测试策略** | 快照、事件触发 | 状态组合、边界值、键盘模拟、类型回溯、axe-core |
+| 关注点         | 简单组件（Button） | 复杂组件（Select / Pagination）                           |
+| -------------- | ------------------ | --------------------------------------------------------- |
+| **Props 数量** | 较少（11）         | 较多（10-15）                                             |
+| **数据格式**   | 固定（字符串）     | 灵活（支持多种数组，可配置字段，类型防腐）                |
+| **状态管理**   | 无内部状态         | 可搜索文本、多选数组、编辑状态、下拉显隐                  |
+| **无障碍**     | 原生语义           | WAI-ARIA Combobox 模式（listbox/option/activedescendant） |
+| **逻辑复用**   | 不需要             | 组合式函数（useFormField/useFloating/useOverlayBehavior） |
+| **SSR 适配**   | 自动               | useId hydration 安全 + isBrowser 守卫                     |
+| **i18n**       | 少数文案           | 全局配置链（prop > setConfig > 内置）                     |
+| **测试策略**   | 快照、事件触发     | 状态组合、边界值、键盘模拟、类型回溯、axe-core            |
 
 一个优秀的复杂组件，对内要像吸尘器一样容纳各种奇葩的后端数据格式（通过 Key 映射和类型回溯），对外要像绅士一样克制地与全局环境（i18n、SSR、键盘）发生耦合。**高内聚、低耦合**，在这两类组件身上体现得淋漓尽致。

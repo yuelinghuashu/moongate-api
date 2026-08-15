@@ -3,7 +3,7 @@ title: Flutter 流式 UI：AI 回复的打字机体验是怎么实现的
 description: 为什么「跳过动画」不等于「中止生成」？从 SSE 到屏幕，拆解流式 UI 的节流、取消语义与可测试性设计。
 permalink: 5c50dd33-81e8-4281-a26d-32fe5765fc94
 date: 2026-08-13 22:00:00
-series: deployment
+series: 
 level: P3
 tags:
   - Flutter

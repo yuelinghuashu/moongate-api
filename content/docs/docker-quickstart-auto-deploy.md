@@ -13,25 +13,14 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇，覆盖从静态网站到生产级 Docker 部署及服务集成的全流程：
+本系列共六篇：
 
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy)
-   —— 纯前端资源的自动化发布，Caddy 自动 HTTPS 和 SPA 路由支持。
-
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy)
-   —— 后端服务进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理。
-
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy)
-   —— 从零开始用 Docker + GitHub Actions 实现 CI/CD 流水线。
-
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy)
-   —— 多容器编排、健康检查、数据库迁移、自动 HTTPS，打造可靠的生产环境。
-
-5. [**自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）**](./umami-integration-auto-deploy)
-   —— 在现有 Docker 生产环境中集成 Umami 分析服务，实现自动化数据跟踪与安全加固。
-
-6. [**VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment)
-   —— 将 VitePress 静态文档站作为子域名接入现有 Docker 基础设施，复用 Caddy 反向代理与网络。
+1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
+2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
+3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
+4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
+5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
+6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
 
 ---
 
@@ -54,20 +43,15 @@ tags:
 
 ## 📌 版本声明
 
-本文档所有工具均采用 **2026 年最新稳定版**，具体版本如下：
+Node.js、pnpm、Caddy、GitHub Actions、阿里云 ACR 的版本信息与[静态篇](./static-site-auto-deploy)一致。本文额外涉及：
 
-| 工具           | 版本        | 说明                                                                                 |
-| -------------- | ----------- | ------------------------------------------------------------------------------------ |
-| Node.js        | 24.x        | 最新的主要版本，支持所有现代 JavaScript 特性                                         |
-| pnpm           | 10.x        | 高性能包管理器，与 Node.js 24 完美兼容                                               |
-| Docker Engine  | 29.x        | 容器运行时，支持 BuildKit 和多阶段构建                                               |
-| Docker Compose | v5          | 全新的 Compose 规范，支持 `name` 项目和 `depends_on` 条件                            |
-| Caddy          | 2.8+        | 自动 HTTPS 的反向代理服务器                                                          |
-| PostgreSQL     | 17 (alpine) | 轻量级关系型数据库，alpine 版本镜像小巧                                              |
-| Drizzle ORM    | 0.30+       | TypeScript 原生 ORM，支持迁移和类型安全查询                                          |
-| PM2            | 5+          | 生产级 Node.js 进程管理工具                                                          |
-| GitHub Actions | 最新        | CI/CD 平台，所有 Action 均为当前最新版本（如 `checkout@v4`、`ssh-action@v1.0.0` 等） |
-| 阿里云 ACR     | –           | 容器镜像服务，需使用固定密码进行认证                                                 |
+| 工具           | 版本  | 说明                                                             |
+| -------------- | ----- | ---------------------------------------------------------------- |
+| Docker Engine  | 29.x  | 容器运行时，支持 BuildKit 和多阶段构建                           |
+| Docker Compose | v5    | 全新 Compose 规范，支持 `name` 项目和 `depends_on` 条件          |
+| PostgreSQL     | 17 (alpine) | 轻量级关系型数据库，alpine 版本镜像小巧                    |
+| Drizzle ORM    | 0.30+ | TypeScript 原生 ORM，支持迁移和类型安全查询                      |
+| PM2            | 5+    | 生产级 Node.js 进程管理工具                                      |
 
 > **注意**：请根据你的项目实际需求调整具体版本号。若使用其他技术栈（如 Python、Java 等），请替换对应的运行时版本。
 
@@ -158,16 +142,13 @@ volumes:
 
 ## 🔐 第三步：配置 GitHub Secrets
 
-在 GitHub 仓库 Settings → Secrets and variables → Actions 中添加：
+`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY` 的配置方法与[静态篇 第二部分](./static-site-auto-deploy)一致。本文额外需要：
 
 | Secret 名称         | 说明                                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------ |
 | `ACR_REGISTRY`      | 阿里云镜像仓库地址（例如 `crpi-xxx.cn-beijing.personal.cr.aliyuncs.com`，**不要带 `https://`**） |
 | `ACR_USERNAME`      | 阿里云账号（邮箱）                                                                               |
 | `ACR_PASSWORD`      | 阿里云容器镜像服务固定密码                                                                       |
-| `SERVER_HOST`       | 服务器公网 IP                                                                                    |
-| `SERVER_USER`       | SSH 用户名（如 `root` 或 `ubuntu`）                                                              |
-| `SSH_PRIVATE_KEY`   | 服务器的 SSH 私钥（包含 `BEGIN` 和 `END` 行，保持完整换行）                                      |
 | `POSTGRES_DB`       | 数据库名                                                                                         |
 | `POSTGRES_USER`     | 数据库用户                                                                                       |
 | `POSTGRES_PASSWORD` | 数据库密码                                                                                       |

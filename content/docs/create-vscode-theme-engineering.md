@@ -5,7 +5,7 @@ date: 2026-08-06 02:00:00
 permalink: 7199f437-f5ae-40e9-b08b-fba6968205b5
 series: design-system
 level: P3
-tags: 
+tags:
   - VSCode
   - Theme
   - Engineering
@@ -13,22 +13,13 @@ tags:
 
 ## 📚 系列导航
 
-本系列共五篇，覆盖从零基础创建到工业级设计系统的 VS Code 主题开发全流程（对应 **Moongate v2.6.0**）：
+本系列共五篇：
 
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics)
-   —— 不依赖脚手架，手写最小主题 JSON，掌握 `colors` 与 `tokenColors` 的核心机制与发布流程。
-
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering)
-   —— 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。
-
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system)
-   —— 用 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体。
-
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system)
-   —— 模块化构建体系、WCAG 对比度校验、scope 自动验证、自动化测试与多格式产物生成。
-
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem)
-   —— 为你的主题赋予设计哲学、视觉契约和品牌生态，打造完整的设计系统。
+1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
+2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
+3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
+4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
+5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
 
 ---
 
@@ -103,6 +94,7 @@ bgMuted: "#1e293b" # 次级背景
 text: "#e2e8f0" # 前景色
 textMuted: "#94a3b8" # 辅助文字
 border: "#2d3748" # 边框
+
 
 # ... 其他变量
 ```
@@ -243,14 +235,17 @@ const colors = yaml.load(fs.readFileSync(PATHS.colors, "utf8"))
 // 递归替换 `${var}`，支持两位十六进制透明度后缀（如 ${primary}20）
 function replaceVariables(obj) {
   if (typeof obj === "string") {
-    return obj.replace(/\$\{([a-zA-Z0-9_-]+)\}([0-9a-fA-F]{2})?/g, (match, key, alpha) => {
-      const value = colors[key]
-      if (value === undefined) {
-        console.warn(`⚠️ 警告: 变量 "${key}" 未定义，保留原样`)
-        return match
-      }
-      return value + (alpha || "")
-    })
+    return obj.replace(
+      /\$\{([a-zA-Z0-9_-]+)\}([0-9a-fA-F]{2})?/g,
+      (match, key, alpha) => {
+        const value = colors[key]
+        if (value === undefined) {
+          console.warn(`⚠️ 警告: 变量 "${key}" 未定义，保留原样`)
+          return match
+        }
+        return value + (alpha || "")
+      },
+    )
   }
   if (Array.isArray(obj)) {
     return obj.map(replaceVariables)
@@ -452,15 +447,15 @@ npm run build
 
 ## 🔍 常见问题排查
 
-| 问题                                      | 可能原因                                                            | 解决方法                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| 构建后颜色值仍为 `${var}`                 | 变量未在 `colors.yaml` 中定义                                       | 检查变量名拼写，确保变量已定义                                                                                |
-| 透明度不正确                              | 变量本身已包含 alpha，或透明度后缀格式错误                          | 变量中不应包含透明度，使用 `${var}20` 形式                                                                    |
-| 某语言高亮缺失                            | 语言规则文件不存在，或规则不在 `base.yaml` 通用范围内               | 添加对应语言文件；注意语言文件只放独有规则，通用规则放 `base.yaml`                                            |
-| 规则被意外覆盖                            | 合并顺序不符合预期                                                  | 文件名排序控制顺序：`base.yaml` 排最前，语言文件按字母序在后，后合并的规则覆盖前面的相同 scope 规则            |
-| `vsce package` 报错「missing dependencies」 | `js-yaml` 被放在了 `dependencies` 中                                | 将其移到 `devDependencies`                                                                                    |
-| 透明度后缀格式不支持三位（如 `200`）      | 脚本仅支持两位十六进制透明度后缀（如 `20`）                         | 确保透明度后缀始终为两位十六进制，并在引用时使用 `${var}20` 形式                                              |
-| 变量名包含连字符或非单词字符导致无法替换  | 变量命名不规范，正则表达式 `\$\{(\w+)\}` 只能匹配字母、数字和下划线 | 变量名仅使用字母、数字和下划线（如 `primary`、`primaryColor`），避免使用连字符或其他符号                      |
+| 问题                                        | 可能原因                                                            | 解决方法                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 构建后颜色值仍为 `${var}`                   | 变量未在 `colors.yaml` 中定义                                       | 检查变量名拼写，确保变量已定义                                                                      |
+| 透明度不正确                                | 变量本身已包含 alpha，或透明度后缀格式错误                          | 变量中不应包含透明度，使用 `${var}20` 形式                                                          |
+| 某语言高亮缺失                              | 语言规则文件不存在，或规则不在 `base.yaml` 通用范围内               | 添加对应语言文件；注意语言文件只放独有规则，通用规则放 `base.yaml`                                  |
+| 规则被意外覆盖                              | 合并顺序不符合预期                                                  | 文件名排序控制顺序：`base.yaml` 排最前，语言文件按字母序在后，后合并的规则覆盖前面的相同 scope 规则 |
+| `vsce package` 报错「missing dependencies」 | `js-yaml` 被放在了 `dependencies` 中                                | 将其移到 `devDependencies`                                                                          |
+| 透明度后缀格式不支持三位（如 `200`）        | 脚本仅支持两位十六进制透明度后缀（如 `20`）                         | 确保透明度后缀始终为两位十六进制，并在引用时使用 `${var}20` 形式                                    |
+| 变量名包含连字符或非单词字符导致无法替换    | 变量命名不规范，正则表达式 `\$\{(\w+)\}` 只能匹配字母、数字和下划线 | 变量名仅使用字母、数字和下划线（如 `primary`、`primaryColor`），避免使用连字符或其他符号            |
 
 ---
 

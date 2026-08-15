@@ -11,6 +11,15 @@ tags:
   - ORM
 ---
 
+## 📚 系列导航
+
+本系列共两篇：
+
+1. [**Nuxt 4 集成 Drizzle ORM (PostgreSQL)**](./nuxt-drizzle-postgresql) —— 数据层：Schema 定义、迁移与查询
+2. [**Nuxt 4 集成 GitHub 登录**](./nuxt-oauth-github) —— 认证层：OAuth 原理与开发/生产配置
+
+---
+
 ## 适用版本
 
 | 依赖 | 版本 | 备注 |

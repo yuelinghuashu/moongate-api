@@ -11,6 +11,16 @@ tags:
   - Security
 ---
 
+## 📚 系列导航
+
+本系列共三篇：
+
+1. [**从零到一：多级引用评论区**](./nuxt-multi-level-replies) —— 评论区基础实现（多级引用、时间线、组件）
+2. [**评论区完美支持 Markdown**](./nuxt-comment-markdown-guide) —— Markdown 安全渲染（marked + Shiki + DOMPurify）
+3. [**评论区内容过滤与安全防护**](./nuxt-comment-security) —— 敏感词过滤与归属验证
+
+---
+
 > 在前文[《从零到一：为 Moongate 博客打造一个支持多级引用的评论区》](./nuxt-multi-level-replies.md)中，我们构建了一个功能完备的评论系统。本文将在此基础上，为评论区增加内容过滤、安全校验和防滥用机制，确保评论区的健康与安全。
 
 ## 1. 背景与需求
@@ -144,86 +154,54 @@ export function validateComment(
 
 #### 3.3.1 修改输入预览组件
 
-在 `components/docs/CommentInputPreview.vue` 中增加实时验证和字符计数。
+在 `components/docs/CommentInputPreview.vue` 中增加实时验证和字符计数。组件的基础模板（预览/输入双栏布局）与[《多级引用评论区》§5.3](./nuxt-multi-level-replies)完全一致，此处仅展示**新增的验证逻辑与 UI 差异**：
 
 ```vue
-<template>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 mb-6">
-    <!-- 左侧预览 -->
-    <div class="bg-ui-bg-elevated">
-      <div class="text-xs font-mono text-ui-text-muted mb-2 tracking-wider">
-        // {{ t("comment.input.preview") }}
-      </div>
-      <DocsMarkdownRenderer
-        class="text-ui-text/90 text-base leading-relaxed"
-        :content="localValue"
-      />
-    </div>
+<!-- 在原有模板的输入栏中新增（位于 UTextarea 之后）： -->
 
-    <!-- 右侧输入 -->
-    <div class="bg-ui-bg">
-      <div class="text-xs font-mono text-ui-text-muted mb-2 tracking-wider">
-        // {{ t("comment.input.input") }}
-      </div>
-      <UTextarea
-        :model-value="localValue"
-        autoresize
-        :rows="5"
-        variant="none"
-        :placeholder="t('comment.input.placeholder')"
-        class="w-full bg-transparent border-0 focus:ring-0 p-0 text-ui-text placeholder:text-ui-text-muted/50 font-mono text-sm"
-        @update:model-value="handleInput"
-      />
-      <div v-if="validationError" class="mt-2 text-xs font-mono text-ui-error">
-        // {{ validationError }}
-      </div>
-      <div class="text-xs text-ui-text-muted text-right mt-1">
-        {{ localValue.length }}/{{ maxLength }}
-      </div>
-    </div>
-  </div>
-</template>
+<!-- 新增1：验证错误提示 -->
+<div v-if="validationError" class="mt-2 text-xs font-mono text-ui-error">
+  // {{ validationError }}
+</div>
 
-<script setup>
-import { useDebounceFn } from "@vueuse/core";
+<!-- 新增2：字符计数 -->
+<div class="text-xs text-ui-text-muted text-right mt-1">
+  {{ localValue.length }}/{{ maxLength }}
+</div>
+```
+
+```ts
+// script 中新增的部分：
 import { validateComment } from "~/utils/commentValidator";
 
-const props = defineProps({
-  modelValue: { type: String, default: "" },
-  debounceTime: { type: Number, default: 300 },
-  permalink: { type: String, required: true },
-  storageType: { type: String, default: "none" },
-  maxLength: { type: Number, default: 5000 }
-});
+// props 新增 maxLength（默认 5000）
+maxLength: { type: Number, default: 5000 }
 
-const emit = defineEmits(["update:modelValue"]);
-
-const localValue = ref(props.modelValue);
+// 新增状态
 const validationError = ref('');
 
+// 新增验证函数
 const validate = (value: string) => {
   const result = validateComment(value, props.maxLength);
   validationError.value = result.valid ? '' : result.message;
   return result.valid;
 };
 
+// 修改 handleInput：在原有防抖逻辑基础上增加实时验证
 const handleInput = (value: string) => {
   localValue.value = value;
-  validate(value);          // 实时验证，仅用于显示错误提示
-  debouncedEmit(value);
+  validate(value);          // ★ 新增：实时验证，仅用于显示错误提示
+  debouncedEmit(value);     // 原有防抖逻辑不变
 };
 
-const debouncedEmit = useDebounceFn((value: string) => {
-  emit("update:modelValue", value);
-}, props.debounceTime);
-
+// 新增：监听外部 modelValue 变化时重新验证
 watch(() => props.modelValue, (newVal) => {
   localValue.value = newVal;
-  validate(newVal);
+  validate(newVal);         // ★ 新增
 });
 
+// 新增：挂载时执行初始验证
 onMounted(() => validate(localValue.value));
-</script>
 ```
 
 #### 3.3.2 在 Store 中管理验证状态
@@ -598,14 +576,8 @@ export default defineEventHandler(async (event) => {
 - **快速多次提交** → 触发限流提示（若实现）
 - **回复多级引用** → 递归查询正确找到根评论归属
 
-## 8. 总结与展望
+## 8. 总结
 
 通过添加内容过滤、归属验证和限流机制，评论区的安全性大大提升，能够抵御常见的恶意行为。这些功能与已有的 Markdown 安全渲染、用户认证共同构成了一个健壮的评论系统。
 
-未来还可扩展：
-
-- **管理员审核模式**：敏感词评论自动进入待审列表。
-- **黑名单机制**：封禁恶意用户。
-- **评论举报功能**：让读者参与监督。
-
-现在，评论区已经可以放心地开放给所有读者了。如果在实践中有任何问题，欢迎在评论区交流。
+现在，评论区已经可以放心地开放给所有读者了。
