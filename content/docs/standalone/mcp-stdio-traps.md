@@ -19,7 +19,7 @@ tags:
 
 如果你正在开发 MCP Server（或者任何基于 stdio 协议的长期运行进程），请记住三条铁律：
 
-1. **永远不要在 `run()` 函数中调用 `process.exit()`** —— MCP Server 是长期运行的守护进程，不是 CLI 工具。`process.exit()` 会在你开始监听 stdin 之前就把进程杀掉。
+1. **永远不要在 `run()` 函数中调用 `process.exit()`** —— MCP Server、`--watch` 模式等任何长期运行的命令都不是一次性 CLI 工具。`process.exit()` 会在你开始监听之前就把进程杀掉。如果不得不豁免，请提炼「长期运行」的抽象（如 `isLongRunning`），而不是枚举具体命令。
 2. **永远不要在 stdout 上打印任何调试日志** —— stdout 是 MCP 协议通道，任何非 JSON-RPC 的输出都会污染消息流，导致客户端无法解析任何响应。诊断信息请走 stderr。
 3. **永远在 `close` 事件中等待所有异步操作完成** —— `close` 只代表输入流关闭，不代表你的回调已执行完毕。你需要在退出前等待所有 in-flight 的 Promise 结束。
 
@@ -131,6 +131,8 @@ if (process.argv[2] !== "mcp-server" && process.argv[2] !== "mcp") {
 }
 ```
 
+> ⚠️ **注意**：这个修复方案当时看起来没问题，但后来在同一天的测试中暴露了它的**局限性**——见下方的「Bug #1.5：同源 Bug 复发」。
+
 ### 深层教训
 
 这是 CLI 工具转服务化时的**第一坑**：
@@ -141,6 +143,81 @@ if (process.argv[2] !== "mcp-server" && process.argv[2] !== "mcp") {
 | **长期运行进程**（MCP Server / 守护进程） | 持续监听输入直到 EOF/信号 | 退出必须由**输入源**触发的回调控制  |
 
 `process.exit()` 是无条件的、立即的、不可中断的。它不会等待 pending 的 IO、定时器或 Promise。在 MCP Server 的场景下，这个"特性"直接杀死了我们的 server。
+
+---
+
+## Bug #1.5：同源 Bug 复发——process.exit() 的第二次幽灵
+
+### 现象
+
+修复 Bug #1 后，我继续对 MCP Server 做测试。当天，我顺便想验证 `story build --watch` 的性能表现：
+
+```bash
+story build --watch
+```
+
+输出显示「👀 监听模式已启动，文件变更自动重建...」，但 **进程立刻退出**——`--watch` 模式根本没有开始监听文件变更。
+
+我尝试修改一个故事文件：
+
+```bash
+echo "新内容" > "01-测试故事/text.md"
+```
+
+什么也没有发生。README 文件没有任何更新。
+
+### 根因：枚举命令的白名单缺陷
+
+我回头看 `bin/index.ts` 的修复代码：
+
+```typescript
+if (process.argv[2] !== "mcp-server" && process.argv[2] !== "mcp") {
+  process.exit(exitCode)
+}
+```
+
+这个逻辑的表述是：**「除了 mcp-server 和 mcp 之外，其他命令都执行 `process.exit()`」**。
+
+但 `build --watch` 同样是**长期运行的进程**！它需要持续监听文件变更，直到收到 `SIGINT`。而这里只豁免了 MCP Server 两个命令——`build --watch` 不在白名单里，一样会被 `process.exit()` 立即杀死。
+
+**MCP Server 的第一次 bug 修好了，同样的幽灵在 `build --watch` 上再次出现。**
+
+### 修复：提炼「长期运行」这个抽象
+
+正确的修复不是继续枚举更多命令，而是提炼出「**哪些命令是长期运行的**」这个本质属性：
+
+```typescript
+#!/usr/bin/env node
+import { run } from "../src/cli.ts"
+
+const exitCode = await run(process.argv)
+
+// 长期运行的进程需要保持存活，进程退出由内部 close/SIGINT 事件处理：
+// - MCP server：持续监听 stdin，退出由 server.ts 的 close/SIGINT 控制
+// - build --watch：持续监听文件变更，退出由 build.ts 的 SIGINT 控制
+const isLongRunning =
+  process.argv[2] === "mcp-server" ||
+  process.argv[2] === "mcp" ||
+  (process.argv[2] === "build" && process.argv[3] === "--watch") ||
+  (process.argv[2] === "b" && process.argv[3] === "--watch")
+
+if (!isLongRunning) {
+  process.exit(exitCode)
+}
+```
+
+### 深层教训：修复 Bug 要提炼「抽象」，而非枚举「实例」
+
+这是本次调试中**最大的反思**：
+
+| 修复方式             | 代码形态                                     | 问题                                     |
+| -------------------- | -------------------------------------------- | ---------------------------------------- |
+| **枚举实例**（当时） | `if (cmd !== "mcp-server" && cmd !== "mcp")` | 新加一个长期运行命令就得回来改这行       |
+| **提炼抽象**（最终） | `const isLongRunning = ...`                  | 任何新命令只需在这个集合里表达自己的属性 |
+
+当代码中出现「排除列表」（`if (cmd !== "A" && cmd !== "B")`）时，说明你在**枚举具体命令**，而不是表达「哪些命令是长期运行的」这个**本质属性**。一旦有新的长期运行命令出现（比如 `--watch`），同样的 bug 就会复发。
+
+**检查清单**：如果你的 CLI 未来要加任何「持续监听」功能（watch / serve / daemon），第一时间检查 `bin/index.ts` 的 `isLongRunning` 列表——它必须包含新命令。
 
 ---
 
@@ -394,6 +471,8 @@ test("MCP server 能响应异步 tools/call（scan_stories）", () => {
 
 这个测试会在**真实子进程**中启动 MCP Server，通过**真正的管道**发送 JSON-RPC 请求，并验证 stdout 的内容。如果未来有人往 `loadStories` 加一个 `console.log`，这个测试会立即失败。
 
+> **后续验证（同日）**：Bug #1.5 修复后，我们补上了 `build --watch` 的端到端回归测试（`tests/watch.test.ts`）——用 spawnSync 启动真实子进程，断言「进程应保持存活」+「修改故事后 README 在 5 秒内被重建」。如果当时就有这个测试，Bug #1.5 在修复后当天就能被发现，而不是等到后续性能测试时偶然暴露。这正是"测试分层"的又一次验证：**单元测试无法覆盖进程生命周期，只有端到端测试可以。**
+
 ---
 
 ## 附 1：完整的排查流程（供参考）
@@ -442,21 +521,28 @@ MCP Inspector 会启动一个可视化 Web 界面，让你：
 
 > 社区还有一些第三方辅助工具（如 `mcp-stdio-guard` 用于捕获 stdout 污染），但 Inspector 作为官方工具足以覆盖大部分场景。
 
+## 附 3：AI 交互层的格式漂移
+
+MCP Server 不仅要处理协议陷阱（#1 / #2 / #3），还要处理 **AI 交互层**的陷阱：
+
+`create_story` 创建目录时会把标题中的空格转为连字符（如 `"AI 创作的故事"` → `02-AI-创作的故事`），但 LLM 可能回传原始空格形式（`"02-AI 创作的故事"`）——`safeFolder` 需要同时匹配两种变体才能命中。
+
+**协议层的坑、交互层的坑，我们当天全踩了一遍。**
+
 ---
 
-## 总结：三条铁律
+## 总结：三条铁律 + 一条元教训
 
-如果你只带走三句话：
+如果你只带走三句话，再加上一条「关于修复 Bug 本身的教训」：
 
-1. **`process.exit()` 只属于 CLI 工具**。长期运行的 server 进程必须由输入流/信号回调控制退出。
-2. **stdout 是协议通道，不是日志通道**。MCP Server 中任何非 JSON-RPC 的 stdout 输出都是污染。
+1. **`process.exit()` 只属于一次性 CLI 命令**。长期运行的进程（MCP Server / watch 模式 / 守护进程）必须由输入流/信号回调控制退出。豁免时要提炼「长期运行」这个抽象，不要枚举具体命令。
+2. **stdout 是协议通道，不是日志通道**。任何 stdio 协议服务器中，非协议输出都是污染。诊断信息请走 stderr。
 3. **`close` ≠ 所有操作完成**。用 `pending` Set + `Promise.allSettled` 显式等待异步操作。
+4. **修复 Bug 要提炼「抽象」，而非枚举「实例」**。当代码中出现 `if (cmd !== "A" && cmd !== "B")` 这种排除列表时，说明你在枚举具体命令——新的长期运行命令出现时，同样的 Bug 会在新的地方复发。
 
-这三个 Bug 的共同点是：它们**无法通过单元测试发现**，只能在真实进程环境中暴露。所以——写完 handler 后，别忘了写一个 `spawnSync` 端到端测试。
+这四个问题的共同点是：它们**无法通过单元测试发现**，只能在真实进程环境中暴露。所以——写完 handler 后，别忘了写一个 `spawnSync` 端到端测试。
 
-请注意，这三条铁律是**语言无关**的——无论你是用 Node.js、Python 还是 Go 开发 MCP Server，`process.exit()` / stdout 污染 / 异步未等待 这三类坑都存在。本文以 Node.js 为例，只是因为我们的项目恰好是 Node 栈。
-
-你遇到过类似的 stdio 协议坑吗？欢迎在评论区分享你的故事。
+请注意，这四条铁律是**语言无关**的——无论你是用 Node.js、Python 还是 Go 开发 stdio 服务器，`process.exit()` / stdout 污染 / 异步未等待 / 枚举而非抽象 这四类坑都存在。本文以 Node.js 为例，只是因为我们的项目恰好是 Node 栈。
 
 ---
 
