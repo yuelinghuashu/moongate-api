@@ -6,37 +6,7 @@
 
 - **语言**: Go 1.26
 - **Web 框架**: Gin
-- **ORM**: GORM
-- **数据库**: PostgreSQL
-- **认证**: GitHub OAuth + JWT (HS256)
 - **内容处理**: Markdown + Frontmatter → HTML
-
-## 快速开始
-
-### 1. 环境变量
-
-复制 `.env.example` 为 `.env` 并填写：
-
-```bash
-cp .env.example .env
-```
-
-### 2. 本地运行
-
-```bash
-# 需要本机 PostgreSQL 和 .env 配置
-make run
-```
-
-### 3. 常用命令
-
-```bash
-make dev          # 本地开发运行
-make build        # 编译二进制
-make test         # 运行全部测试（详细输出）
-make check        # 代码检查 + 全部测试（与 CI 一致）
-make docker-build # 构建 Docker 镜像
-```
 
 ## API 端点
 
@@ -48,19 +18,6 @@ make docker-build # 构建 Docker 镜像
 | GET  | `/api/docs/:slug`  | 文档详情                                   |
 | GET  | `/api/about`       | 关于页面列表                               |
 | GET  | `/api/about/:slug` | 关于页面详情                               |
-
-### 认证 API
-
-| 方法 | 路径                    | 说明                   |
-| ---- | ----------------------- | ---------------------- |
-| GET  | `/auth/github`          | 发起 GitHub OAuth 登录 |
-| GET  | `/auth/github/callback` | GitHub OAuth 回调      |
-
-### 用户 API（需要认证）
-
-| 方法 | 路径            | 说明                                 |
-| ---- | --------------- | ------------------------------------ |
-| GET  | `/api/users/me` | 获取当前登录用户信息（Bearer token） |
 
 ### 其他
 
