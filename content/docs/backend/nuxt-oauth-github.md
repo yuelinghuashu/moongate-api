@@ -5,7 +5,7 @@ date: 2026-02-15
 permalink: 87fa418e-f74e-4d83-8d79-01d44761b3eb
 series: backend
 level: P2
-tags: 
+tags:
   - Nuxt
   - OAuth
   - Security
@@ -187,7 +187,7 @@ export default defineNuxtConfig({
       },
     },
   },
-});
+})
 ```
 
 **原理**：`runtimeConfig` 自动将 `NUXT_OAUTH_GITHUB_*` 注入对应字段，无需硬编码。
@@ -209,16 +209,16 @@ export default defineOAuthGitHubEventHandler({
         email: user.email, // 注意：可能为 null
       },
       loggedInAt: Date.now(),
-    });
+    })
 
     // 重定向回首页（或来源页）
-    return sendRedirect(event, "/");
+    return sendRedirect(event, "/")
   },
   onError(event, error) {
-    console.error("GitHub OAuth error:", error);
-    return sendRedirect(event, "/?auth_error=true");
+    console.error("GitHub OAuth error:", error)
+    return sendRedirect(event, "/?auth_error=true")
   },
-});
+})
 ```
 
 **注意**：以上代码使用了 `requireNuxtAuthSession`，但实际 `nuxt-auth-utils` 模块的 API 可能略有不同，请以[官方文档](https://github.com/Atinux/nuxt-auth-utils)为准。如果模块提供了专门的 `defineOAuthGitHubEventHandler`，建议直接使用。
@@ -229,11 +229,11 @@ export default defineOAuthGitHubEventHandler({
 
 ```vue
 <script setup>
-const { loggedIn, user, clear } = useUserSession();
+const { loggedIn, user, clear } = useUserSession()
 const loginWithGitHub = () => {
   // 跳转到 GitHub 授权页
-  navigateTo("/api/auth/github", { external: true });
-};
+  navigateTo("/api/auth/github", { external: true })
+}
 </script>
 <template>
   <div>
@@ -274,29 +274,29 @@ GitHub 在回调时只会保留 code 和 state 两个参数，你附加的任何
 ```ts
 // server/api/store-redirect.post.ts
 export default defineEventHandler(async (event) => {
-  const { redirect } = await readBody(event);
+  const { redirect } = await readBody(event)
 
   // 校验 redirect 是否为内部路径（防止开放重定向）
   if (!redirect || typeof redirect !== "string" || !redirect.startsWith("/")) {
-    return { ok: false };
+    return { ok: false }
   }
 
-  await setUserSession(event, { redirect });
-  return { ok: true };
-});
+  await setUserSession(event, { redirect })
+  return { ok: true }
+})
 ```
 
 如果你担心有人恶意传 /\/\/evil.com 这种试图绕过检测的路径，可以加一个更严格的 URL 解析校验：
 
 ```ts
-import { parseURL } from "ufo";
+import { parseURL } from "ufo"
 
-const { redirect } = await readBody(event);
+const { redirect } = await readBody(event)
 
 // 解析路径，确保是内部路径
-const parsed = parseURL(redirect);
+const parsed = parseURL(redirect)
 if (!redirect || !parsed.pathname || parsed.host) {
-  return { ok: false };
+  return { ok: false }
 }
 ```
 
@@ -306,17 +306,17 @@ if (!redirect || !parsed.pathname || parsed.host) {
 
 ```vue
 <script setup>
-const { loggedIn } = useUserSession();
-const route = useRoute();
+const { loggedIn } = useUserSession()
+const route = useRoute()
 
 const loginWithGitHub = async () => {
   // 将当前完整路径保存到 session
   await $fetch("/api/store-redirect", {
     method: "POST",
     body: { redirect: route.fullPath },
-  });
-  navigateTo("/api/auth/github", { external: true });
-};
+  })
+  navigateTo("/api/auth/github", { external: true })
+}
 </script>
 ```
 
@@ -327,11 +327,11 @@ const loginWithGitHub = async () => {
 export default defineOAuthGitHubEventHandler({
   async onSuccess(event, { user }) {
     // 获取之前存储的来源页
-    const session = await getUserSession(event);
-    let redirect = (session.redirect as string) || "/";
+    const session = await getUserSession(event)
+    let redirect = (session.redirect as string) || "/"
 
     // 清理 session 中的 redirect（避免下次重复使用）
-    await setUserSession(event, { ...session, redirect: undefined });
+    await setUserSession(event, { ...session, redirect: undefined })
 
     // 存入用户信息
     await setUserSession(event, {
@@ -343,17 +343,17 @@ export default defineOAuthGitHubEventHandler({
         email: user.email,
       },
       loggedInAt: Date.now(),
-    });
+    })
 
     // 重定向回来源页
-    return sendRedirect(event, redirect);
+    return sendRedirect(event, redirect)
   },
 
   async onError(event, error) {
-    console.error("GitHub OAuth error:", error);
-    return sendRedirect(event, "/login?error=true");
+    console.error("GitHub OAuth error:", error)
+    return sendRedirect(event, "/login?error=true")
   },
-});
+})
 ```
 
 **安全说明**：在 store-redirect.post.ts 中增加了路径校验，防止开放重定向漏洞。
@@ -438,7 +438,7 @@ module.exports = {
       },
     },
   ],
-};
+}
 ```
 
 ### 6.4 CI/CD 自动化部署（GitHub Actions 示例）

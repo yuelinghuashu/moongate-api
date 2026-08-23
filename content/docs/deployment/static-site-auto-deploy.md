@@ -5,7 +5,7 @@ date: 2026-01-22
 permalink: 8ba35286-9f24-4067-81c0-32e3671d5284
 series: deployment
 level: P4
-tags: 
+tags:
   - Caddy
   - CI/CD
 ---

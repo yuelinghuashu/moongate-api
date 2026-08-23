@@ -53,9 +53,9 @@ tags:
 
 Node.js、pnpm、Docker、Caddy、GitHub Actions 的版本信息与[入门篇](./docker-quickstart-auto-deploy)一致。本文额外涉及：
 
-| 工具      | 版本  | 说明         |
-| --------- | ----- | ------------ |
-| VitePress | 1.6.x | 文档生成器   |
+| 工具      | 版本  | 说明       |
+| --------- | ----- | ---------- |
+| VitePress | 1.6.x | 文档生成器 |
 
 ## 🏗️ 系统架构（接入现有基础设施）
 

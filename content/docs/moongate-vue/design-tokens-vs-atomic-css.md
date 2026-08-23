@@ -16,14 +16,12 @@ tags:
 
 ## 📚 系列导航
 
-本系列共六篇：
+本系列共四篇：
 
 1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
 2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
 3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
 4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
 
 ## 一、起点：我有一套完整的设计令牌
 
@@ -56,10 +54,13 @@ import { defineConfig } from "unocss"
 export default defineConfig({
   theme: {
     colors: {
+      // ❌ 每个 --ui-* 变量都要手动映射一次，68 个变量 = 68 行映射
+      // ❌ 变量改一处，这里也要跟着改，单一真实源变成两个
       primary: "var(--ui-primary)",
       success: "var(--ui-success)",
       warning: "var(--ui-warning)",
       error: "var(--ui-error)",
+      // ❌ 命名开始失控：bg-muted / border-subtle 拼出来的类名像口吃
       "bg-muted": "var(--ui-bg-muted)",
       "border-subtle": "var(--ui-border-subtle)",
       // 需要映射 68 个变量，此处省略...
@@ -85,6 +86,7 @@ export default defineConfig({
 
 ```vue
 <!-- 改造后的 Button.vue（失败尝试） -->
+<!-- ❌ 语义丢失：一眼看不出这是按钮的主要样式，只能看到一串布局碎片 -->
 <button :class="cn('bg-primary text-white', 'bg-bg-muted', 'border-border-subtle')">
 ```
 
@@ -108,7 +110,10 @@ export default defineConfig({
 
 ## 五、量化对比：纯设计令牌方案 vs. UnoCSS 映射方案
 
-为了客观判断"不划算"到底多不划算，我整理了下表（基于我的项目实测，令牌数按实际 68 统计）：
+为了客观判断"不划算"到底多不划算，我整理了对比表（基于我的项目实测，令牌数按实际 68 统计）：
+
+<details>
+<summary>📊 完整量化对比（点击展开）</summary>
 
 | 指标                   | 纯设计令牌方案（最终采用）               | UnoCSS 映射方案（放弃）                      |
 | ---------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -120,6 +125,8 @@ export default defineConfig({
 | 首屏 CSS 体积（gzip）  | ~4 KB（组件库实际消费）                  | ~2 KB（按需生成更小）                        |
 | 调试体验               | 直接看到 `background: var(--ui-primary)` | 需要查找 `bg-primary` 映射到哪个变量         |
 | 学习成本（新人）       | 低（只需理解 CSS 变量）                  | 中（需理解映射逻辑 + UnoCSS 规则）           |
+
+</details>
 
 **结论**：牺牲 ~2 KB 体积，换取维护成本的巨大降低。对于个人项目，**维护成本、语义清晰度、调试体验**比极致的体积优化更重要。
 
@@ -208,3 +215,13 @@ theme: {
 UnoCSS 和 Tailwind 是好工具，但它们不是设计系统的替代品。设计令牌才是地基，原子化只是上面的一层涂料。当你已经有一块坚实的地基时，是否涂上这层涂料，取决于你愿不愿意接受那点语法糖带来的维护成本。
 
 至少对我来说，**不划算**。
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文来自 Moongate Vue 组件库设计实战系列（共 4 篇），所有内容均基于真实项目实践：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

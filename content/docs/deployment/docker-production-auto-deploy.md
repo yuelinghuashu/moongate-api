@@ -312,7 +312,7 @@ docker compose up -d --force-recreate caddy
 docker image prune -f --filter "until=24h"
 ```
 
-> **完整可复制版本**：将上述差异化命令合并进入门篇的 workflow，替换对应的 `Deploy to server` 步骤脚本，并在 `envs` 列表中追加所有 NUXT_* 变量即可。
+> **完整可复制版本**：将上述差异化命令合并进入门篇的 workflow，替换对应的 `Deploy to server` 步骤脚本，并在 `envs` 列表中追加所有 NUXT\_\* 变量即可。
 
 **进阶要点**：
 

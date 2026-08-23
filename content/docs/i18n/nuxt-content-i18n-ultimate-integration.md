@@ -5,7 +5,7 @@ date: 2025-12-29
 permalink: e7c84714-d1ba-4c6f-a56a-57c00edc3661
 series: i18n
 level: P1
-tags: 
+tags:
   - Nuxt
   - i18n
 ---
@@ -141,11 +141,11 @@ content/
 
 ## 🔄 路由映射关系
 
-| 访问 URL | i18n 处理 | Content 查询 | 实际文件 |
-| --- | --- | --- | --- |
+| 访问 URL                 | i18n 处理  | Content 查询       | 实际文件                     |
+| ------------------------ | ---------- | ------------------ | ---------------------------- |
 | `/zh_cn/docs/nuxt-guide` | 识别为中文 | `/docs/nuxt-guide` | `content/docs/nuxt-guide.md` |
-| `/en/docs/nuxt-guide` | 识别为英文 | `/docs/nuxt-guide` | `content/docs/nuxt-guide.md` |
-| `/ja/docs/nuxt-guide` | 识别为日文 | `/docs/nuxt-guide` | `content/docs/nuxt-guide.md` |
+| `/en/docs/nuxt-guide`    | 识别为英文 | `/docs/nuxt-guide` | `content/docs/nuxt-guide.md` |
+| `/ja/docs/nuxt-guide`    | 识别为日文 | `/docs/nuxt-guide` | `content/docs/nuxt-guide.md` |
 
 ## 总结
 

@@ -3,7 +3,7 @@ title: 从代码到 npm：Vue 3 组件库发布实战与避坑指南
 description: 记录 moongate-vue 组件库从构建到 npm v1.5.0 发布的完整流程，涵盖 nrm 源管理、2FA 配置、WebAuthn 网络代理、本地链接测试、构建验证、体积预算、自动化脚本及工业级发布检查清单。
 date: 2026-05-20
 permalink: 6b5acf3d-2c8c-421b-ab33-404ad767f18b
-series: moongate-vue
+series:
 level: P4
 tags:
   - CI/CD
@@ -11,24 +11,13 @@ tags:
   - Engineering
 ---
 
-> 记录 `moongate-vue` 组件库从构建到发布的完整流程，以及 2FA 验证、网络代理解密、npm 源自动化管理等实战经验。
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
-2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
-3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
-4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
+> 组件库写完了，发布到 npm 才是真正的考验：2FA、网络代理、源切换、构建产物校验……这篇把踩过的坑和最终标准化的发布流程一次讲清。
 
 ## 一、引言
 
 组件库开发完成后，最后一步也是至关重要的一步：**发布到 npm**。这个过程看似简单，实则暗藏不少现代工程包袱：包名冲突、2FA 强校验、安全密钥（WebAuthn）在特定网络下的卡死、源镜像频繁切换……以及——**构建产物的正确性**。
 
-本文作为系列收官之作，记录了我从 **v0.0.1** 一路到 **v1.5.0** 的发布实战。
+本文记录了我从 **v0.0.1** 一路到 **v1.5.0** 的发布实战。
 
 ## 二、发布前的准备
 
@@ -112,6 +101,9 @@ for (const [componentName, kebabName] of Object.entries(componentEntries)) {
 
 ### 2.3 使用 nrm 管理 npm 源
 
+<details>
+<summary>🛠️ nrm 源切换细节（点击展开）</summary>
+
 发布到 npm 必须使用官方源。如果你之前为了加速下载切换到了国内镜像，推荐使用 `nrm`。
 
 ```bash
@@ -122,6 +114,8 @@ nrm current
 ```
 
 > **提示**：国内淘宝 npm 镜像已迁移至 `https://registry.npmmirror.com`。
+
+</details>
 
 ### 2.4 本地集成测试
 
@@ -152,7 +146,8 @@ pnpm link /home/dark/projects/moongate-vue
 
 npm 强制要求发布时开启双重认证。npm 已全面拥抱 **安全密钥 (WebAuthn)** 模式。
 
-### 3.1 浏览器选择与网络环境的"隐藏陷阱"
+<details>
+<summary>🛠️ WebAuthn 网络排障细节（点击展开）</summary>
 
 > **⚠️ 工业级避坑警告**：npm 的 WebAuthn 验证会尝试与 Google 验证服务联动。在国内网络环境下，使用 Chrome/Edge 弹出密钥窗口时**极易由于网络超时而无响应或报错**。
 
@@ -161,6 +156,8 @@ npm 强制要求发布时开启双重认证。npm 已全面拥抱 **安全密钥
 | **Chrome**  | ✅ 必须开启      | 极高   | **首选**   |
 | **Edge**    | ❌ 不需要        | 高     | 次选       |
 | **Firefox** | ❌ 不需要        | 极低   | **不建议** |
+
+</details>
 
 ### 3.2 CI/CD 备选：Granular Access Token
 
@@ -231,8 +228,18 @@ npm 强制要求发布时开启双重认证。npm 已全面拥抱 **安全密钥
 
 ## 七、结语
 
-从第一篇的**设计令牌**，到薄封装**架构**、简单/复杂组件的 **API 设计**，再到今天的 **npm 工业级分发**——五篇文章，见证了一个组件库从零到 v1.5.0 的完整工程闭环。
+发布环节经常被当作"最后一步的杂事"，但它其实和组件设计同等重要——**构建产物的正确性、体积的克制、API 的稳定**，都靠这一环节守住。
 
-v1.5.0 的发布不再是简单的 `npm publish`，而是一条由 **verify-build.js + tree-shake-check.js + 450 测试** 共同守护的自动化流水线。**构建产物的正确性、体积的克制、API 的稳定**，是组件库生命线。
+v1.5.0 的发布不再是简单的 `npm publish`，而是一条由 **verify-build.js + tree-shake-check.js + 450 测试** 共同守护的自动化流水线。
 
 愿你的组件库也能跨越泥潭，抵达更远的远方。🚀
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文基于 [Moongate Vue](https://github.com/yuelinghuashu/moongate-vue) 的真实发布实践，相关资源：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

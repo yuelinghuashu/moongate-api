@@ -54,7 +54,7 @@ DTCG（Design Tokens Community Group）是 W3C 下属的行业标准组织，旨
 
 Moongate 采用 DTCG 推荐的三层架构：
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │  原始值层（Primitives）                           │
 │  src/core/primitives/colors.yaml                 │

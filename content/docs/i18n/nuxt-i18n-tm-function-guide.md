@@ -5,7 +5,7 @@ date: 2026-01-21
 permalink: 87d4fd2c-9ef2-48c9-b0ac-a686f3c527f9
 series: i18n
 level: P1
-tags: 
+tags:
   - Nuxt
   - i18n
   - Engineering
@@ -60,8 +60,8 @@ tags:
 </template>
 
 <script setup>
-const isDev = import.meta.env.DEV;
-const { tm } = useI18n();
+const isDev = import.meta.env.DEV
+const { tm } = useI18n()
 </script>
 ```
 
@@ -76,45 +76,45 @@ const { tm } = useI18n();
 
 ```ts
 // composables/useI18nSafe.ts
-import { useI18n } from "vue-i18n";
+import { useI18n } from "vue-i18n"
 
 /**
  * 递归提取开发环境下的实际值（移除 loc.source 包装）
  */
 function extractValue(value: any): any {
-  if (!value || typeof value !== "object") return value;
+  if (!value || typeof value !== "object") return value
 
   // 处理被包装的字符串（开发环境特有）
   if (value.loc?.source !== undefined) {
-    return value.loc.source;
+    return value.loc.source
   }
 
   // 处理数组
   if (Array.isArray(value)) {
-    return value.map(extractValue);
+    return value.map(extractValue)
   }
 
   // 处理对象
-  const result: Record<string, any> = {};
+  const result: Record<string, any> = {}
   for (const key in value) {
-    result[key] = extractValue(value[key]);
+    result[key] = extractValue(value[key])
   }
-  return result;
+  return result
 }
 
 export function useI18nSafe() {
-  const { tm: originalTm, ...rest } = useI18n();
+  const { tm: originalTm, ...rest } = useI18n()
 
   const tm = (key: string) => {
-    const value = originalTm(key);
+    const value = originalTm(key)
     // 仅开发环境需要提取，生产环境直接返回
     if (import.meta.env.DEV) {
-      return extractValue(value);
+      return extractValue(value)
     }
-    return value;
-  };
+    return value
+  }
 
-  return { tm, ...rest };
+  return { tm, ...rest }
 }
 ```
 
@@ -122,7 +122,7 @@ export function useI18nSafe() {
 
 ```vue
 <script setup>
-const { tm } = useI18nSafe();
+const { tm } = useI18nSafe()
 </script>
 
 <template>

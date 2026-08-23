@@ -5,7 +5,7 @@ date: 2026-02-16
 permalink: 9f906ca5-0c33-4467-ac12-092e5e204a99
 series: backend
 level: P2
-tags: 
+tags:
   - Nuxt
   - PostgreSQL
   - ORM
@@ -22,10 +22,10 @@ tags:
 
 ## 适用版本
 
-| 依赖 | 版本 | 备注 |
-| --- | --- | --- |
+| 依赖        | 版本               | 备注                                     |
+| ----------- | ------------------ | ---------------------------------------- |
 | Drizzle ORM | **v1.0.0-alpha.x** | 本文基于 alpha.10，后续版本 API 可能微调 |
-| pg | **v8** | PostgreSQL 驱动 |
+| pg          | **v8**             | PostgreSQL 驱动                          |
 
 > ⚠️ **注意**：Drizzle ORM 目前仍处于 alpha 阶段，如果你使用更新版本，建议参考[官方文档](https://orm.drizzle.org.cn/)。
 
@@ -96,7 +96,7 @@ export default defineNuxtConfig({
     databaseUrl: process.env.NUXT_DATABASE_URL, // 无默认值，强制从环境变量读取
   },
   // ... 其他配置
-});
+})
 ```
 
 > **重要**：`databaseUrl` 必须从环境变量读取，不留默认值，避免生产环境误连本地数据库。
@@ -131,7 +131,7 @@ import {
   varchar,
   boolean,
   timestamp,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -139,10 +139,10 @@ export const users = pgTable("users", {
   username: varchar("username", { length: 100 }).notNull(),
   isAdmin: boolean("is_admin").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+})
 
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect
+export type NewUser = typeof users.$inferInsert
 ```
 
 **`server/db/schema/comments.ts`**
@@ -155,8 +155,8 @@ import {
   text,
   varchar,
   timestamp,
-} from "drizzle-orm/pg-core";
-import { users } from "./users";
+} from "drizzle-orm/pg-core"
+import { users } from "./users"
 
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
@@ -169,10 +169,10 @@ export const comments = pgTable("comments", {
     onDelete: "cascade",
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+})
 
-export type Comment = typeof comments.$inferSelect;
-export type NewComment = typeof comments.$inferInsert;
+export type Comment = typeof comments.$inferSelect
+export type NewComment = typeof comments.$inferInsert
 ```
 
 ### 3.2 定义关系（relations）
@@ -180,9 +180,9 @@ export type NewComment = typeof comments.$inferInsert;
 **`server/db/schema/relations.ts`**
 
 ```ts
-import { relations } from "drizzle-orm";
-import { users } from "./users";
-import { comments } from "./comments";
+import { relations } from "drizzle-orm"
+import { users } from "./users"
+import { comments } from "./comments"
 
 // 评论 -> 用户（多对一）
 export const commentsRelations = relations(comments, ({ one }) => ({
@@ -190,12 +190,12 @@ export const commentsRelations = relations(comments, ({ one }) => ({
     fields: [comments.userId],
     references: [users.id],
   }),
-}));
+}))
 
 // 用户 -> 评论（一对多）
 export const usersRelations = relations(users, ({ many }) => ({
   comments: many(comments),
-}));
+}))
 ```
 
 ### 3.3 统一导出
@@ -203,9 +203,9 @@ export const usersRelations = relations(users, ({ many }) => ({
 **`server/db/schema/index.ts`**
 
 ```ts
-export * from "./users";
-export * from "./comments";
-export * from "./relations";
+export * from "./users"
+export * from "./comments"
+export * from "./relations"
 ```
 
 ---
@@ -217,18 +217,18 @@ Nuxt 中，数据库连接应放在 `server/db/` 下以便导入。
 **`server/db.ts`**
 
 ```ts
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "../db/schema"; // 导入完整的 schema
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
+import * as schema from "../db/schema" // 导入完整的 schema
 
-const config = useRuntimeConfig();
+const config = useRuntimeConfig()
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
-});
+})
 
 // 导出函数，每次调用获取新连接（防止连接泄漏）
-export const useDB = () => drizzle(pool, { schema });
+export const useDB = () => drizzle(pool, { schema })
 ```
 
 > **注意**：必须传入完整的 `schema` 对象（包含表和关系），否则无法使用 `with` 等关系查询。
@@ -242,18 +242,18 @@ export const useDB = () => drizzle(pool, { schema });
 **`server/api/test/db.get.ts`**
 
 ```ts
-import { sql } from "drizzle-orm";
+import { sql } from "drizzle-orm"
 
 export default defineEventHandler(async (event) => {
   try {
-    const db = useDB();
-    const result = await db.execute(sql`SELECT 1+1 as result`);
-    return { success: true, data: result.rows[0] };
+    const db = useDB()
+    const result = await db.execute(sql`SELECT 1+1 as result`)
+    return { success: true, data: result.rows[0] }
   } catch (error) {
-    console.error("DB connection failed:", error);
-    return { success: false, error: String(error) };
+    console.error("DB connection failed:", error)
+    return { success: false, error: String(error) }
   }
-});
+})
 ```
 
 访问 `http://localhost:3000/api/test/db`，若返回 `{ result: 2 }` 则连接成功。
@@ -267,8 +267,8 @@ export default defineEventHandler(async (event) => {
 在项目根目录创建：
 
 ```ts
-import "dotenv/config";
-import { defineConfig } from "drizzle-kit";
+import "dotenv/config"
+import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
   out: "./server/db/migrations",
@@ -277,7 +277,7 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.NUXT_DATABASE_URL!,
   },
-});
+})
 ```
 
 ### 6.2 生成迁移文件
@@ -311,14 +311,14 @@ npx drizzle-kit push
 **`server/api/comments.get.ts`**
 
 ```ts
-import { comments } from "~/server/db/schema"; // 需要显式导入表定义
-import { eq, desc } from "drizzle-orm";
+import { comments } from "~/server/db/schema" // 需要显式导入表定义
+import { eq, desc } from "drizzle-orm"
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event);
-  const permalink = query.permalink as string;
+  const query = getQuery(event)
+  const permalink = query.permalink as string
 
-  const db = useDB();
+  const db = useDB()
   const result = await db.query.comments.findMany({
     where: eq(comments.permalink, permalink),
     orderBy: [desc(comments.createdAt)],
@@ -327,10 +327,10 @@ export default defineEventHandler(async (event) => {
         columns: { username: true },
       },
     },
-  });
+  })
 
-  return { success: true, data: result };
-});
+  return { success: true, data: result }
+})
 ```
 
 ### 插入示例
@@ -338,22 +338,22 @@ export default defineEventHandler(async (event) => {
 **`server/api/comments.post.ts`**
 
 ```ts
-import { comments, type NewComment } from "~/server/db/schema";
-import { useDB } from "~~/server/db";
+import { comments, type NewComment } from "~/server/db/schema"
+import { useDB } from "~~/server/db"
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
-  const db = useDB();
+  const body = await readBody(event)
+  const db = useDB()
 
   const newComment: NewComment = {
     userId: body.userId,
     content: body.content,
     permalink: body.permalink,
-  };
+  }
 
-  const [inserted] = await db.insert(comments).values(newComment).returning();
-  return { success: true, data: inserted };
-});
+  const [inserted] = await db.insert(comments).values(newComment).returning()
+  return { success: true, data: inserted }
+})
 ```
 
 ---

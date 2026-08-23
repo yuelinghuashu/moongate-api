@@ -3,7 +3,7 @@ title: Vue 3 Teleport 组件单元测试指南：5 个 jsdom 陷阱与顺手抓�
 description: 为我们的组件库 Moongate Vue 编写 204 个单元测试时，Teleport 组件在 jsdom 环境中踩了 5 个坑，还顺手揪出了 2 个隐藏 bug。本文复盘完整过程，附可复现的最小示例。
 date: 2026-08-05
 permalink: 59513f20-2b16-4652-89b3-1d9ba7cfac05
-series: moongate-vue
+series:
 level: P4
 tags:
   - Vue
@@ -11,20 +11,7 @@ tags:
   - TypeScript
 ---
 
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
-2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
-3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
-4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
-
----
-
-> 本文记录了为组件库 [Moongate Vue](https://github.com/yuelinghuashu/moongate-vue) 编写单元测试时，在 jsdom 环境中测试 Teleport 组件的完整踩坑与收获。
+> 给 Teleport 组件写测试，5 个 jsdom 陷阱 + 顺手抓到的 2 个隐藏 Bug——每个坑都附可复现的最小示例。
 
 ## 背景
 
@@ -337,3 +324,13 @@ describe("MyTeleport", () => {
 这次为组件库补测试的经历，最大收获不是"写出了 204 个通过的断言"，而是验证了一个观点：**测试环境（jsdom）不是浏览器，但它会以更严格的方式逼你直面组件实现和生命周期管理的每一处模糊地带。**
 
 Teleport 在 jsdom 中的这些坑，本质都是同一个问题：**手动挂载（Teleport / createApp / 动态组件）产生的 DOM，其生命周期超出了组件 vnode 树的管理范围。这种"失控"在 jsdom 中会被放大——就像 Bug 2 中的孤儿引用，你以为清理干净了，实则残留的缓存和游离的 DOM 节点还在暗中作祟**。理解了这一点，就掌握了应对所有类似场景（Portal、Dialog、Notification、ContextMenu）的思路。
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文基于 [Moongate Vue](https://github.com/yuelinghuashu/moongate-vue) 的真实测试实践，相关资源：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

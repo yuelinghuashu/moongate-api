@@ -12,20 +12,20 @@ tags:
   - Engineering
 ---
 
+> 四层 CSS 架构把"样式"从"组件"中彻底解耦：设计令牌是 API，组件只做组合。这篇讲架构怎么落地，以及 25KB 体积是怎么守住的。
+
 ## 📚 系列导航
 
-本系列共六篇：
+本系列共四篇：
 
 1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
 2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
 3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
 4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
 
 ## 回顾：第一篇文章的结论
 
-在上一篇文章[《design-tokens-vs-atomic-css》](./design-tokens-vs-atomic-css.md)中，我分享了尝试用 UnoCSS 映射已有设计令牌的失败经历。核心结论是：
+在上一篇文章[《design-tokens-vs-atomic-css》](./design-tokens-vs-atomic-css)中，我分享了尝试用 UnoCSS 映射已有设计令牌的失败经历。核心结论是：
 
 - **设计令牌是地基，原子化只是涂料**
 - 强行映射只会增加维护成本，得不偿失
@@ -40,34 +40,27 @@ tags:
 整个样式系统分为多个层级，职责清晰、层层依赖：
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ 设计令牌层（自动生成） │
-│ ┌─────────────────────┐ ┌──────────────────────────────┐ │
-│ │ tokens/colors.css   │ │ tokens/layout.css            │ │
-│ │ 颜色令牌（浅/深各   │ │ 间距/字体/动效/z-index 令牌  │ │
-│ │ 68 个变量）         │ │ 【组件库的核心 API 层】      │ │
-│ └──────────┬──────────┘ └─────────────┬────────────────┘ │
-│            └──────────────┬───────────┘                   │
-│                           ↓                              │
-│ 组件样式层（手写）                                         │
-│ ┌────────────────────────────────────────────────────────┐ │
-│ │ components/ 各组件独立样式文件                          │ │
-│ │ （Button.css, Card.css, ... 共 20+ 文件）               │ │
-│ │ 引用 var(--ui-*) 令牌                                   │ │
-│ └──────────────────────────┬─────────────────────────────┘ │
-│                            ↓                              │
-│ 工具层（手写）                                              │
-│ ┌────────────────────────────────────────────────────────┐ │
-│ │ utilities/ 极简语义工具类（颜色/文本/契约变量）         │ │
-│ └──────────────────────────┬─────────────────────────────┘ │
-│                            ↓                              │
-│ 入口层（手写）                                              │
-│ ┌────────────────────────────────────────────────────────┐ │
-│ │ index.css 导入令牌 + 组件样式 + 工具类                  │ │
-│ └────────────────────────────────────────────────────────┘ │
-│                                                            │
-│ reset.css（可选，独立导出，不属于层级链）                    │
-└──────────────────────────────────────────────────────────────┘
+设计令牌层（自动生成）          ← 组件库的核心 API 层
+├─ tokens/colors.css            颜色令牌（浅/深各 68 个变量）
+├─ tokens/layout.css            间距 / 字体 / 动效 / z-index 令牌
+│
+↓ 组件通过 var(--ui-*) 引用
+│
+组件样式层（手写）
+├─ components/                  各组件独立样式文件
+│  （Button.css, Card.css, ... 共 20+ 文件）
+│
+↓ 引用工具类
+│
+工具层（手写）
+├─ utilities/                   极简语义工具类（颜色 / 文本 / 契约变量）
+│
+↓ 统一入口
+│
+入口层（手写）
+├─ index.css                    导入令牌 + 组件样式 + 工具类
+│
+reset.css（可选，独立导出，不属于层级链）
 ```
 
 ### 各文件/文件夹职责
@@ -97,96 +90,30 @@ tags:
 2. 处理交互逻辑（click、disabled、loading）
 3. 透传插槽
 
-以 v1.5.0 的实际代码为例（已精简注释）：
+以 v1.5.0 的实际代码为例，模板核心只有三部分（完整代码见[第 3 篇 §九](./vue-component-api-design)）：
 
 ```vue
-<script setup lang="ts">
-import { useSlots, computed } from "vue"
-import type { Component } from "vue"
-import type { Size, AddonColor } from "../types/components"
-
-defineOptions({ name: "Button", inheritAttrs: false })
-
-type Variant = "filled" | "outline"
-type ButtonType = "button" | "submit" | "reset"
-
-interface Props {
-  label?: string
-  variant?: Variant
-  color?: AddonColor
-  size?: Size
-  type?: ButtonType
-  disabled?: boolean
-  loading?: boolean
-  showLabelWhileLoading?: boolean
-  loadingLabel?: string
-  block?: boolean
-  icon?: string | Component
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  label: "",
-  variant: "filled",
-  color: "primary",
-  size: "sm",
-  type: "button",
-  disabled: false,
-  loading: false,
-  showLabelWhileLoading: false,
-  block: false,
-})
-
-const slots = useSlots()
-const hasIconSlot = computed(() => !!slots.icon)
-const hasLabel = computed(() => props.label !== "" || !!slots.default)
-
-const emit = defineEmits<{ click: [event: MouseEvent] }>()
-
-const handleClick = (event: MouseEvent) => {
-  if (props.disabled || props.loading) return
-  emit("click", event)
-}
-</script>
-
-<template>
-  <button
-    v-bind="$attrs"
-    :type="type"
-    class="mg-button"
-    :class="[
-      `mg-button-${variant}-${color}`,
-      `mg-button-${size}`,
-      { 'mg-button-block': block, 'mg-button-loading': loading },
-    ]"
-    :disabled="disabled || loading"
-    @click="handleClick"
-  >
-    <template v-if="loading">
-      <span class="mg-button-loading-icon" />
-      <span v-if="showLabelWhileLoading" class="mg-button-label">
-        <slot name="loading-label">{{ loadingLabel || label }}</slot>
-      </span>
-    </template>
-
-    <template v-else>
-      <span v-if="hasIconSlot || icon" class="mg-button-icon">
-        <slot name="icon">
-          <component :is="icon" v-if="typeof icon !== 'string'" />
-          <span v-else-if="icon">{{ icon }}</span>
-        </slot>
-      </span>
-      <span v-if="hasLabel" class="mg-button-label">
-        <slot>{{ label }}</slot>
-      </span>
-    </template>
-  </button>
-</template>
+<!-- Button.vue 核心：类名组合 + 状态 + 透传 -->
+<button
+  v-bind="$attrs"
+  :type="type"
+  class="mg-button"
+  :class="[
+    `mg-button-${variant}-${color}`,
+    `mg-button-${size}`,
+    { 'mg-button-block': block, 'mg-button-loading': loading },
+  ]"
+  :disabled="disabled || loading"
+  @click="handleClick"
+>
+  <!-- 图标 / 文字 / 加载状态插槽，见第 3 篇完整代码 -->
+</button>
 ```
 
 **组件特点**：
 
 - 无 `<style>` 块，样式全部来自全局 CSS
-- 只有 ~110 行代码，极简清晰
+- 完整实现约 110 行，极简清晰（见[第 3 篇 §九](./vue-component-api-design)）
 - 类型安全（TypeScript），共享类型从 `src/types/components.ts` 导入
 - 支持 11 种 props + 3 种插槽，覆盖日常场景
 - `v-bind="$attrs"` 透传原生属性
@@ -273,7 +200,7 @@ export default defineConfig({
 ✅ 完整库 Min+Gzip 在 25KB 预算内
 ```
 
-这个"预算"与文化有关：我用「25KB gzip 完整组件库」作为设计挑战来对抗组件库普遍臃肿的现状。与主流相比，Element Plus 完整引入约 100KB+ gzip，Naive UI 约 120KB+。**25KB 是一个数量级的差距。**
+这个"预算"与文化有关：我用「25KB gzip 完整组件库」作为设计挑战来对抗组件库普遍臃肿的现状。
 
 ### 为什么能这么小？
 
@@ -345,6 +272,9 @@ import "moongate-vue/reset.css"
 
 ### 维护性对比
 
+<details>
+<summary>📊 完整对比（点击展开）</summary>
+
 | 维度           | 原子化方案（UnoCSS 映射）                | 本方案（CSS 变量 + 薄封装）               |
 | -------------- | ---------------------------------------- | ----------------------------------------- |
 | **CSS 体积**   | 按需生成，极小                           | ~5.6 KB (gzip)                            |
@@ -356,6 +286,10 @@ import "moongate-vue/reset.css"
 | **多框架复用** | 不可能                                   | 样式文件可跨框架                          |
 | **按需引入**   | -                                        | 27 个独立导出入口（v1.5.0）               |
 | **体积预算**   | -                                        | 25KB gzip 强制验证（CI 中断）             |
+
+</details>
+
+**核心差异一句话**：原子化方案赢在体积，本方案赢在维护成本、可读性和多框架复用——对组件库来说，后者更重要。
 
 ## 总结
 
@@ -377,3 +311,13 @@ import "moongate-vue/reset.css"
 初版的 10KB 承诺在 v1.5.0 经过多轮功能迭代（全局 i18n 文案、可搜索 Select、多选、无障碍增强、450 测试），依然保持 **25KB gzip 预算内**——这不是偶然，而是通过**架构纪律**（零依赖 + 薄封装）和**自动化**（tree-shake-check.js 体积门禁）共同守住的。
 
 **这 25KB 不仅是体积的缩减，更是思维的减负。**
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文来自 Moongate Vue 组件库设计实战系列（共 4 篇），所有内容均基于真实项目实践：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

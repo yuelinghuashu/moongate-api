@@ -11,18 +11,16 @@ tags:
   - Engineering
 ---
 
-> 从数据格式适配到可搜索/多选，深入复杂组件的设计要点与逻辑复用
+> 简单组件是单向的数据消费者，复杂组件是数据适配器与状态协调器。以 Select 和 Pagination 为例，看"工业级细节"落在哪里。
 
 ## 📚 系列导航
 
-本系列共六篇：
+本系列共四篇：
 
 1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
 2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
 3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
 4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
 
 ## 一、引言
 
@@ -179,35 +177,26 @@ const wrapperAttrs = computed(() => {
 
 ### 2.6 多选模式
 
-多选（`multiple + filterable`）将 `modelValue` 变为数组：
+多选（`multiple + filterable`）将 `modelValue` 变为数组，选中逻辑的核心分支：
 
 ```typescript
-const modelValue = defineModel<SelectValue | SelectValue[]>({ default: "" })
+// 多选：切换选中（已选则移除，未选则追加）
+if (props.multiple) {
+  const current = multipleValues.value
+  const isAlreadySelected = current.some((v) => String(v) === String(value))
+  const next = isAlreadySelected
+    ? current.filter((v) => String(v) !== String(value))
+    : [...current, value]
 
-// 多选时：切换选中
-const selectOption = (item: SelectOption) => {
-  if (isOptionDisabled(item)) return
-  const value = getValue(item)
-
-  if (props.multiple) {
-    const current = multipleValues.value
-    const isAlreadySelected = current.some((v) => String(v) === String(value))
-    const next = isAlreadySelected
-      ? current.filter((v) => String(v) !== String(value))
-      : [...current, value]
-
-    modelValue.value = next
-    // 多选保持下拉打开，方便连续多选
-    searchText.value = ""
-    focusedIndex.value = -1
-    nextTick(() => inputRef.value?.focus())
-    return
-  }
-
-  // 单选：选择后关闭
-  modelValue.value = value
-  closeDropdown()
+  modelValue.value = next
+  // 多选保持下拉打开，方便连续多选
+  nextTick(() => inputRef.value?.focus())
+  return
 }
+
+// 单选：选择后关闭
+modelValue.value = value
+closeDropdown()
 ```
 
 多选时：
@@ -398,21 +387,19 @@ export function createOverlay(component, props, containerClass) {
 ## 六、数据与状态流向
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│ 复杂组件数据流 │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
-│ │ 外部数据 │ -> │ 数据适配器 │ -> │ 内部状态 │ │
-│ │ (options) │ │ (getLabel/ │ │ (selected/ │ │
-│ └─────────────┘ │ getValue) │ │ searchText) │ │
-│ └─────────────┘ └──────┬──────┘ │
-│ ↓ │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
-│ │ 全局环境 │ <- │ 状态协调器 │ <- │ 用户交互 │ │
-│ │ (i18n/SSR) │ │ (watch/event)│ │ (click/ │ │
-│ └─────────────┘ └─────────────┘ │ keyboard) │ │
-│ └─────────────┘ │
-└─────────────────────────────────────────────────────────┘
+外部数据 ──► 数据适配器 ──► 内部状态
+(options)    (getLabel/     (selected/
+              getValue)      searchText)
+   ▲                            │
+   │                            ▼
+全局环境 ◄── 状态协调器 ◄── 用户交互
+(i18n/SSR)   (watch/event)   (click/keyboard)
 ```
+
+- **左列**：外部输入（数据 + 用户操作）
+- **中间**：适配与协调（把外部世界翻译成内部状态）
+- **右列**：内部状态（组件自管理）
+- **底部**：全局环境（i18n / SSR）反向约束组件行为
 
 ## 七、测试策略
 
@@ -443,3 +430,13 @@ v1.5.0 的 Select 有 **40+ 测试**，Pagination 有 **14 测试**，覆盖：
 | **测试策略**   | 快照、事件触发     | 状态组合、边界值、键盘模拟、类型回溯、axe-core            |
 
 一个优秀的复杂组件，对内要像吸尘器一样容纳各种奇葩的后端数据格式（通过 Key 映射和类型回溯），对外要像绅士一样克制地与全局环境（i18n、SSR、键盘）发生耦合。**高内聚、低耦合**，在这两类组件身上体现得淋漓尽致。
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文来自 Moongate Vue 组件库设计实战系列（共 4 篇），所有内容均基于真实项目实践：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

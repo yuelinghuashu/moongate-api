@@ -5,7 +5,7 @@ date: 2026-02-21
 permalink: 85853cc1-2371-4b61-a6ef-90fda07a3116
 series: comment
 level: P3
-tags: 
+tags:
   - Nuxt
   - Security
 ---
@@ -160,7 +160,7 @@ Shiki 初始化较慢，且应只创建一次。我们通过 Nuxt 插件在客�
 
 ```ts
 // plugins/shiki.client.ts
-import { createHighlighter } from "shiki";
+import { createHighlighter } from "shiki"
 
 export default defineNuxtPlugin(async () => {
   // 预加载文档用到的主题和语言（可根据实际需求调整）
@@ -183,14 +183,14 @@ export default defineNuxtPlugin(async () => {
       "shell",
       "diff",
     ],
-  });
+  })
 
   return {
     provide: {
       shiki: highlighter, // 通过 $shiki 注入全局
     },
-  };
-});
+  }
+})
 ```
 
 ### 3.3 封装 Markdown 渲染组件
@@ -201,65 +201,65 @@ export default defineNuxtPlugin(async () => {
 - 监听 `colorMode` 动态切换主题。
 - 最后通过 DOMPurify 过滤输出。
 
-```vue
+````vue
 <template>
   <!-- eslint-disable-next-line vue/no-v-html -->
   <div v-html="renderedContent" />
 </template>
 
 <script lang="ts" setup>
-import { marked } from "marked";
-import DOMPurify from "isomorphic-dompurify";
+import { marked } from "marked"
+import DOMPurify from "isomorphic-dompurify"
 
-const props = defineProps({ content: { type: String, required: true } });
+const props = defineProps({ content: { type: String, required: true } })
 
 // 从 Nuxt 插件中获取全局 Shiki 高亮器实例（已在客户端插件中预加载主题和语言）
-const { $shiki } = useNuxtApp();
-const colorMode = useColorMode();
+const { $shiki } = useNuxtApp()
+const colorMode = useColorMode()
 
-const renderedContent = ref("");
+const renderedContent = ref("")
 
 // 根据当前颜色模式动态选择 Shiki 主题，确保与文档代码块配色一致
 const currentTheme = computed(() => {
   return colorMode.value === "dark"
     ? "material-theme-palenight" // 深色主题
-    : "material-theme-lighter"; // 浅色主题
-});
+    : "material-theme-lighter" // 浅色主题
+})
 
 // 核心渲染函数：将用户输入的 Markdown 内容转换为安全的、高亮的 HTML
 const renderContent = async () => {
   // 如果 Shiki 未就绪或内容为空，则直接显示原始内容（降级处理）
   if (!$shiki || !props.content) {
-    renderedContent.value = props.content;
-    return;
+    renderedContent.value = props.content
+    return
   }
 
   try {
     // ---------- 第一步：手动提取并高亮所有代码块 ----------
-    let processed = props.content;
+    let processed = props.content
     // 正则匹配围栏代码块：```lang\n代码\n```（支持语言可选）
-    const codeBlockRegex = /```([a-zA-Z0-9+#-]+)\n([\s\S]*?)```/g;
-    const matches = [...processed.matchAll(codeBlockRegex)];
+    const codeBlockRegex = /```([a-zA-Z0-9+#-]+)\n([\s\S]*?)```/g
+    const matches = [...processed.matchAll(codeBlockRegex)]
 
     for (const match of matches) {
-      const [fullMatch, lang, code] = match;
+      const [fullMatch, lang, code] = match
       try {
         // 调用 Shiki 进行语法高亮，返回 HTML 字符串或包含 HTML 的对象
         const highlighted = $shiki.codeToHtml(code.trim(), {
           lang: lang || "text", // 未指定语言时当作纯文本
           theme: currentTheme.value, // 使用当前主题
-        });
+        })
 
         // 兼容 Shiki 不同版本的返回值（可能直接返回字符串，也可能返回 { html } 对象）
         const htmlStr =
           typeof highlighted === "string"
             ? highlighted
-            : highlighted.html || highlighted.value || String(highlighted);
+            : highlighted.html || highlighted.value || String(highlighted)
 
         // 用高亮后的 HTML 替换原始代码块（使用函数替换避免 $ 符号被转义）
-        processed = processed.replace(fullMatch, () => htmlStr);
+        processed = processed.replace(fullMatch, () => htmlStr)
       } catch (e) {
-        console.error("高亮失败:", e);
+        console.error("高亮失败:", e)
         // 高亮失败时保留原始代码块（不做高亮）
       }
     }
@@ -268,7 +268,7 @@ const renderContent = async () => {
     const html = await marked.parse(processed, {
       breaks: true, // 将换行符转换为 <br>
       gfm: true, // 启用 GitHub 风格 Markdown（表格、删除线等）
-    });
+    })
 
     // ---------- 第三步：使用 DOMPurify 过滤不安全内容，防止 XSS 攻击 ----------
     renderedContent.value = DOMPurify.sanitize(html, {
@@ -335,24 +335,24 @@ const renderContent = async () => {
       // - false → 正则作为“强制列表”，只有列出的协议才允许（安全）
       // 评论区场景必须设置为 false，确保所有 URL 都经过协议白名单检查
       ALLOW_UNKNOWN_PROTOCOLS: false,
-    });
+    })
   } catch (error) {
-    console.error("渲染失败:", error);
+    console.error("渲染失败:", error)
     // 发生任何错误时，回退显示原始内容
-    renderedContent.value = props.content;
+    renderedContent.value = props.content
   }
-};
+}
 
 // 监听内容或主题变化，立即执行一次渲染，之后每次变化重新渲染
 watch([() => props.content, () => colorMode.value], renderContent, {
   immediate: true,
-});
+})
 </script>
 
 <style scoped>
 /* 样式部分见 3.5 节，此处先省略 */
 </style>
-```
+````
 
 ### 3.4 在评论区中使用
 
@@ -484,61 +484,61 @@ Nuxt Content 默认代码块样式带有背景、边框和圆角。我们通过 
 - Shiki 的主题和语言在第一次使用时才加载，后续自动缓存，优化首屏体积。
 - 保留了手动正则提取代码块的逻辑，确保参数类型安全，避免 marked 内部传递不确定对象的问题。
 
-```vue
+````vue
 <template>
   <!-- eslint-disable-next-line vue/no-v-html -->
   <div v-html="renderedContent" />
 </template>
 
 <script lang="ts" setup>
-import { marked } from "marked";
-import { codeToHtml } from "shiki";
-import DOMPurify from "isomorphic-dompurify";
+import { marked } from "marked"
+import { codeToHtml } from "shiki"
+import DOMPurify from "isomorphic-dompurify"
 
-const props = defineProps({ content: { type: String, required: true } });
-const colorMode = useColorMode();
-const renderedContent = ref("");
+const props = defineProps({ content: { type: String, required: true } })
+const colorMode = useColorMode()
+const renderedContent = ref("")
 
 // 根据当前颜色模式动态选择 Shiki 主题，确保与文档代码块配色一致
 const currentTheme = computed(() => {
   return colorMode.value === "dark"
     ? "material-theme-palenight" // 深色主题（请根据你的实际主题替换）
-    : "material-theme-lighter"; // 浅色主题（请根据你的实际主题替换）
-});
+    : "material-theme-lighter" // 浅色主题（请根据你的实际主题替换）
+})
 
 // 核心渲染函数：将用户输入的 Markdown 内容转换为安全的、高亮的 HTML
 const renderContent = async () => {
   if (!props.content) {
-    renderedContent.value = "";
-    return;
+    renderedContent.value = ""
+    return
   }
 
   try {
     // ---------- 第一步：手动提取并高亮所有代码块 ----------
-    let processed = props.content;
+    let processed = props.content
     // 正则匹配围栏代码块：```lang\n代码\n```（支持语言可选）
-    const codeBlockRegex = /```([a-zA-Z0-9+#-]+)\n([\s\S]*?)```/g;
-    const matches = [...processed.matchAll(codeBlockRegex)];
+    const codeBlockRegex = /```([a-zA-Z0-9+#-]+)\n([\s\S]*?)```/g
+    const matches = [...processed.matchAll(codeBlockRegex)]
 
     for (const match of matches) {
-      const [fullMatch, lang, code] = match;
+      const [fullMatch, lang, code] = match
       try {
         // 调用 Shiki 进行语法高亮（懒加载，按需加载主题和语言）
         const highlighted = await codeToHtml(code.trim(), {
           lang: lang || "text", // 未指定语言时当作纯文本
           theme: currentTheme.value, // 使用当前主题
-        });
+        })
 
         // 兼容 Shiki 不同版本的返回值（可能直接返回字符串，也可能返回 { html } 对象）
         const htmlStr =
           typeof highlighted === "string"
             ? highlighted
-            : highlighted.html || highlighted.value || String(highlighted);
+            : highlighted.html || highlighted.value || String(highlighted)
 
         // 用高亮后的 HTML 替换原始代码块（使用函数替换避免 $ 符号被转义）
-        processed = processed.replace(fullMatch, () => htmlStr);
+        processed = processed.replace(fullMatch, () => htmlStr)
       } catch (e) {
-        console.error("代码块高亮失败:", e);
+        console.error("代码块高亮失败:", e)
         // 高亮失败时保留原始代码块（不做高亮）
       }
     }
@@ -547,7 +547,7 @@ const renderContent = async () => {
     const html = await marked.parse(processed, {
       breaks: true, // 将换行符转换为 <br>
       gfm: true, // 启用 GitHub 风格 Markdown（表格、删除线等）
-    });
+    })
 
     // ---------- 第三步：使用 DOMPurify 过滤不安全内容，防止 XSS 攻击 ----------
     renderedContent.value = DOMPurify.sanitize(html, {
@@ -614,20 +614,20 @@ const renderContent = async () => {
       // - false → 正则作为“强制列表”，只有列出的协议才允许（安全）
       // 评论区场景必须设置为 false，确保所有 URL 都经过协议白名单检查
       ALLOW_UNKNOWN_PROTOCOLS: false,
-    });
+    })
   } catch (error) {
-    console.error("Markdown 渲染失败:", error);
+    console.error("Markdown 渲染失败:", error)
     // 发生任何错误时，回退显示原始内容
-    renderedContent.value = props.content;
+    renderedContent.value = props.content
   }
-};
+}
 
 // 监听内容或主题变化，立即执行一次渲染，之后每次变化重新渲染
 watch([() => props.content, () => colorMode.value], renderContent, {
   immediate: true,
-});
+})
 </script>
-```
+````
 
 #### 与方案一（插件预加载）的对比
 

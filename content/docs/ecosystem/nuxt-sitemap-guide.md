@@ -5,7 +5,7 @@ date: 2026-02-04
 permalink: f8358d9f-5548-4ad1-8432-b8a5ef31e70d
 series: ecosystem
 level: P1
-tags: 
+tags:
   - Nuxt
   - SEO
   - Engineering
@@ -19,7 +19,6 @@ tags:
 2. [**Nuxt 4 博客 Sitemap 配置完整指南**](./nuxt-sitemap-guide) —— 静态与动态 Sitemap 的完整配置
 
 ---
-
 
 ## 为什么需要 Sitemap？
 
@@ -71,12 +70,12 @@ Sitemap: https://moongate.top/sitemap.xml
 ```typescript
 // server/routes/sitemap.xml.ts
 export default defineEventHandler(async (event) => {
-  const siteUrl = useRuntimeConfig().public.siteUrl;
+  const siteUrl = useRuntimeConfig().public.siteUrl
 
   try {
     // 1. 获取文档数据
-    const docs = await queryCollection(event, "docs").select("path").all();
-    const about = await queryCollection(event, "about").select("path").all();
+    const docs = await queryCollection(event, "docs").select("path").all()
+    const about = await queryCollection(event, "about").select("path").all()
 
     // 2. 构建URL数组
     const urls = [
@@ -86,34 +85,34 @@ export default defineEventHandler(async (event) => {
       `${siteUrl}/404`,
       ...docs.map((doc) => `${siteUrl}${doc.path}`),
       ...about.map((about) => `${siteUrl}${about.path}`),
-    ];
+    ]
 
     // 3. 生成XML（关键修改：添加换行和缩进）
     const xmlLines = [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ];
+    ]
 
     // 添加每个URL条目
     urls.forEach((url) => {
-      xmlLines.push("  <url>");
-      xmlLines.push(`    <loc>${url}</loc>`);
-      xmlLines.push("  </url>");
-    });
+      xmlLines.push("  <url>")
+      xmlLines.push(`    <loc>${url}</loc>`)
+      xmlLines.push("  </url>")
+    })
 
     // 闭合标签
-    xmlLines.push("</urlset>");
+    xmlLines.push("</urlset>")
 
     // 组合成最终字符串（用换行符连接）
-    const sitemap = xmlLines.join("\n");
+    const sitemap = xmlLines.join("\n")
 
     // 4. 设置响应头
-    setResponseHeader(event, "content-type", "application/xml");
-    setResponseHeader(event, "Cache-Control", "public, max-age=3600");
+    setResponseHeader(event, "content-type", "application/xml")
+    setResponseHeader(event, "Cache-Control", "public, max-age=3600")
 
-    return sitemap;
+    return sitemap
   } catch (error) {
-    console.error("生成Sitemap失败:", error);
+    console.error("生成Sitemap失败:", error)
 
     // 失败时返回最小化版本（同样格式化）
     const fallbackSitemap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -121,12 +120,12 @@ export default defineEventHandler(async (event) => {
   <url>
     <loc>${siteUrl}</loc>
   </url>
-</urlset>`;
+</urlset>`
 
-    setResponseHeader(event, "content-type", "application/xml");
-    return fallbackSitemap;
+    setResponseHeader(event, "content-type", "application/xml")
+    return fallbackSitemap
   }
-});
+})
 ```
 
 ### 2. 配置环境变量
@@ -140,7 +139,7 @@ export default defineNuxtConfig({
       siteUrl: process.env.SITE_URL,
     },
   },
-});
+})
 ```
 
 在 `.env` 文件中：
@@ -154,15 +153,15 @@ NUXT_PUBLIC_SITE_URL=https://moongate.top
 ```typescript
 // server/routes/robots.txt.ts
 export default defineEventHandler((event) => {
-  const siteUrl = useRuntimeConfig().public.siteUrl;
+  const siteUrl = useRuntimeConfig().public.siteUrl
 
   return `User-agent: *
 Allow: /
 Allow: /*.css$
 Allow: /*.js$
 
-Sitemap: ${siteUrl}/sitemap.xml`;
-});
+Sitemap: ${siteUrl}/sitemap.xml`
+})
 ```
 
 ## 生产环境部署要点
@@ -193,7 +192,7 @@ module.exports = {
       },
     },
   ],
-};
+}
 ```
 
 ## 验证与测试
@@ -230,9 +229,9 @@ curl -I http://localhost:3000/sitemap.xml
 
 ```typescript
 // 正确：完整的 URL
-`${siteUrl}/docs/${slug}`
+;`${siteUrl}/docs/${slug}`
 // 错误：相对路径
-`/docs/${slug}`;
+`/docs/${slug}`
 ```
 
 ### Q3: 生产环境 siteUrl 为空

@@ -5,7 +5,7 @@ date: 2026-02-23
 permalink: 48461e0d-b045-429d-92b8-36eac871d481
 series: ecosystem
 level: P1
-tags: 
+tags:
   - Nuxt
   - SEO
 ---
@@ -18,7 +18,6 @@ tags:
 2. [**Nuxt 4 博客 Sitemap 配置完整指南**](./nuxt-sitemap-guide) —— 静态与动态 Sitemap 的完整配置
 
 ---
-
 
 ## 为什么需要 RSS？
 
@@ -44,7 +43,7 @@ export default defineNuxtConfig({
       "/feed.xml": { type: "rss2" },
     },
   },
-});
+})
 ```
 
 **实际可能遇到的坑**：
@@ -93,7 +92,7 @@ export default defineNuxtConfig({
       siteDescription: "博客描述",
     },
   },
-});
+})
 ```
 
 ### 2. 创建 MinimarkTree 转 HTML 工具函数
@@ -109,19 +108,19 @@ Nuxt Content v3 返回的 `doc.body.value` 是结构化的 MinimarkTree，需要
  * @returns HTML 字符串
  */
 export function minimarkToHtml(node: any): string {
-  if (!node) return "";
+  if (!node) return ""
 
   // 处理根节点
   if (node.type === "minimark" && Array.isArray(node.value)) {
-    return node.value.map(minimarkToHtml).join("");
+    return node.value.map(minimarkToHtml).join("")
   }
 
   // 文本节点
-  if (typeof node === "string") return node;
+  if (typeof node === "string") return node
 
   // 数组节点
   if (Array.isArray(node)) {
-    return node.map(minimarkToHtml).join("");
+    return node.map(minimarkToHtml).join("")
   }
 
   if (node && typeof node === "object") {
@@ -135,19 +134,19 @@ export function minimarkToHtml(node: any): string {
               ([key, val]) => `${key}="${String(val).replace(/"/g, "&quot;")}"`,
             )
             .join(" ")
-        : "";
+        : ""
 
-      const children = (node.children || []).map(minimarkToHtml).join("");
+      const children = (node.children || []).map(minimarkToHtml).join("")
 
       // 自闭合标签
       if (["img", "br", "hr", "input"].includes(node.tag)) {
-        return `<${node.tag}${attrs} />`;
+        return `<${node.tag}${attrs} />`
       }
-      return `<${node.tag}${attrs}>${children}</${node.tag}>`;
+      return `<${node.tag}${attrs}>${children}</${node.tag}>`
     }
   }
 
-  return "";
+  return ""
 }
 ```
 
@@ -155,14 +154,12 @@ export function minimarkToHtml(node: any): string {
 
 ```ts
 // server/routes/feed.xml.ts
-import { minimarkToHtml } from "~/utils/minimarkToHtml";
+import { minimarkToHtml } from "~/utils/minimarkToHtml"
 
 export default defineEventHandler(async (event) => {
-  const { siteName, siteDescription, siteUrl } = useRuntimeConfig().public;
+  const { siteName, siteDescription, siteUrl } = useRuntimeConfig().public
 
-  const docs = await queryCollection(event, "docs")
-    .order("date", "DESC")
-    .all();
+  const docs = await queryCollection(event, "docs").order("date", "DESC").all()
 
   let rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
@@ -172,21 +169,21 @@ export default defineEventHandler(async (event) => {
     <description>${siteDescription}</description>
     <language>zh-CN</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-`;
+`
 
   for (const doc of docs) {
-    let fullContent = "";
+    let fullContent = ""
     if (doc.body?.value) {
       try {
-        fullContent = minimarkToHtml(doc.body.value);
+        fullContent = minimarkToHtml(doc.body.value)
       } catch (e) {
-        console.error("转换失败:", e);
-        fullContent = doc.description || "";
+        console.error("转换失败:", e)
+        fullContent = doc.description || ""
       }
     }
 
-    const link = `${siteUrl}${doc.path}`;
-    const date = new Date(doc.date).toUTCString();
+    const link = `${siteUrl}${doc.path}`
+    const date = new Date(doc.date).toUTCString()
 
     rss += `
     <item>
@@ -197,16 +194,16 @@ export default defineEventHandler(async (event) => {
       <description><![CDATA[${doc.description || ""}]]></description>
       <content:encoded><![CDATA[${fullContent}]]></content:encoded>
     </item>
-`;
+`
   }
 
   rss += `
   </channel>
-</rss>`;
+</rss>`
 
-  setResponseHeader(event, "content-type", "application/xml; charset=utf-8");
-  return rss;
-});
+  setResponseHeader(event, "content-type", "application/xml; charset=utf-8")
+  return rss
+})
 ```
 
 ### 4. 创建 Atom 1.0 生成器
@@ -215,18 +212,16 @@ Atom 是另一种 XML 格式的订阅标准，结构更规范：
 
 ```ts
 // server/routes/feed.atom.ts
-import { minimarkToHtml } from "~/utils/minimarkToHtml";
+import { minimarkToHtml } from "~/utils/minimarkToHtml"
 
 export default defineEventHandler(async (event) => {
-  const { siteName, siteDescription, siteUrl } = useRuntimeConfig().public;
+  const { siteName, siteDescription, siteUrl } = useRuntimeConfig().public
 
-  const docs = await queryCollection(event, "docs")
-    .order("date", "DESC")
-    .all();
+  const docs = await queryCollection(event, "docs").order("date", "DESC").all()
 
   const updated = docs[0]?.date
     ? new Date(docs[0].date).toISOString()
-    : new Date().toISOString();
+    : new Date().toISOString()
 
   let atom = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -239,21 +234,21 @@ export default defineEventHandler(async (event) => {
   <author>
     <name>MoonGate</name>
   </author>
-`;
+`
 
   for (const doc of docs) {
-    let content = "";
+    let content = ""
     if (doc.body?.value) {
       try {
-        content = minimarkToHtml(doc.body.value);
+        content = minimarkToHtml(doc.body.value)
       } catch (e) {
-        console.error("转换失败:", e);
-        content = doc.description || "";
+        console.error("转换失败:", e)
+        content = doc.description || ""
       }
     }
 
-    const link = `${siteUrl}${doc.path}`;
-    const published = new Date(doc.date).toISOString();
+    const link = `${siteUrl}${doc.path}`
+    const published = new Date(doc.date).toISOString()
 
     atom += `
   <entry>
@@ -265,18 +260,18 @@ export default defineEventHandler(async (event) => {
     <summary>${doc.description || ""}</summary>
     <content type="html"><![CDATA[${content}]]></content>
   </entry>
-`;
+`
   }
 
-  atom += `\n</feed>`;
+  atom += `\n</feed>`
 
   setResponseHeader(
     event,
     "content-type",
     "application/atom+xml; charset=utf-8",
-  );
-  return atom;
-});
+  )
+  return atom
+})
 ```
 
 ### 5. 创建 JSON Feed 1.1 生成器
@@ -285,14 +280,12 @@ JSON Feed 是现代化的订阅格式，结构清晰：
 
 ```ts
 // server/routes/feed.json.ts
-import { minimarkToHtml } from "~/utils/minimarkToHtml";
+import { minimarkToHtml } from "~/utils/minimarkToHtml"
 
 export default defineEventHandler(async (event) => {
-  const { siteUrl } = useRuntimeConfig().public;
+  const { siteUrl } = useRuntimeConfig().public
 
-  const docs = await queryCollection(event, "docs")
-    .order("date", "DESC")
-    .all();
+  const docs = await queryCollection(event, "docs").order("date", "DESC").all()
 
   const feed = {
     version: "https://jsonfeed.org/version/1.1",
@@ -309,13 +302,13 @@ export default defineEventHandler(async (event) => {
     ],
     items: await Promise.all(
       docs.map(async (doc) => {
-        let contentHtml = "";
+        let contentHtml = ""
         if (doc.body?.value) {
           try {
-            contentHtml = minimarkToHtml(doc.body.value);
+            contentHtml = minimarkToHtml(doc.body.value)
           } catch (e) {
-            console.error("转换失败:", e);
-            contentHtml = doc.description || "";
+            console.error("转换失败:", e)
+            contentHtml = doc.description || ""
           }
         }
 
@@ -328,18 +321,18 @@ export default defineEventHandler(async (event) => {
           date_published: new Date(doc.date).toISOString(),
           language: "zh-CN",
           tags: doc.tags || [],
-        };
+        }
       }),
     ),
-  };
+  }
 
   setResponseHeader(
     event,
     "content-type",
     "application/feed+json; charset=utf-8",
-  );
-  return feed;
-});
+  )
+  return feed
+})
 ```
 
 ### 6. 添加缓存优化（可选）
@@ -356,7 +349,7 @@ export default defineCachedEventHandler(
     name: "feed-cache",
     getKey: () => "static", // 所有用户共享缓存
   },
-);
+)
 ```
 
 ### 7. 在网页中引入 RSS 订阅
@@ -366,7 +359,7 @@ export default defineCachedEventHandler(
 ```vue
 // app.vue
 <script setup>
-const { siteName } = useRuntimeConfig().public;
+const { siteName } = useRuntimeConfig().public
 
 useHead({
   link: [
@@ -389,7 +382,7 @@ useHead({
       href: "/feed.json",
     },
   ],
-});
+})
 </script>
 ```
 
@@ -471,14 +464,14 @@ curl -I http://localhost:3000/feed.xml
 const docs = await queryCollection(event, "docs")
   .order("date", "DESC")
   .limit(20) // 只取最近 20 篇
-  .all();
+  .all()
 ```
 
 ### 2. 自定义命名空间（RSS 2.0）
 
 ```ts
-xmlns: media = "http://search.yahoo.com/mrss/"; // 支持媒体内容
-xmlns: dc = "http://purl.org/dc/elements/1.1/"; // 支持 Dublin Core
+xmlns: media = "http://search.yahoo.com/mrss/" // 支持媒体内容
+xmlns: dc = "http://purl.org/dc/elements/1.1/" // 支持 Dublin Core
 ```
 
 ### 3. 添加更多元数据

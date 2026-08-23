@@ -11,18 +11,16 @@ tags:
   - Engineering
 ---
 
-> 极简不是简陋，克制不是缺失——从 Nuxt UI v4 汲取灵感，如何设计一个好用的组件 API
+> 极简不是简陋，克制不是缺失——以 Button 为例，看一个 11 个 props 的组件如何覆盖日常 90% 的按钮场景。
 
 ## 📚 系列导航
 
-本系列共六篇：
+本系列共四篇：
 
 1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
 2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
 3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
 4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
-5. [**从代码到 npm（发布篇）**](./component-library-publishing) —— 发布实战与避坑指南
-6. [**Vue 3 Teleport 单元测试（测试篇）**](./vue-teleport-unit-testing-jsdom-pitfalls) —— jsdom 陷阱与组件库测试实践
 
 ## 一、背景与参考
 
@@ -90,11 +88,7 @@ interface Props {
   showLabelWhileLoading?: boolean // 加载时是否保留文字
   loadingLabel?: string // 加载时的自定义文字
 }
-```
 
-默认值设计：
-
-```typescript
 const props = withDefaults(defineProps<Props>(), {
   label: "",
   disabled: false,
@@ -109,12 +103,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 ### 3.2 变体系统：variant + color
 
-常见的按钮类型有：主要按钮、次要按钮、边框按钮、幽灵按钮。受 Nuxt UI v4 的 `variant` + `color` 设计启发，我选择将"视觉模式"与"语义颜色"完全解耦。
-
-```typescript
-type Variant = "filled" | "outline"
-type Color = "primary" | "success" | "warning" | "error"
-```
+常见的按钮类型有：主要按钮、次要按钮、边框按钮、幽灵按钮。受 Nuxt UI v4 的 `variant` + `color` 设计启发，我选择将"视觉模式"与"语义颜色"完全解耦——`variant` 只控制 `filled` / `outline` 两种视觉模式，`color` 只控制 `primary` / `success` / `warning` / `error` 四种语义颜色。
 
 为什么只保留 `filled` 和 `outline`，删除了 `ghost`？
 
@@ -136,19 +125,9 @@ type Color = "primary" | "success" | "warning" | "error"
 
 ### 3.3 尺寸设计
 
-```typescript
-type Size = "sm" | "md" | "lg"
-```
+尺寸只保留 `sm` / `md` / `lg` 三档。我删除了 `xs` 和 `xl`：极小尺寸可以用 Badge 或其他非按钮组件替代，而个人博客里几乎碰不到超大尺寸的场景。
 
-尺寸选项与 Nuxt UI v4 提供的五种尺寸（xs, sm, md, lg, xl）相比做了精简。我删除了 `xs` 和 `xl`，因为极小尺寸可以用 Badge 或其他非按钮组件替代，而个人博客里几乎碰不到超大尺寸的场景。
-
-默认尺寸的选择：主流 UI 库（Naive UI、PrimeVue 等）的默认按钮高度约 32-34px，对应我们的 `sm`，因此默认尺寸设为 `sm`。
-
-```typescript
-const props = withDefaults(defineProps<Props>(), {
-  size: "sm", // 默认小号
-})
-```
+默认尺寸设为 `sm`——常见的按钮默认高度约 32-34px，正好对应我们的 `sm`。
 
 ### 3.4 图标设计：prop 与插槽共存
 
@@ -157,13 +136,7 @@ const props = withDefaults(defineProps<Props>(), {
 1. **简单图标（如 `✓`、emoji）用插槽太啰嗦**：`<template #icon>✓</template>` 比 `icon="✓"` 多了 20 个字符
 2. **图标库组件（如 lucide-vue-next 的 IconHome）用插槽不够直观**：需要用 `<component :is="IconHome" />` 包一层
 
-经过多版本迭代，最终同时支持两者，并建立明确的优先级：
-
-```typescript
-interface Props {
-  icon?: string | Component // 图标：字符串或 Vue 组件
-}
-```
+经过多版本迭代，最终同时支持 `icon?: string | Component`（字符串或 Vue 组件）与 `#icon` 插槽，并建立明确的优先级：
 
 ```vue
 <!-- 使用插槽（优先级更高，更灵活） -->
@@ -195,17 +168,11 @@ interface Props {
 
 **设计原则：插槽优先于 prop**。`hasIconSlot` 检测是否传入 `#icon` 插槽，如果有则完全忽略 `icon` prop。这保证了灵活性——当用户需要自定义图标布局时，插槽总是能覆盖 prop 的默认行为。
 
-> 设计考量：Nuxt UI v4 同样支持 `icon` prop 和 `leading-icon`/`trailing-icon` 等多个图标相关属性。我合并为单个 `icon` prop（左侧图标——这是个人博客场景 90% 的需求），保留 `#icon` 插槽用于完全控制。
+> 设计考量：我合并为单个 `icon` prop（左侧图标——这是个人博客场景 90% 的需求），保留 `#icon` 插槽用于完全控制。
 
 ## 四、插槽设计：默认插槽 vs label prop
 
-为了支持快速写法和自定义内容，同时提供 `label` prop 和默认插槽：
-
-```vue
-<span v-if="hasLabel" class="mg-button-label">
-  <slot>{{ label }}</slot>
-</span>
-```
+为了支持快速写法和自定义内容，同时提供 `label` prop 和默认插槽，模板中通过 `<slot>{{ label }}</slot>` 实现——有插槽内容时用插槽，否则回退到 `label`。
 
 `hasLabel` 的判断逻辑有一个容易忽视的细节：
 
@@ -242,9 +209,7 @@ const handleClick = (event: MouseEvent) => {
 }
 ```
 
-```vue
-<button :disabled="disabled || loading" @click="handleClick">
-```
+模板中通过 `:disabled="disabled || loading"` 让两种状态都禁用按钮，但 click 事件仍由 `handleClick` 统一拦截——这保证了程序化调用（`.trigger('click')`）时也遵守禁用语义。
 
 ### 5.2 加载状态增强
 
@@ -265,24 +230,16 @@ const handleClick = (event: MouseEvent) => {
 </template>
 ```
 
-使用场景：
+使用场景（三种递进的控制粒度）：
 
 ```vue
-<!-- 默认：只显示加载动画 -->
+<!-- ① 默认：只显示加载动画 -->
 <Button loading label="保存" />
 
-<!-- 保留文字：提示用户"正在保存" -->
+<!-- ② 保留文字：提示用户"正在保存" -->
 <Button loading :show-label-while-loading="true" label="保存" />
 
-<!-- 自定义加载文字 -->
-<Button
-  loading
-  :show-label-while-loading="true"
-  loading-label="提交中..."
-  label="提交"
-/>
-
-<!-- 用插槽完全自定义 -->
+<!-- ③ 完全自定义：插槽覆盖一切 -->
 <Button loading :show-label-while-loading="true">
   <template #loading-label>⏳ 拼命保存中...</template>
 </Button>
@@ -369,7 +326,7 @@ v1.5.0 的颜色变体不仅定义了基础色，还完善了 hover/active 反�
 
 ### 6.4 图标与文字容器
 
-图标容器使用 `inline-flex` 并设置 `line-height: 0` 来消除行高影响，内部的 SVG 或 iconify 图标强制块级并设置宽高为 `1em`。
+图标容器使用 `inline-flex` 并设置 `line-height: 0` 来消除行高影响，内部的 SVG 或 iconify 图标强制块级并设置宽高为 `1em`。配合 `:empty` 伪类隐藏空标签，修复只有图标时的居中问题：
 
 ```css
 .mg-button-icon {
@@ -385,9 +342,7 @@ v1.5.0 的颜色变体不仅定义了基础色，还完善了 hover/active 反�
   width: 1em;
   height: 1em;
 }
-```
 
-```css
 /* 空标签隐藏 - 修复只有图标时的居中问题 */
 .mg-button-label:empty {
   display: none;
@@ -408,13 +363,7 @@ CSS 层的 `:empty` 伪类 + 组件层的 `hasLabel` 判断共同保证了纯图
 
 ## 八、属性透传
 
-使用 `v-bind="$attrs"` 透传原生属性：
-
-```vue
-<button v-bind="$attrs" class="mg-button" ...>
-```
-
-用户可以直接传入 `id`、`name`、`data-*`、`aria-*` 等属性：
+模板根元素通过 `v-bind="$attrs"` 透传原生属性（见 §九 完整代码），用户可以直接传入 `id`、`name`、`data-*`、`aria-*` 等属性：
 
 ```vue
 <Button id="submit-btn" name="submit" data-testid="submit">
@@ -518,28 +467,13 @@ const handleClick = (event: MouseEvent) => {
 </script>
 ```
 
-## 十、与其他主流 UI 库的 API 对比
+## 十、设计取舍总结
 
-| API 特性            | **Moongate UI (本文)**                   | **✨ Nuxt UI v4**                                          | Naive UI (NButton)                          | PrimeVue (Button)               |
-| :------------------ | :--------------------------------------- | :--------------------------------------------------------- | :------------------------------------------ | :------------------------------ |
-| **核心风格**        | `variant` (filled/outline)               | `variant` + `color` (solid/outline/soft/subtle/ghost/link) | `type` (primary/success/warning/error/info) | `severity` + `variant`          |
-| **尺寸**            | `size` (sm/md/lg)                        | `size` (xs/sm/md/lg/xl)                                    | `size` (small/medium/large)                 | `size` (small/medium/large)     |
-| **禁用**            | `disabled`                               | `disabled`                                                 | `disabled`                                  | `disabled`                      |
-| **加载**            | `loading`                                | `loading` / `loadingAuto`                                  | `loading`                                   | `loading`                       |
-| **块级**            | `block`                                  | `block`                                                    | `block`                                     | `fluid`                         |
-| **图标**            | `icon` prop + `#icon` 插槽               | `icon` / `leading-icon` / `trailing-icon` + 插槽           | 无                                          | `icon` + `iconPos`              |
-| **加载文字**        | `showLabelWhileLoading` + `loadingLabel` | `loading` / `loadingAuto`                                  | 无                                          | `loading`                       |
-| **原生类型**        | `type` (button/submit/reset)             | 透传                                                       | 透传                                        | 透传                            |
-| **额外样式**        | 无                                       | `square`                                                   | `dashed`, `circle`, `round`                 | `rounded`, `raised`, `outlined` |
-| **Vue Router 集成** | 不支持 (由用户包装)                      | 原生支持 (`to`/`href`)                                     | 不支持                                      | 通过 `as` 属性间接支持          |
-
-> 说明：表格中 **Nuxt UI**、**Naive UI** 和 **PrimeVue** 的 API 信息均来自其官方文档 (2026 年版本)。
-
-通过这张表，可以清晰地看到 Moongate 的设计取舍：
+回顾上面的设计过程，几个关键取舍：
 
 - **`variant` 与 `color` 的解耦**：关注"视觉模式"与"语义颜色"分离
 - **尺寸的精简**：3 种尺寸足够覆盖个人博客场景
-- **加载状态的精细化**：`showLabelWhileLoading`/`loadingLabel` 是对"加载时文案"需求的响应——这是其他库经常忽略的细节
+- **加载状态的精细化**：`showLabelWhileLoading`/`loadingLabel` 是对"加载时文案"需求的响应
 - **图标支持的灵活性**：prop 快速写法 + 插槽完全控制
 
 ## 十一、关于加载状态宽度变化的讨论
@@ -597,3 +531,13 @@ v1.5.0 的 Button 有 **20 个组件测试**，覆盖：
 ---
 
 本篇以 Button 为例梳理了简单组件的设计要点。下一篇将深入复杂组件，涵盖数据适配、内部状态、逻辑复用等更高级的话题。
+
+---
+
+## 🌙 关于 Moongate Vue
+
+本文来自 Moongate Vue 组件库设计实战系列（共 4 篇），所有内容均基于真实项目实践：
+
+- **项目仓库**：[github.com/yuelinghuashu/moongate-vue](https://github.com/yuelinghuashu/moongate-vue) — 极简 Vue 3 组件库，零依赖、CSS 优先、25KB gzip
+- **真实案例**：[moongate.top](https://moongate.top) — 个人博客，从 Nuxt UI v4 迁移至 Moongate Vue 构建
+- **在线文档**：[vue.moongate.top](https://vue.moongate.top) — 组件 API 与主题定制指南

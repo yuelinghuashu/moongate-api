@@ -26,7 +26,6 @@ tags:
 
 ---
 
-
 ## 为什么要折腾 Shiki？
 
 在个人博客中，代码高亮是阅读体验的核心。市面上主流的 Prism.js 和 Highlight.js 虽然普及度高，但高亮精度有限。相比之下，Shiki 使用与 VSCode 相同的 TextMate 语法引擎，能实现像素级精准的高亮，完全对标 VSCode 的代码着色体验。

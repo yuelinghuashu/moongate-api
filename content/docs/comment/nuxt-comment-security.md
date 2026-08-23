@@ -5,7 +5,7 @@ date: 2026-03-23
 permalink: e87b100b-4980-433c-8ae0-4c490bcfc60c
 series: comment
 level: P3
-tags: 
+tags:
   - Nuxt
   - Vue
   - Security
@@ -69,7 +69,7 @@ const blockedKeywords = [
   "fuck",
   "shit",
   "damn",
-];
+]
 
 // 技术白名单（豁免词汇，需与敏感词冲突时使用）
 const technicalWhitelist = [
@@ -80,7 +80,7 @@ const technicalWhitelist = [
   "死循环",
   "垃圾回收",
   "垃圾收集",
-];
+]
 ```
 
 ### 3.2 验证函数实现
@@ -96,12 +96,12 @@ const sensitiveRegex = new RegExp(
     .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|"),
   "i",
-);
+)
 
 export interface ValidationResult {
-  valid: boolean;
-  message?: string;
-  foundWords?: string[];
+  valid: boolean
+  message?: string
+  foundWords?: string[]
 }
 
 /**
@@ -115,32 +115,32 @@ export function validateComment(
 ): ValidationResult {
   // 1. 空内容检查
   if (!content?.trim()) {
-    return { valid: false, message: "评论内容不能为空" };
+    return { valid: false, message: "评论内容不能为空" }
   }
 
   // 2. 长度限制
   if (content.length > maxLength) {
-    return { valid: false, message: `评论内容不能超过 ${maxLength} 个字符` };
+    return { valid: false, message: `评论内容不能超过 ${maxLength} 个字符` }
   }
 
   // 3. 移除白名单词汇，避免误判
-  let text = content;
+  let text = content
   for (const word of technicalWhitelist) {
-    text = text.replace(new RegExp(word, "gi"), "");
+    text = text.replace(new RegExp(word, "gi"), "")
   }
 
   // 4. 敏感词检测
-  const matches = text.match(sensitiveRegex);
+  const matches = text.match(sensitiveRegex)
   if (matches) {
-    const found = [...new Set(matches)];
+    const found = [...new Set(matches)]
     return {
       valid: false,
       message: `包含敏感词: ${found.join(", ")}`,
       foundWords: found,
-    };
+    }
   }
 
-  return { valid: true };
+  return { valid: true }
 }
 ```
 
@@ -210,23 +210,23 @@ onMounted(() => validate(localValue.value));
 
 ```ts
 // stores/comment.ts
-import { validateComment } from "~/utils/commentValidator";
+import { validateComment } from "~/utils/commentValidator"
 
 export const useCommentStore = defineStore("comment", () => {
-  const comment = ref("");
+  const comment = ref("")
   // ... 其他状态
 
   const isCommentValid = computed(() => {
-    const { valid } = validateComment(comment.value, 5000);
-    return valid;
-  });
+    const { valid } = validateComment(comment.value, 5000)
+    return valid
+  })
 
   return {
     comment,
     isCommentValid,
     // ... 其他
-  };
-});
+  }
+})
 ```
 
 #### 3.3.3 修改评论区容器组件
@@ -271,60 +271,60 @@ export const useCommentStore = defineStore("comment", () => {
 **修改 `server/api/comment/post.ts`**：
 
 ```ts
-import { eq } from "drizzle-orm";
-import { useDB } from "~~/server/db";
-import { comments, users } from "~~/server/db/schema";
-import { validateComment } from "~/../utils/commentValidator";
+import { eq } from "drizzle-orm"
+import { useDB } from "~~/server/db"
+import { comments, users } from "~~/server/db/schema"
+import { validateComment } from "~/../utils/commentValidator"
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
-  const session = await getUserSession(event);
+  const body = await readBody(event)
+  const session = await getUserSession(event)
 
   // 1. 验证 session
   if (!session.user?.id) {
-    return { success: false, status: 401, message: "请先登录" };
+    return { success: false, status: 401, message: "请先登录" }
   }
 
   // 2. 查询用户是否存在
-  const db = useDB();
+  const db = useDB()
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.user.id),
-  });
+  })
   if (!user) {
-    await clearUserSession(event);
-    return { success: false, status: 401, message: "用户不存在" };
+    await clearUserSession(event)
+    return { success: false, status: 401, message: "用户不存在" }
   }
 
   // 3. 验证评论内容
-  const content = body.content?.trim();
-  const { valid, message } = validateComment(content, 5000);
+  const content = body.content?.trim()
+  const { valid, message } = validateComment(content, 5000)
   if (!valid) {
-    return { success: false, status: 400, message: message || "评论内容无效" };
+    return { success: false, status: 400, message: message || "评论内容无效" }
   }
 
   // 4. 验证 permalink 非空
   if (!body.permalink) {
-    return { success: false, status: 400, message: "永久链接不能为空" };
+    return { success: false, status: 400, message: "永久链接不能为空" }
   }
 
   // 5. 验证文档是否存在（假设使用 Nuxt Content，具体实现需根据项目调整）
   // 注意：这里使用了 `#content/server` 虚拟模块，实际项目中可能需要替换为其他方式。
   // 若无法验证，应返回错误而不是放行。
   try {
-    const { queryCollection } = await import("#content/server");
+    const { queryCollection } = await import("#content/server")
     const doc = await queryCollection("docs")
       .where("permalink", "=", body.permalink)
-      .first();
+      .first()
     if (!doc) {
-      return { success: false, status: 404, message: "文档不存在" };
+      return { success: false, status: 404, message: "文档不存在" }
     }
   } catch (err) {
-    console.error("文档存在性验证失败，请检查 Nuxt Content 服务端配置", err);
+    console.error("文档存在性验证失败，请检查 Nuxt Content 服务端配置", err)
     return {
       success: false,
       status: 500,
       message: "服务器配置错误，无法验证文档",
-    };
+    }
   }
 
   // 6. 保存评论到数据库
@@ -336,19 +336,19 @@ export default defineEventHandler(async (event) => {
         content: body.content.trim(),
         permalink: body.permalink,
       })
-      .returning();
+      .returning()
 
     return {
       success: true,
       status: 201,
       message: "评论存储成功",
       data: { ...comment },
-    };
+    }
   } catch (error) {
-    console.error("评论存储失败", error);
-    return { success: false, status: 500, message: "评论存储失败" };
+    console.error("评论存储失败", error)
+    return { success: false, status: 500, message: "评论存储失败" }
   }
-});
+})
 ```
 
 同样修改 `server/api/reply/post.ts`（完整代码见第 4 节）。
@@ -364,17 +364,17 @@ export default defineEventHandler(async (event) => {
 由于回复表没有 `permalink` 字段，需要通过目标评论的 `permalink` 来验证。下面给出完整的 `reply/post.ts` 实现，包含用户认证、参数校验、敏感词过滤、归属验证和限流（可选）。
 
 ```ts
-import { eq, sql } from "drizzle-orm";
-import { useDB } from "~~/server/db";
-import { replies, users, comments } from "~~/server/db/schema";
-import { validateComment } from "~/../utils/commentValidator";
+import { eq, sql } from "drizzle-orm"
+import { useDB } from "~~/server/db"
+import { replies, users, comments } from "~~/server/db/schema"
+import { validateComment } from "~/../utils/commentValidator"
 
 // 注意：内存限流仅用于演示，生产环境请替换为 Redis 或数据库
-const rateLimit = new Map();
+const rateLimit = new Map()
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
-  const session = await getUserSession(event);
+  const body = await readBody(event)
+  const session = await getUserSession(event)
 
   // 1. 参数校验
   if (
@@ -382,54 +382,54 @@ export default defineEventHandler(async (event) => {
     !["comment", "reply"].includes(body.target_type) ||
     !body.content?.trim()
   ) {
-    return { success: false, status: 400, message: "参数错误" };
+    return { success: false, status: 400, message: "参数错误" }
   }
   if (!body.permalink) {
-    return { success: false, status: 400, message: "缺少 permalink 参数" };
+    return { success: false, status: 400, message: "缺少 permalink 参数" }
   }
   // 确保 target_id 为数字
-  const targetId = Number(body.target_id);
+  const targetId = Number(body.target_id)
   if (isNaN(targetId)) {
-    return { success: false, status: 400, message: "target_id 必须为数字" };
+    return { success: false, status: 400, message: "target_id 必须为数字" }
   }
 
   // 2. 验证 session
   if (!session.user?.id) {
-    return { success: false, status: 401, message: "请先登录" };
+    return { success: false, status: 401, message: "请先登录" }
   }
 
-  const db = useDB();
+  const db = useDB()
 
   // 3. 验证用户存在
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.user.id),
-  });
+  })
   if (!user) {
-    await clearUserSession(event);
-    return { success: false, status: 401, message: "用户不存在" };
+    await clearUserSession(event)
+    return { success: false, status: 401, message: "用户不存在" }
   }
 
   // 4. 验证回复内容
-  const content = body.content?.trim();
-  const { valid, message } = validateComment(content, 5000);
+  const content = body.content?.trim()
+  const { valid, message } = validateComment(content, 5000)
   if (!valid) {
     return {
       success: false,
       status: 400,
       message: message || "回复包含敏感词",
-    };
+    }
   }
 
   // 5. 验证目标存在并检查是否属于当前文档
-  let targetPermalink = "";
+  let targetPermalink = ""
   if (body.target_type === "comment") {
     const comment = await db.query.comments.findFirst({
       where: eq(comments.id, targetId),
-    });
+    })
     if (!comment) {
-      return { success: false, status: 404, message: "评论不存在" };
+      return { success: false, status: 404, message: "评论不存在" }
     }
-    targetPermalink = comment.permalink;
+    targetPermalink = comment.permalink
   } else {
     // 目标是回复，需要向上追溯找到根评论的 permalink
     // 使用递归 CTE 查询（PostgreSQL）
@@ -447,26 +447,26 @@ export default defineEventHandler(async (event) => {
       FROM reply_chain rc
       JOIN comments c ON c.id = rc.target_id AND rc.target_type = 'comment'
       LIMIT 1
-    `);
+    `)
     if (!result.rows.length) {
-      return { success: false, status: 404, message: "目标评论或回复不存在" };
+      return { success: false, status: 404, message: "目标评论或回复不存在" }
     }
-    targetPermalink = result.rows[0].permalink;
+    targetPermalink = result.rows[0].permalink
   }
 
   if (targetPermalink !== body.permalink) {
-    return { success: false, status: 400, message: "目标不属于当前文档" };
+    return { success: false, status: 400, message: "目标不属于当前文档" }
   }
 
   // 6. 可选：防重复提交限流（同一用户对同一文档 1 分钟内只能回复一次）
   // 注意：内存限流仅用于演示，生产环境请使用 Redis 或数据库
-  const rateKey = `${user.id}:${body.permalink}`;
-  const last = rateLimit.get(rateKey);
+  const rateKey = `${user.id}:${body.permalink}`
+  const last = rateLimit.get(rateKey)
   if (last && Date.now() - last < 60000) {
-    return { success: false, status: 429, message: "操作过于频繁，请稍后再试" };
+    return { success: false, status: 429, message: "操作过于频繁，请稍后再试" }
   }
-  rateLimit.set(rateKey, Date.now());
-  setTimeout(() => rateLimit.delete(rateKey), 60000); // 自动清理过期条目
+  rateLimit.set(rateKey, Date.now())
+  setTimeout(() => rateLimit.delete(rateKey), 60000) // 自动清理过期条目
 
   // 7. 保存回复
   try {
@@ -478,19 +478,19 @@ export default defineEventHandler(async (event) => {
         target_type: body.target_type,
         content: content,
       })
-      .returning();
+      .returning()
 
     return {
       success: true,
       status: 201,
       message: "回复成功",
       data: newReply,
-    };
+    }
   } catch (error) {
-    console.error(error);
-    return { success: false, status: 500, message: "服务器内部错误" };
+    console.error(error)
+    return { success: false, status: 500, message: "服务器内部错误" }
   }
-});
+})
 ```
 
 **说明**：
@@ -516,7 +516,7 @@ export default defineEventHandler(async (event) => {
 
 ### /i18n/locales/zh_cn.json
 
-```json
+````json
 {
   "comment": {
     "input": {
@@ -526,11 +526,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 }
-```
+````
 
 ### /i18n/locales/en.json
 
-```json
+````json
 {
   "comment": {
     "input": {
@@ -540,11 +540,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 }
-```
+````
 
 ### /i18n/locales/ja.json
 
-```json
+````json
 {
   "comment": {
     "input": {
@@ -554,7 +554,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 }
-```
+````
 
 ## 7. 整合与测试
 

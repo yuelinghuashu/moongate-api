@@ -5,7 +5,7 @@ date: 2026-03-08
 permalink: 2f14097a-5218-4adb-8204-fca2f2eddc85
 series: comment
 level: P3
-tags: 
+tags:
   - Nuxt
   - Security
 ---
@@ -104,8 +104,8 @@ import {
   timestamp,
   integer,
   text,
-} from "drizzle-orm/pg-core";
-import { users } from "./users";
+} from "drizzle-orm/pg-core"
+import { users } from "./users"
 
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
@@ -115,10 +115,10 @@ export const comments = pgTable("comments", {
   content: text("content").notNull(),
   permalink: varchar("permalink", { length: 255 }).notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+})
 
-export type CommentSelect = typeof comments.$inferSelect;
-export type CommentInsert = typeof comments.$inferInsert;
+export type CommentSelect = typeof comments.$inferSelect
+export type CommentInsert = typeof comments.$inferInsert
 ```
 
 **`server/db/schema/replies.ts`**（含枚举）
@@ -131,10 +131,10 @@ import {
   integer,
   text,
   timestamp,
-} from "drizzle-orm/pg-core";
-import { users } from "./users";
+} from "drizzle-orm/pg-core"
+import { users } from "./users"
 
-export const targetTypeEnum = pgEnum("target_type", ["comment", "reply"]);
+export const targetTypeEnum = pgEnum("target_type", ["comment", "reply"])
 
 export const replies = pgTable("replies", {
   id: serial("id").primaryKey(),
@@ -145,10 +145,10 @@ export const replies = pgTable("replies", {
   }),
   content: text("content").notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+})
 
-export type ReplySelect = typeof replies.$inferSelect;
-export type ReplyInsert = typeof replies.$inferInsert;
+export type ReplySelect = typeof replies.$inferSelect
+export type ReplyInsert = typeof replies.$inferInsert
 ```
 
 **`server/db/schema/users.ts`**
@@ -160,7 +160,7 @@ import {
   varchar,
   boolean,
   timestamp,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -168,10 +168,10 @@ export const users = pgTable("users", {
   username: varchar("username", { length: 100 }).notNull(),
   is_admin: boolean("is_admin").default(false),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+})
 
-export type UserSelect = typeof users.$inferSelect;
-export type UserInsert = typeof users.$inferInsert;
+export type UserSelect = typeof users.$inferSelect
+export type UserInsert = typeof users.$inferInsert
 ```
 
 </details>
@@ -180,8 +180,8 @@ export type UserInsert = typeof users.$inferInsert;
 <summary>查看完整关系表</summary>
 
 ```ts
-import { relations } from "drizzle-orm";
-import { users, comments, replies } from "./index";
+import { relations } from "drizzle-orm"
+import { users, comments, replies } from "./index"
 
 // comments 表的关系
 export const commentsRelations = relations(comments, ({ one, many }) => ({
@@ -194,13 +194,13 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
   repliesFrom: many(replies, {
     relationName: "commentTarget",
   }),
-}));
+}))
 
 // users 表的关系（不变）
 export const usersRelations = relations(users, ({ many }) => ({
   comments: many(comments),
   replies: many(replies),
-}));
+}))
 
 // replies 表的关系
 export const repliesRelations = relations(replies, ({ one }) => ({
@@ -220,7 +220,7 @@ export const repliesRelations = relations(replies, ({ one }) => ({
     references: [replies.id],
     relationName: "replyTarget",
   }),
-}));
+}))
 ```
 
 </details>
@@ -235,16 +235,16 @@ export const repliesRelations = relations(replies, ({ one }) => ({
 <summary>完整的获取时间线接口代码</summary>
 
 ```ts
-import { eq, sql } from "drizzle-orm";
-import { useDB } from "~~/server/db";
-import { comments, replies, users } from "~~/server/db/schema";
+import { eq, sql } from "drizzle-orm"
+import { useDB } from "~~/server/db"
+import { comments, replies, users } from "~~/server/db/schema"
 
 export default defineEventHandler(async (event) => {
-  const { permalink } = getQuery(event);
+  const { permalink } = getQuery(event)
   if (!permalink)
-    throw createError({ status: 400, statusText: "缺少 permalink" });
+    throw createError({ status: 400, statusText: "缺少 permalink" })
 
-  const db = useDB();
+  const db = useDB()
 
   // 获取所有评论
   const commentsData = await db
@@ -258,7 +258,7 @@ export default defineEventHandler(async (event) => {
     .from(comments)
     .leftJoin(users, eq(comments.user_id, users.id))
     .where(eq(comments.permalink, permalink as string))
-    .orderBy(comments.created_at);
+    .orderBy(comments.created_at)
 
   // 构建评论映射，供后续引用摘要使用
   const commentMap = new Map(
@@ -266,7 +266,7 @@ export default defineEventHandler(async (event) => {
       c.id,
       { content: c.content, username: c.user?.username },
     ]),
-  );
+  )
 
   // 获取所有回复（限制属于当前文章）
   const repliesData = await db
@@ -285,7 +285,7 @@ export default defineEventHandler(async (event) => {
       sql`${replies.target_id} IN (SELECT id FROM comments WHERE permalink = ${permalink})
                 OR ${replies.target_id} IN (SELECT id FROM replies r2 WHERE r2.target_id IN (SELECT id FROM comments WHERE permalink = ${permalink}))`,
     )
-    .orderBy(replies.created_at);
+    .orderBy(replies.created_at)
 
   // 构建回复映射
   const replyMap = new Map(
@@ -293,7 +293,7 @@ export default defineEventHandler(async (event) => {
       r.id,
       { content: r.content, username: r.user?.username },
     ]),
-  );
+  )
 
   // 格式化评论
   const formattedComments = commentsData.map((c) => ({
@@ -302,14 +302,14 @@ export default defineEventHandler(async (event) => {
     content: c.content,
     user: c.user,
     created_at: c.created_at,
-  }));
+  }))
 
   // 格式化回复并添加引用摘要
   const formattedReplies = repliesData.map((r) => {
     const target =
       r.target_type === "comment"
         ? commentMap.get(r.target_id)
-        : replyMap.get(r.target_id);
+        : replyMap.get(r.target_id)
 
     return {
       id: r.id,
@@ -329,17 +329,17 @@ export default defineEventHandler(async (event) => {
               (target.content.length > 100 ? "…" : ""),
           }
         : null,
-    };
-  });
+    }
+  })
 
   // 合并并按时间排序
   const timeline = [...formattedComments, ...formattedReplies].sort(
     (a, b) =>
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
+  )
 
-  return { success: true, data: timeline };
-});
+  return { success: true, data: timeline }
+})
 ```
 
 </details>
@@ -360,13 +360,13 @@ export default defineEventHandler(async (event) => {
 <summary>查看完整的回复接口代码</summary>
 
 ```ts
-import { eq } from "drizzle-orm";
-import { useDB } from "~~/server/db";
-import { replies, users, comments } from "~~/server/db/schema";
+import { eq } from "drizzle-orm"
+import { useDB } from "~~/server/db"
+import { replies, users, comments } from "~~/server/db/schema"
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
-  const session = await getUserSession(event);
+  const body = await readBody(event)
+  const session = await getUserSession(event)
 
   // 参数校验
   if (
@@ -374,20 +374,20 @@ export default defineEventHandler(async (event) => {
     !["comment", "reply"].includes(body.target_type) ||
     !body.content?.trim()
   ) {
-    throw createError({ status: 400, statusText: "参数错误" });
+    throw createError({ status: 400, statusText: "参数错误" })
   }
   if (!session.user?.id)
-    throw createError({ status: 401, statusText: "请先登录" });
+    throw createError({ status: 401, statusText: "请先登录" })
 
-  const db = useDB();
+  const db = useDB()
 
   // 验证用户存在
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.user.id),
-  });
+  })
   if (!user) {
-    await clearUserSession(event);
-    throw createError({ status: 401, statusText: "用户不存在" });
+    await clearUserSession(event)
+    throw createError({ status: 401, statusText: "用户不存在" })
   }
 
   // 验证目标存在
@@ -396,17 +396,17 @@ export default defineEventHandler(async (event) => {
       .select()
       .from(comments)
       .where(eq(comments.id, body.target_id))
-      .limit(1);
+      .limit(1)
     if (!comment.length)
-      throw createError({ status: 404, statusText: "评论不存在" });
+      throw createError({ status: 404, statusText: "评论不存在" })
   } else {
     const reply = await db
       .select()
       .from(replies)
       .where(eq(replies.id, body.target_id))
-      .limit(1);
+      .limit(1)
     if (!reply.length)
-      throw createError({ status: 404, statusText: "回复不存在" });
+      throw createError({ status: 404, statusText: "回复不存在" })
   }
 
   // 插入回复
@@ -419,15 +419,15 @@ export default defineEventHandler(async (event) => {
         target_type: body.target_type,
         content: body.content.trim(),
       })
-      .returning();
+      .returning()
 
-    event.node.res.statusCode = 201;
-    return { success: true, data: newReply };
+    event.node.res.statusCode = 201
+    return { success: true, data: newReply }
   } catch (error) {
-    console.error(error);
-    throw createError({ status: 500, statusText: "服务器内部错误" });
+    console.error(error)
+    throw createError({ status: 500, statusText: "服务器内部错误" })
   }
-});
+})
 ```
 
 </details>
@@ -442,78 +442,78 @@ export default defineEventHandler(async (event) => {
 <summary>查看完整的pinia代码</summary>
 
 ```ts
-import { defineStore } from "pinia";
+import { defineStore } from "pinia"
 
 export const useCommentStore = defineStore("comment", () => {
-  const comment = ref(""); // 当前输入的评论内容
-  const permalink = ref(""); // 当前文章标识
-  const commentList = ref<any[]>([]); // 扁平时间线数据
-  const loading = ref(false); // 获取列表加载状态
-  const submitting = ref(false); // 提交评论/回复中
+  const comment = ref("") // 当前输入的评论内容
+  const permalink = ref("") // 当前文章标识
+  const commentList = ref<any[]>([]) // 扁平时间线数据
+  const loading = ref(false) // 获取列表加载状态
+  const submitting = ref(false) // 提交评论/回复中
 
   const getCommentList = async (newPermalink?: string) => {
-    if (newPermalink) permalink.value = newPermalink;
-    if (!permalink.value) return;
-    loading.value = true;
+    if (newPermalink) permalink.value = newPermalink
+    if (!permalink.value) return
+    loading.value = true
     try {
       const { data } = await $fetch("/api/comment/timeline", {
         query: { permalink: permalink.value },
-      });
-      commentList.value = data || [];
+      })
+      commentList.value = data || []
     } catch (error) {
-      console.error("获取评论失败", error);
-      commentList.value = [];
+      console.error("获取评论失败", error)
+      commentList.value = []
     } finally {
-      loading.value = false;
+      loading.value = false
     }
-  };
+  }
 
   const submitComment = async () => {
-    if (!comment.value.trim() || submitting.value) return false;
-    submitting.value = true;
+    if (!comment.value.trim() || submitting.value) return false
+    submitting.value = true
     try {
       const response = await $fetch("/api/comment/post", {
         method: "POST",
         body: { content: comment.value, permalink: permalink.value },
-      });
+      })
       if (response.success) {
-        comment.value = "";
-        await getCommentList();
-        return true;
+        comment.value = ""
+        await getCommentList()
+        return true
       }
-      return false;
+      return false
     } catch (error) {
-      console.error(error);
-      return false;
+      console.error(error)
+      return false
     } finally {
-      submitting.value = false;
+      submitting.value = false
     }
-  };
+  }
 
   const submitReply = async (
     targetId: number,
     targetType: string,
     content: string,
   ) => {
-    if (!content.trim() || submitting.value) return false;
-    submitting.value = true;
+    if (!content.trim() || submitting.value) return false
+    submitting.value = true
     try {
       const response = await $fetch("/api/reply/post", {
         method: "POST",
         body: { target_id: targetId, target_type: targetType, content },
-      });
+      })
       if (response.success) {
-        await getCommentList();
-        return true;
+        await getCommentList()
+        return true
       }
-      return false;
+      return false
     } catch (error) {
-      console.error(error);
-      return false;
+      console.error(error)
+      return false
     } finally {
-      submitting.value = false;
+      submitting.value = false
     }
-  };
+  }
 
   return {
     comment,
@@ -524,8 +524,8 @@ export const useCommentStore = defineStore("comment", () => {
     getCommentList,
     submitComment,
     submitReply,
-  };
-});
+  }
+})
 ```
 
 </details>
@@ -577,21 +577,21 @@ export const useCommentStore = defineStore("comment", () => {
 </template>
 
 <script setup>
-import { useCommentStore } from "~/stores/comment";
-const commentStore = useCommentStore();
-const { t } = useI18n();
-const { containerRef, onDetailsToggle } = useDetailsScroll();
-const { loggedIn } = useUserSession();
+import { useCommentStore } from "~/stores/comment"
+const commentStore = useCommentStore()
+const { t } = useI18n()
+const { containerRef, onDetailsToggle } = useDetailsScroll()
+const { loggedIn } = useUserSession()
 
-const prop = defineProps({ permalink: { type: String, required: true } });
+const prop = defineProps({ permalink: { type: String, required: true } })
 
 watch(
   () => prop.permalink,
   (newPermalink) => {
-    commentStore.getCommentList(newPermalink);
+    commentStore.getCommentList(newPermalink)
   },
   { immediate: true },
-);
+)
 </script>
 ```
 
@@ -780,8 +780,8 @@ const scrollToElement = (id: number, type: string) => {
 </template>
 
 <script lang="ts" setup>
-import { useDebounceFn } from "@vueuse/core";
-const { t } = useI18n();
+import { useDebounceFn } from "@vueuse/core"
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: { type: String, default: "" }, // v-model 绑定的值
@@ -792,31 +792,31 @@ const props = defineProps({
     default: "none",
     validator: (val: string) => ["session", "local", "none"].includes(val),
   },
-});
+})
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue"])
 
 // 创建一个 ref 来存储本地输入值
-const localValue = ref(props.modelValue);
+const localValue = ref(props.modelValue)
 
 // 监听父组件 prop 变化，同步到本地
 watch(
   () => props.modelValue,
   (newVal) => {
-    localValue.value = newVal;
+    localValue.value = newVal
   },
-);
+)
 
 // 用防抖函数包装 emit
 const debouncedEmit = useDebounceFn((value: string) => {
-  emit("update:modelValue", value);
-}, props.debounceTime);
+  emit("update:modelValue", value)
+}, props.debounceTime)
 
 // 当输入框的文本改变时
 const handleInput = (value: string) => {
-  localValue.value = value; // 立即更新预览
-  debouncedEmit(value); // 防抖更新父组件
-};
+  localValue.value = value // 立即更新预览
+  debouncedEmit(value) // 防抖更新父组件
+}
 </script>
 ```
 

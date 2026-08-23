@@ -5,7 +5,7 @@ date: 2026-03-18
 permalink: 89857e17-36c9-4a7b-a879-43a1f64f54a6
 series: deployment
 level: P4
-tags: 
+tags:
   - Nuxt
   - Docker
   - Caddy
@@ -31,12 +31,12 @@ tags:
 
 Node.js、pnpm、Docker Engine、Docker Compose、Caddy、GitHub Actions 的版本信息与[入门篇](./docker-quickstart-auto-deploy)一致。本文额外涉及：
 
-| 组件           | 版本              | 说明                                                        |
-| -------------- | ----------------- | ----------------------------------------------------------- |
-| Nuxt           | 4.x               | 前端框架，兼容 Nuxt 3                                       |
-| nuxt-umami     | 3.2.1             | Umami 集成模块                                              |
-| PostgreSQL     | alpine 最新       | Umami 数据库                                                |
-| Umami          | postgresql-latest | 分析服务（生产环境建议固定具体版本，如 `postgresql-3.0.3`） |
+| 组件       | 版本              | 说明                                                        |
+| ---------- | ----------------- | ----------------------------------------------------------- |
+| Nuxt       | 4.x               | 前端框架，兼容 Nuxt 3                                       |
+| nuxt-umami | 3.2.1             | Umami 集成模块                                              |
+| PostgreSQL | alpine 最新       | Umami 数据库                                                |
+| Umami      | postgresql-latest | 分析服务（生产环境建议固定具体版本，如 `postgresql-3.0.3`） |
 
 ---
 
@@ -310,7 +310,7 @@ export default defineNuxtConfig({
     enabled: process.env.NODE_ENV !== "development",
   },
   // 其他配置...
-});
+})
 ```
 
 ### 5.3 本地测试（可选）
@@ -557,16 +557,16 @@ log {
 
 ## 🧪 第十部分：深度问题排查手册
 
-| 现象                                                                   | 可能原因                                                   | 解决方案                                                                                                                                                         |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Umami 容器不断重启，日志显示 `password authentication failed`**      | 数据库密码与 `.env` 不一致，或密码含特殊字符               | 检查 `.env` 中 `UMAMI_DB_PASSWORD` 是否匹配；使用字母数字密码；删除卷重建：`docker compose down -v umami-db umami && docker compose up -d umami-db umami`        |
-| **访问 `umami.your-domain.com` 返回 502**                              | Umami 容器未就绪，或 Caddy 代理配置错误                    | 检查 `docker compose ps umami` 状态；查看 Caddy 日志；测试内部连通性：`docker exec my-app-caddy wget -O- http://umami:3000`                                      |
-| **浏览器中 Umami 脚本未加载，Network 中无请求**                        | 构建时未传递 `NUXT_PUBLIC_UMAMI_*` 变量                    | 检查 Dockerfile 是否包含对应的 `ARG`/`ENV`；检查 GitHub Actions 日志中 `build-args` 是否传递                                                                     |
-| **后台无数据，但脚本已加载**                                           | Website ID 错误，或广告拦截器阻止                          | 核对 `NUXT_PUBLIC_UMAMI_ID`；在无痕模式下测试                                                                                                                    |
-| **本地开发环境报 `id is missing`**                                     | 本地未设置环境变量                                         | 可忽略，或使用 `enabled: process.env.NODE_ENV !== 'development'` 禁用                                                                                            |
-| **IP 白名单不生效，所有 IP 均可访问**                                  | Caddy 未重新加载配置 / `remote_ip` 匹配器语法错误          | 重启 Caddy 容器；检查 `@allowed` 定义中 IP 格式是否正确                                                                                                          |
-| **Basic Auth 配置后页面转圈**                                          | `Authorization` 头干扰 Umami 会话 / 浏览器缓存             | 添加 `header_up -Authorization` 到 `reverse_proxy`；清除浏览器缓存                                                                                               |
-| **Caddy 无法写入日志文件**                                             | 宿主机目录权限不足                                         | 确保目录存在且 UID 1000 有写权限：`sudo chown 1000:1000 /var/log/caddy`                                                                                          |
+| 现象                                                              | 可能原因                                          | 解决方案                                                                                                                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Umami 容器不断重启，日志显示 `password authentication failed`** | 数据库密码与 `.env` 不一致，或密码含特殊字符      | 检查 `.env` 中 `UMAMI_DB_PASSWORD` 是否匹配；使用字母数字密码；删除卷重建：`docker compose down -v umami-db umami && docker compose up -d umami-db umami` |
+| **访问 `umami.your-domain.com` 返回 502**                         | Umami 容器未就绪，或 Caddy 代理配置错误           | 检查 `docker compose ps umami` 状态；查看 Caddy 日志；测试内部连通性：`docker exec my-app-caddy wget -O- http://umami:3000`                               |
+| **浏览器中 Umami 脚本未加载，Network 中无请求**                   | 构建时未传递 `NUXT_PUBLIC_UMAMI_*` 变量           | 检查 Dockerfile 是否包含对应的 `ARG`/`ENV`；检查 GitHub Actions 日志中 `build-args` 是否传递                                                              |
+| **后台无数据，但脚本已加载**                                      | Website ID 错误，或广告拦截器阻止                 | 核对 `NUXT_PUBLIC_UMAMI_ID`；在无痕模式下测试                                                                                                             |
+| **本地开发环境报 `id is missing`**                                | 本地未设置环境变量                                | 可忽略，或使用 `enabled: process.env.NODE_ENV !== 'development'` 禁用                                                                                     |
+| **IP 白名单不生效，所有 IP 均可访问**                             | Caddy 未重新加载配置 / `remote_ip` 匹配器语法错误 | 重启 Caddy 容器；检查 `@allowed` 定义中 IP 格式是否正确                                                                                                   |
+| **Basic Auth 配置后页面转圈**                                     | `Authorization` 头干扰 Umami 会话 / 浏览器缓存    | 添加 `header_up -Authorization` 到 `reverse_proxy`；清除浏览器缓存                                                                                        |
+| **Caddy 无法写入日志文件**                                        | 宿主机目录权限不足                                | 确保目录存在且 UID 1000 有写权限：`sudo chown 1000:1000 /var/log/caddy`                                                                                   |
 
 ---
 
