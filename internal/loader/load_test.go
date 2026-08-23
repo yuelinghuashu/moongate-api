@@ -275,3 +275,98 @@ func TestLoadAll_NonExistentDir(t *testing.T) {
 		t.Errorf("Docs count = %d, want 0 for non-existent directory", len(store.Docs))
 	}
 }
+
+func TestLoadAll_EnglishTranslationFiles(t *testing.T) {
+	dir := createTestContentDir(t)
+
+	// 中文文章
+	writeTestMarkdown(t, filepath.Join(dir, "docs"), "article.md", `---
+title: "Article"
+description: "中文摘要"
+date: 2025-01-01 00:00:00
+permalink: /docs/article
+level: P2
+series: go-tutorial
+tags:
+  - Go
+---
+
+中文内容
+`)
+
+	// 英文译文（.en.md），slug 应归一化为 article
+	writeTestMarkdown(t, filepath.Join(dir, "docs"), "article.en.md", `---
+title: "Article (EN)"
+description: "English description"
+date: 2025-01-01 00:00:00
+permalink: /docs/article
+level: P2
+series: go-tutorial
+tags:
+  - Go
+---
+
+English content
+`)
+
+	store, err := LoadAll(dir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+
+	// 中文照常进入 Docs / DocsBySlug
+	if len(store.Docs) != 1 {
+		t.Errorf("Docs count = %d, want 1", len(store.Docs))
+	}
+	if len(store.DocsBySlug) != 1 {
+		t.Errorf("DocsBySlug count = %d, want 1", len(store.DocsBySlug))
+	}
+
+	// 英文译文进入 DocsEn，slug 不带 .en 后缀
+	if len(store.DocsEn) != 1 {
+		t.Fatalf("DocsEn count = %d, want 1", len(store.DocsEn))
+	}
+	en := store.DocsEn["article"]
+	if en == nil {
+		t.Fatal("DocsEn should contain slug article")
+	}
+	if en.Title != "Article (EN)" {
+		t.Errorf("EN title = %q, want %q", en.Title, "Article (EN)")
+	}
+	if _, ok := store.DocsBySlug["article.en"]; ok {
+		t.Error("DocsBySlug should NOT contain slug article.en")
+	}
+}
+
+func TestLoadAll_EnglishTranslationMissingCounterpart(t *testing.T) {
+	dir := createTestContentDir(t)
+
+	// 只有英文译文，没有中文配对
+	writeTestMarkdown(t, filepath.Join(dir, "docs"), "en-only.en.md", `---
+title: "EN Only"
+description: "desc"
+date: 2025-01-01 00:00:00
+permalink: /docs/en-only
+level: P1
+tags:
+  - English
+---
+
+English only
+`)
+
+	store, err := LoadAll(dir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+
+	if len(store.Docs) != 0 {
+		t.Errorf("Docs count = %d, want 0", len(store.Docs))
+	}
+	if len(store.DocsEn) != 1 {
+		t.Errorf("DocsEn count = %d, want 1", len(store.DocsEn))
+	}
+	if _, ok := store.DocsEn["en-only"]; !ok {
+		t.Error("DocsEn should contain slug en-only")
+	}
+}

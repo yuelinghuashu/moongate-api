@@ -14,8 +14,8 @@
 
 | 方法 | 路径               | 说明                                       |
 | ---- | ------------------ | ------------------------------------------ |
-| GET  | `/api/docs`        | 文档列表（支持分页、搜索、标签、等级筛选） |
-| GET  | `/api/docs/:slug`  | 文档详情                                   |
+| GET  | `/api/docs`        | 文档列表（支持分页、搜索、标签、等级筛选、`?lang=en`） |
+| GET  | `/api/docs/:slug`  | 文档详情（支持 `?lang=en`，无译文时回退中文） |
 | GET  | `/api/about`       | 关于页面列表                               |
 | GET  | `/api/about/:slug` | 关于页面详情                               |
 
@@ -31,6 +31,13 @@
 
 - `content/docs/*.md` — 技术文章
 - `content/about/*.md` — 关于页面
+
+### 中英双语
+
+- 英文译文与中文文章放在同一目录，文件名为 `<slug>.en.md`（如 `content/docs/url-state/component-library-publishing.en.md`），slug 自动去掉 `.en` 后缀与中文配对。
+- 英文文件的 frontmatter 以中文为标准：`date/permalink/level/series/tags` 与中文一致，`title/description` 为英文。
+- API 通过 `?lang=en` 请求英文版本：有译文返回英文（`lang:"en"`），无译文回退中文（`isFallback:true`）；不传 `lang` 或传其他值（如 `ja`）时始终返回中文，行为与旧版一致。
+- 响应新增字段：`lang`（实际语言）、`isFallback`（是否回退）、`hasTranslation`（是否存在英文译文）。
 
 ### Frontmatter 格式
 

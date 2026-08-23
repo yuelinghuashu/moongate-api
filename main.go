@@ -27,7 +27,7 @@ func main() {
 	}
 
 	// 3. 创建路由
-	docsHandler := api.NewDocsHandler(contentStore.Docs, contentStore.DocsBySlug)
+	docsHandler := api.NewDocsHandler(contentStore.Docs, contentStore.DocsBySlug, contentStore.DocsEn)
 	aboutHandler := api.NewAboutHandler(contentStore.About, contentStore.AboutBySlug)
 
 	r := gin.Default()

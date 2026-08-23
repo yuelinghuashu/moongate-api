@@ -34,8 +34,10 @@ func ParseMarkdown[T any](filePath string) (T, error) {
 	}
 
 	// 4. 提取文件名作为 Slug（去掉扩展名）
+	// 英文译文文件名形如 <slug>.en.md，去掉 .en 后缀以便与中文文章共享同一 slug
 	baseName := filepath.Base(filePath)
 	slug := strings.TrimSuffix(baseName, filepath.Ext(baseName))
+	slug = strings.TrimSuffix(slug, ".en")
 
 	// 5. 转换 Markdown 到 HTML
 	htmlContent := mdToHTML(body)

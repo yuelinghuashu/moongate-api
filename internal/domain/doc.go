@@ -26,6 +26,11 @@ type Doc struct {
 	Series      *string   `yaml:"series" json:"series"`           // 所属系列，nil 表示无系列
 	Tags        []string  `yaml:"tags" json:"tags"`               // 标签列表，用于分类
 	Content     string    `json:"content"`                        // 正文 HTML（来自 Markdown 转换）
+
+	// 以下字段为 API 响应时按请求语言填充（不参与 YAML frontmatter 解析）
+	Lang           string `json:"lang"`           // 实际返回内容的语言：zh | en
+	IsFallback     bool   `json:"isFallback"`     // 请求语言无译文时回退到中文（或反向兜底）
+	HasTranslation bool   `json:"hasTranslation"` // 该 slug 是否存在英文译文
 }
 
 func (d *Doc) SetSlug(slug string) {
@@ -77,6 +82,9 @@ type DocSummary struct {
 	Level       Level     `json:"level"`
 	Series      *string   `json:"series"`
 	Tags        []string  `json:"tags"`
+	Lang        string    `json:"lang"`           // 实际返回内容的语言：zh | en
+	IsFallback  bool      `json:"isFallback"`     // 请求语言无译文时回退到中文
+	HasTranslation bool   `json:"hasTranslation"` // 该 slug 是否存在英文译文
 }
 
 // SeriesGroup 系列分组（用于 API 响应）

@@ -53,6 +53,31 @@ func setupDocsTestRouter() *gin.Engine {
 		Content:     "<p>Advanced Go content</p>",
 	}
 
+	// 英文译文：go-tutorial 有英文版，vue-guide / advanced-go 无英文版
+	doc1En := &domain.Doc{
+		Title:       "Go Tutorial (EN)",
+		Description: "Learn Go programming (EN)",
+		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
+		Permalink:   "/docs/go-tutorial",
+		Slug:        "go-tutorial",
+		Level:       domain.LevelP1,
+		Series:      stringPtr("go-series"),
+		Tags:        []string{"Go", "Tutorial"},
+		Content:     "<p>Go tutorial content (EN)</p>",
+	}
+
+	// 仅英文存在的文档（无中文配对）：测试兜底逻辑
+	docEnOnly := &domain.Doc{
+		Title:       "English Only Doc",
+		Description: "No Chinese version",
+		Date:        time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+		Permalink:   "/docs/en-only",
+		Slug:        "en-only",
+		Level:       domain.LevelP4,
+		Tags:        []string{"English"},
+		Content:     "<p>English only content</p>",
+	}
+
 	store := map[string]*domain.Doc{
 		doc1.Permalink: doc1,
 		doc2.Permalink: doc2,
@@ -63,8 +88,12 @@ func setupDocsTestRouter() *gin.Engine {
 		doc2.Slug: doc2,
 		doc3.Slug: doc3,
 	}
+	storeEn := map[string]*domain.Doc{
+		doc1En.Slug: doc1En,
+		docEnOnly.Slug: docEnOnly,
+	}
 
-	handler := NewDocsHandler(store, storeBySlug)
+	handler := NewDocsHandler(store, storeBySlug, storeEn)
 	r.GET("/api/docs", handler.GetDocs)
 	r.GET("/api/docs/:slug", handler.GetDocBySlug)
 
@@ -376,5 +405,268 @@ func TestGetDocBySlug_NotFound(t *testing.T) {
 	w := performRequest(r, "GET", "/api/docs/nonexistent")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// ==================== 语言（lang）相关测试 ====================
+
+func TestGetDocBySlug_LangEnglish(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	w := performRequest(r, "GET", "/api/docs/go-tutorial?lang=en")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var doc domain.Doc
+	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if doc.Title != "Go Tutorial (EN)" {
+		t.Errorf("Title = %q, want %q", doc.Title, "Go Tutorial (EN)")
+	}
+	if doc.Lang != "en" {
+		t.Errorf("Lang = %q, want %q", doc.Lang, "en")
+	}
+	if doc.IsFallback {
+		t.Error("IsFallback = true, want false (English version exists)")
+	}
+	if !doc.HasTranslation {
+		t.Error("HasTranslation = false, want true")
+	}
+}
+
+func TestGetDocBySlug_LangEnglishFallbackToChinese(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	// vue-guide 无英文译文，lang=en 应回退中文并标记
+	w := performRequest(r, "GET", "/api/docs/vue-guide?lang=en")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var doc domain.Doc
+	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if doc.Title != "Vue Guide" {
+		t.Errorf("Title = %q, want %q", doc.Title, "Vue Guide")
+	}
+	if doc.Lang != "zh" {
+		t.Errorf("Lang = %q, want %q", doc.Lang, "zh")
+	}
+	if !doc.IsFallback {
+		t.Error("IsFallback = false, want true (no English version)")
+	}
+	if doc.HasTranslation {
+		t.Error("HasTranslation = true, want false")
+	}
+}
+
+func TestGetDocBySlug_DefaultLangHasTranslationFlag(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	// 默认（无 lang 参数）行为不变，但应标记存在英文译文
+	w := performRequest(r, "GET", "/api/docs/go-tutorial")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var doc domain.Doc
+	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if doc.Title != "Go Tutorial" {
+		t.Errorf("Title = %q, want %q", doc.Title, "Go Tutorial")
+	}
+	if doc.Lang != "zh" {
+		t.Errorf("Lang = %q, want %q", doc.Lang, "zh")
+	}
+	if doc.IsFallback {
+		t.Error("IsFallback = true, want false (default language)")
+	}
+	if !doc.HasTranslation {
+		t.Error("HasTranslation = false, want true")
+	}
+}
+
+func TestGetDocBySlug_EnglishOnlyFallback(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	// en-only 无中文配对：默认语言下应兜底返回英文而非 404
+	w := performRequest(r, "GET", "/api/docs/en-only")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var doc domain.Doc
+	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if doc.Title != "English Only Doc" {
+		t.Errorf("Title = %q, want %q", doc.Title, "English Only Doc")
+	}
+	if doc.Lang != "en" {
+		t.Errorf("Lang = %q, want %q", doc.Lang, "en")
+	}
+	if !doc.IsFallback {
+		t.Error("IsFallback = false, want true (no Chinese version)")
+	}
+}
+
+func TestGetDocsList_LangEnglish(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	w := performRequest(r, "GET", "/api/docs?lang=en")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Data  []domain.DocSummary `json:"data"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.Total != 3 {
+		t.Errorf("Total = %d, want 3", resp.Total)
+	}
+
+	// 按日期倒序：advanced-go, vue-guide, go-tutorial
+	en := resp.Data[2] // go-tutorial 有英文译文
+	if en.Title != "Go Tutorial (EN)" {
+		t.Errorf("go-tutorial Title = %q, want %q", en.Title, "Go Tutorial (EN)")
+	}
+	if en.Lang != "en" || en.IsFallback || !en.HasTranslation {
+		t.Errorf("go-tutorial lang flags = {lang:%s fallback:%v hasTrans:%v}, want {en false true}",
+			en.Lang, en.IsFallback, en.HasTranslation)
+	}
+
+	zh := resp.Data[1] // vue-guide 无英文译文
+	if zh.Title != "Vue Guide" {
+		t.Errorf("vue-guide Title = %q, want %q", zh.Title, "Vue Guide")
+	}
+	if zh.Lang != "zh" || !zh.IsFallback || zh.HasTranslation {
+		t.Errorf("vue-guide lang flags = {lang:%s fallback:%v hasTrans:%v}, want {zh true false}",
+			zh.Lang, zh.IsFallback, zh.HasTranslation)
+	}
+}
+
+func TestGetDocsList_IncludeContentLangEnglish(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	w := performRequest(r, "GET", "/api/docs?content=true&lang=en")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Data []domain.Doc `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(resp.Data) != 3 {
+		t.Fatalf("Data length = %d, want 3", len(resp.Data))
+	}
+	en := resp.Data[2] // go-tutorial
+	if !strings.Contains(en.Content, "(EN)") {
+		t.Errorf("go-tutorial Content should be English, got %q", en.Content)
+	}
+	if en.Lang != "en" {
+		t.Errorf("go-tutorial Lang = %q, want %q", en.Lang, "en")
+	}
+}
+
+func TestGetDocsList_DefaultLangBackwardCompatible(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	// 不带 lang 参数时，标题/内容与改造前一致
+	w := performRequest(r, "GET", "/api/docs")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Data  []domain.DocSummary `json:"data"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.Total != 3 {
+		t.Errorf("Total = %d, want 3", resp.Total)
+	}
+	if resp.Data[2].Title != "Go Tutorial" {
+		t.Errorf("go-tutorial Title = %q, want %q", resp.Data[2].Title, "Go Tutorial")
+	}
+	if resp.Data[2].Lang != "zh" {
+		t.Errorf("go-tutorial Lang = %q, want %q", resp.Data[2].Lang, "zh")
+	}
+}
+
+func TestGetDocs_SeriesGroupLangEnglish(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	w := performRequest(r, "GET", "/api/docs?group=series&lang=en")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var groups []domain.SeriesGroup
+	if err := json.Unmarshal(w.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(groups) != 2 {
+		t.Fatalf("Groups length = %d, want 2", len(groups))
+	}
+	// go-series 组内 go-tutorial 应显示英文标题
+	found := false
+	for _, g := range groups {
+		if g.Slug != "go-series" {
+			continue
+		}
+		for _, doc := range g.Docs {
+			if doc.Slug == "go-tutorial" && doc.Title == "Go Tutorial (EN)" && doc.Lang == "en" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("go-series 组内 go-tutorial 应为英文标题且 Lang=en")
+	}
+}
+
+func TestGetDocs_SearchInEnglish(t *testing.T) {
+	r := setupDocsTestRouter()
+
+	// lang=en 时搜索作用于英文标题/摘要
+	w := performRequest(r, "GET", "/api/docs?lang=en&search=learn&searchMode=description")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Data  []domain.DocSummary `json:"data"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.Total != 1 {
+		t.Errorf("Total = %d, want 1", resp.Total)
+	}
+	if len(resp.Data) != 1 || resp.Data[0].Title != "Go Tutorial (EN)" {
+		t.Errorf("Data = %+v, want [Go Tutorial (EN)]", resp.Data)
 	}
 }
