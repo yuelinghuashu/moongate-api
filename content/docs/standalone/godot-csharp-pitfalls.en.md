@@ -1,10 +1,10 @@
 ---
-title: 'Godot 4 + C# Pitfall Notes: Five Deep Traps, with a Cheat Sheet and Minimal Reproductions'
+title: "Godot 4 + C# Pitfall Notes: Five Deep Traps, with a Cheat Sheet and Minimal Reproductions"
 description: Five of the most subtle Godot 4 + C# traps (script loading, config overwrites, build pollution, test runs, naming conflicts), with source-level root-cause analysis, a cheat sheet, and engineering scaffolding — for developers who can already compile and run.
 date: 2026-08-23
 permalink: 4ecf940a-cff8-4b29-8b31-e72d193db8a7
 level: P5
-series: ''
+series: ""
 tags:
   - Godot
   - C#
@@ -12,6 +12,7 @@ tags:
   - Compiler
   - Engineering
 ---
+
 > Environment: Godot 4.7.2 (mono) / .NET SDK 9 / C# (net8.0) / Linux
 >
 > 🎯 Audience: **developers who can already compile and run a Godot C# project and are currently debugging script loading or build issues**. Beginners: follow the official "Hello World" tutorial first, then come back. This article assumes you know your way around csproj files and a terminal; sections with unfamiliar terms can be skipped without losing the main thread.
@@ -30,7 +31,7 @@ tags:
 | :-- | :----------------------------------------- | :----------------------------------------------- | :----------------------------------------------------------------------------------- |
 | 1   | Created/renamed a C# script                | Script "class not found / does not inherit Node" | **Filename (case-sensitive) must exactly match the class name (PascalCase-aligned)** |
 | 2   | Edited project.godot externally            | Config silently overwritten, clicks dead         | **Close the editor before editing project.godot**                                    |
-| 3   | Built repeatedly / built while editor open | "Duplicate attribute CS0579"                     | **Close editor + exclude .godot/ in csproj**                                         |
+| 3   | Built repeatedly / built while editor open | "Duplicate attribute CS0579"                     | **Close editor + exclude sibling projects' bin/obj in csproj**                       |
 | 4   | Ran unit tests (xUnit etc.)                | "You must install or update .NET"                | **Add `<RollForward>LatestMajor</RollForward>` to test projects**                    |
 | 5   | Wrote a `Timer` variable                   | CS0104 ambiguous reference                       | **Fully qualify `Godot.Timer`**, or `<ImplicitUsings>disable</ImplicitUsings>`       |
 
@@ -119,11 +120,11 @@ obj/
 
 **Symptom**: the autoload script won't start; headless runs fail the same way:
 
-```
+```text
 ERROR: Failed to instantiate an autoload, script 'res://autoload/game_manager.cs' does not inherit from 'Node'.
 ```
 
-```
+```text
 ERROR: Cannot instantiate C# script because the associated class could not be found.
 Make sure the script exists and contains a class definition with a name that matches
 the filename of the script exactly (it's case-sensitive).
@@ -173,7 +174,7 @@ git mv autoload/game_manager.cs autoload/GameManager.cs   # just align the filen
 
 **Symptom**: you press F5 in the editor and nothing is clickable; the log has one line:
 
-```
+```text
 ERROR: System.NullReferenceException ... at GameManager.Instance...
 ```
 
@@ -183,9 +184,9 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 1. Open the Godot editor and load the project
 2. Modify `project.godot` externally (e.g. add an `[autoload]` section)
-3. Editor saves/exits → the on-disk file is overwritten by the stale in-memory copy, your changes vanish
+3. The editor saves the project from the editor side (e.g. applying a change in the Project Settings window, or setting a main scene) → the on-disk file is overwritten by the stale in-memory copy, your changes vanish
 
-**Root cause**: the editor holds an in-memory copy of `project.godot` while a project is open; when you modify the file on disk, the editor writes back from its own stale copy — **your config is silently overwritten with no warning at all** (nothing to do with version control; pure editor behavior).
+**Root cause**: the editor holds an in-memory copy of `project.godot` while a project is open; whenever the project settings are saved from the editor, it writes back from its own stale copy — **external changes are overwritten by the stale in-memory copy**. Since Godot 4.x (verified on 4.7.2), the editor usually warns when it detects the file changed on disk: when the editor window regains focus it pops up a "Files have been modified outside Godot" dialog offering "Reload from disk" or "Ignore external changes". **But the warning does not block later saves** — if you ignore the dialog and then save any project setting from the editor (including clicking "Ignore external changes" in that dialog), the external changes are still silently discarded. Quitting the editor does not write `project.godot` back by itself (nothing to do with version control; pure editor behavior).
 
 **Fix (safe modification workflow)**:
 
@@ -204,22 +205,24 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 **Symptom**: `dotnet build` fails reliably, pointing at generated files under `.godot/mono/temp/obj/`:
 
-```
+```text
 error CS0579: Duplicate 'System.Reflection.AssemblyCompanyAttribute' attribute
 error CS0579: Duplicate 'global::System.Runtime.Versioning.TargetFrameworkAttribute' attribute
 ```
 
-**Minimal reproduction**:
+**Minimal reproduction** (multi-project; verified on 4.7.2 + .NET SDK 9/10):
 
-1. Project uses Godot.NET.Sdk (intermediates land in `.godot/mono/temp/obj`)
-2. First build succeeds (generates `*.AssemblyInfo.cs`)
-3. Second build → the previous round's generated files get swept into compilation by the default `**/*.cs` glob, duplicating what the SDK generates this time → CS0579
-4. If the Godot editor is open (it auto-builds), it races the CLI on the same directory, worsening the pollution
+1. A solution root contains a Godot project (Godot.NET.Sdk, intermediates in `.godot/mono/temp/obj`) and a sibling project, e.g. `tests/` with plain Microsoft.NET.Sdk
+2. Build the solution → the sibling's generated files land in `tests/obj/**`
+3. Build the solution again → the Godot project's default `**/*.cs` glob sweeps in the sibling's leftover `tests/obj/**/*.cs` (generated `AssemblyInfo.cs`, global usings, etc.), duplicating what the SDK generates this time → CS0579, with errors pointing at `.godot/mono/temp/obj/`
+4. If the Godot editor is open (it auto-builds), it races the CLI on the same directory, worsening the situation
 
 <details>
 <summary>🔧 Deep dive: root cause (source-level) — skippable for beginners; platforms without folding support will just show it inline</summary>
 
-Godot.NET.Sdk redirects `BaseIntermediateOutputPath` to `.godot/mono/temp/obj` but doesn't sync that into MSBuild's default exclude list — so generated files get double-collected by the project's own glob. This is a design flaw at the SDK level; clearing caches only treats the symptom.
+A project's default `**/*.cs` compile glob includes every `.cs` file under the project folder, minus `$(DefaultItemExcludes)` and hidden directories. The Godot project's own intermediates are safe: `DefaultItemExcludes` automatically includes `$(BaseIntermediateOutputPath)/**` — which Godot.NET.Sdk redirects to `.godot/mono/temp/obj/` — so a single Godot project never re-collects its own generated files (verified: the exclude is present in .NET SDK 5.0 through 10.0).
+
+The real trap is sibling projects: their leftover `bin/`/`obj/` generated files (`tests/obj/**` etc.) are not covered by the Godot project's excludes, so they get swept into its compilation and duplicate the assembly attributes the SDK generates this round. The errors point at `.godot/mono/temp/obj/`, which is misleading. Clearing caches only treats the symptom.
 
 </details>
 
@@ -274,13 +277,13 @@ kill -CONT <PID>         # resume
 
 > 💡 We verified `DefaultItemExcludes` works on our setup; still, using it together with `Compile Remove` as **belt and suspenders** is recommended (if an older Godot.NET.Sdk doesn't honor the property, `Compile Remove` has your back). If the excludes still don't take effect: with the SDK shorthand (`<Project Sdk="...">`) the project body is already positioned before default-item evaluation; with explicit `<Import>` style projects, place the PropertyGroup after the Sdk.props import. **Exclusion mechanics may differ across Godot.NET.Sdk versions — defer to the docs for your version** (we verified traditional excludes on 4.7.2).
 >
-> 📦 **Multi-csproj projects**: if you don't use Directory.Build.props (option ③), every root-level csproj must add the excludes **individually** — the main project's generated outputs (`.godot/**`, `engine/obj/**`) can be swept in by other projects' default globs.
+> 📦 **Multi-csproj projects**: if you don't use Directory.Build.props (option ③), every root-level csproj must add the excludes **individually** — a sibling's generated outputs (`tests/obj/**`, `engine/obj/**`, etc.) can be swept in by the Godot project's default glob (`.godot/**` itself is already excluded as a hidden directory on current .NET SDKs).
 
 > 📤 **Export scenario**: to package, use `godot --headless --export-release <preset>` (you must configure an export preset in the editor first). Note: a headless export **also triggers a C# build internally** (via the editor build callback), so the concurrent-write risk with a GUI editor still exists — **close the GUI editor before exporting** too.
 
 (There's also a community trick of symlinking `.godot/mono/temp` to `/tmp` to isolate it; we haven't verified it, so we won't recommend it.)
 
-✅ **TL;DR**: the build pollution comes from Godot.NET.Sdk's intermediate directory not being in the default excludes; the most reliable fix is "close the editor before building + explicit csproj excludes".
+✅ **TL;DR**: in multi-project solutions, a sibling project's leftover `bin/`/`obj/` files get swept into the Godot project's compile glob and duplicate its assembly attributes (the errors misleadingly point at `.godot/mono/temp/obj/`); the most reliable fix is "close the editor before building + exclude sibling projects' folders in csproj".
 
 ---
 

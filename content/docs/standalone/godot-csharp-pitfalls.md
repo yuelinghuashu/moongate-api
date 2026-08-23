@@ -30,7 +30,7 @@ tags:
 | :-- | :----------------------------- | :--------------------------- | :-------------------------------------------------------------------- |
 | 1   | 新建/重命名了一个 C# 脚本      | 脚本"找不到类 / 不继承 Node" | **文件名（含大小写）必须与类名完全一致（PascalCase 对齐）**           |
 | 2   | 外部编辑器修改了 project.godot | 配置被旧副本覆盖、点击全失效 | **改 project.godot 前先关编辑器**                                     |
-| 3   | 多次构建 / 编辑器开着时构建    | 构建报"特性重复 CS0579"      | **关编辑器 + csproj 排除 .godot/**                                    |
+| 3   | 多次构建 / 编辑器开着时构建    | 构建报"特性重复 CS0579"      | **关编辑器 + csproj 排除兄弟项目 bin/obj**                            |
 | 4   | 运行单元测试（xUnit 等）       | 提示安装或更新 .NET          | **测试项目加 `<RollForward>LatestMajor</RollForward>`**               |
 | 5   | 代码里写了 `Timer` 变量        | 编译报 Timer 歧义 CS0104     | **显式 `Godot.Timer`**，或 `<ImplicitUsings>disable</ImplicitUsings>` |
 
@@ -183,9 +183,9 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 1. 打开 Godot 编辑器加载项目
 2. 外部修改 `project.godot`（比如加一个 `[autoload]` 段）
-3. 编辑器保存/退出 → 磁盘文件被旧内存副本覆盖，你的修改消失
+3. 编辑器侧发生保存（如在项目设置面板 Apply 修改、设置主场景）→ 磁盘文件被旧内存副本覆盖，你的修改消失（注意：仅退出编辑器本身不会写回 project.godot）
 
-**根因**：编辑器在项目打开期间持有 `project.godot` 的内存副本，外部修改磁盘后，编辑器以自己的旧副本为准写回——**配置被旧内存副本静默覆盖，无任何提示**（与版本控制无关，纯编辑器行为）。
+**根因**：编辑器在项目打开期间持有 `project.godot` 的内存副本；只要编辑器侧发生保存，就以旧副本为准写回——**外部修改被旧内存副本覆盖**。Godot 4.x（4.7.2 实测）在编辑器窗口获焦、检测到文件被外部改动时，通常会弹出 "Files have been modified outside Godot" 对话框（Reload from disk / Ignore external changes）；**但该提示不拦截后续保存**——无视提示直接进行任何编辑器侧保存（包括在对话框里选 "Ignore external changes"），外部修改仍会被静默丢弃。仅退出编辑器不会写回 project.godot（与版本控制无关，纯编辑器行为）。
 
 **解法（安全修改流程）**：
 
@@ -209,17 +209,19 @@ error CS0579: “System.Reflection.AssemblyCompanyAttribute”特性重复
 error CS0579: “global::System.Runtime.Versioning.TargetFrameworkAttribute”特性重复
 ```
 
-**最小复现**：
+**最小复现**（多项目；4.7.2 + .NET SDK 9/10 实测）：
 
-1. 项目含 Godot.NET.Sdk（中间产物在 `.godot/mono/temp/obj`）
-2. 构建一次成功（生成 `*.AssemblyInfo.cs`）
-3. 再次构建 → 上一轮的生成文件被默认通配符 `**/*.cs` 扫进编译，与 SDK 本次生成的重复 → CS0579
-4. 若 Godot 编辑器开着（会自动构建），与 CLI 并发抢写同一目录，污染加剧
+1. 解决方案根目录同时含一个 Godot 项目（Godot.NET.Sdk，中间产物在 `.godot/mono/temp/obj`）和一个兄弟项目，如 `tests/`（普通 Microsoft.NET.Sdk 类库）
+2. 构建解决方案 → 兄弟项目的生成文件落在 `tests/obj/**`
+3. 再次构建解决方案 → Godot 项目的默认通配符 `**/*.cs` 把兄弟项目残留的 `tests/obj/**/*.cs`（生成的 `AssemblyInfo.cs`、全局 using 等）扫进编译，与 SDK 本次生成的重复 → CS0579，报错指向 `.godot/mono/temp/obj/`
+4. 若 Godot 编辑器开着（会自动构建），与 CLI 并发抢写同一目录，局面更糟
 
 <details>
 <summary>🔧 进阶：根因（源码级）——新手可跳过；平台不支持折叠时会直接展示</summary>
 
-Godot.NET.Sdk 把 `BaseIntermediateOutputPath` 重定向到 `.godot/mono/temp/obj`，但没有同步到 MSBuild 的默认排除列表——生成文件被自己的项目通配符重复收录。这是引擎层面的设计问题，清缓存治标不治本。
+项目的默认 `**/*.cs` 编译通配符收录项目目录下所有 .cs 文件，仅减去 `$(DefaultItemExcludes)` 与隐藏目录。Godot 项目自身的中间产物是安全的：`DefaultItemExcludes` 自动包含 `$(BaseIntermediateOutputPath)/**`——Godot.NET.Sdk 恰好把该属性重定向到 `.godot/mono/temp/obj/`——所以单个 Godot 项目永远不会重复收录自己的生成文件（实测：.NET SDK 5.0–10.0 均含此排除）。
+
+真正的坑在兄弟项目：它们的残留 `bin/`/`obj/` 生成文件（`tests/obj/**` 等）不在 Godot 项目的排除范围内，被扫进其编译后与 SDK 本次生成的程序集特性重复。报错指向 `.godot/mono/temp/obj/` 具有误导性。清缓存治标不治本。
 
 </details>
 
@@ -274,13 +276,13 @@ kill -CONT <PID>         # 恢复
 
 > 💡 本项目实测 `DefaultItemExcludes` 生效；仍推荐与 `Compile Remove` **双保险**使用（若旧版 Godot.NET.Sdk 未尊重该属性，`Compile Remove` 兜底）。若排除仍未生效：Sdk 简写语法（`<Project Sdk="...">`）下项目体位置已满足默认项求值顺序；显式 `<Import>` 风格项目请把该 PropertyGroup 放在 Sdk.props 导入之后。**Godot.NET.Sdk 各版本的排除机制可能有差异，以你所用版本文档为准**（本项目实测 4.7.2 下传统排除生效）。
 >
-> 📦 **多 csproj 项目**：若不用 Directory.Build.props（方案 ③），则每个根级 csproj 需**各自添加**排除——主项目的生成产物（`.godot/**`、`engine/obj/**`）可能被其他项目的默认通配符扫到。
+> 📦 **多 csproj 项目**：若不用 Directory.Build.props（方案 ③），则每个根级 csproj 需**各自添加**排除——兄弟项目的生成产物（`tests/obj/**`、`engine/obj/**` 等）可能被 Godot 项目的默认通配符扫到（`.godot/**` 本身在当前 .NET SDK 上已作为隐藏目录被默认排除）。
 
 > 📤 **导出场景**：需要打包时用 `godot --headless --export-release <预设>`（需先在编辑器中配置导出预设）。注意：headless 导出内部**同样会触发 C# 构建**（走编辑器构建回调），与 GUI 编辑器并发写 `.godot/mono` 的风险依然存在——**导出前仍建议关闭 GUI 编辑器**。
 
 （社区还有把 `.godot/mono/temp` 软链到 `/tmp` 隔离的方案，我们未实测验证，不作推荐。）
 
-✅ **一句话总结**：构建污染来自 Godot.NET.Sdk 的中间目录未进默认排除；最稳的解法是"关编辑器再构建 + csproj 显式排除"。
+✅ **一句话总结**：多项目解决方案里，兄弟项目的残留 bin/obj 文件被 Godot 项目的编译通配符扫入并重复生成程序集特性（报错误导性地指向 `.godot/mono/temp/obj/`）；最稳的解法是"关编辑器再构建 + csproj 排除兄弟项目目录"。
 
 ---
 
