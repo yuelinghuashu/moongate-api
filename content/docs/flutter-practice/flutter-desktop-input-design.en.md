@@ -2,7 +2,6 @@
 title: Flutter Desktop Input Design — Where Does the Enter Key Actually Go?
 description: 'From "pressing Enter does nothing" to "the numpad Enter still inserts a newline" — all these desktop input field pitfalls trace back to the same root cause: the Focus Chain. A deep dive into LogicalKeyboardKey, Shift+Enter semantics, and input history lifecycle.'
 date: 2026-08-13 23:00:00
-permalink: 66503c7c-d972-44cc-89d1-a8df5262c224
 level: P3
 series: flutter-practice
 tags:
@@ -54,13 +53,13 @@ Once an event is `handled`, it **no longer bubbles up** to the outer `Focus`. Yo
 
 The word "bubbling" naturally makes frontend readers think of **JS DOM event bubbling**. The two do share a commonality: the event starts at a point, propagates up a chain, and can be stopped midway if consumed. But the details of "propagation path" and "midway stop" are **completely different**:
 
-|  | JS DOM events | Flutter keyboard events |
-| --- | --- | --- |
-| What determines the propagation path | **DOM tree** | **Focus Chain** |
-| Is visual containment = propagation path? | Yes | No (focus relation ≠ containment relation) |
-| Propagation direction | capture down → target → bubble up | focus node → up the focus chain |
-| Midway stop | `stopPropagation()` | return `KeyEventResult.handled` |
-| Key difference | any DOM ancestor receives the event | inner node can **consume early**; the event is cut off before bubbling reaches ancestors |
+|                                           | JS DOM events                       | Flutter keyboard events                                                                  |
+| ----------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| What determines the propagation path      | **DOM tree**                        | **Focus Chain**                                                                          |
+| Is visual containment = propagation path? | Yes                                 | No (focus relation ≠ containment relation)                                               |
+| Propagation direction                     | capture down → target → bubble up   | focus node → up the focus chain                                                          |
+| Midway stop                               | `stopPropagation()`                 | return `KeyEventResult.handled`                                                          |
+| Key difference                            | any DOM ancestor receives the event | inner node can **consume early**; the event is cut off before bubbling reaches ancestors |
 
 In JS, an outer `div` wrapping an inner `input` **always** receives the event — visual containment is the propagation path, so intercepting at the outer layer is natural. But in Flutter, **the event travels along the focus chain, not the widget containment tree**: the `EditableText` inside the TextField is the current focus node, and the event starts there and propagates up the focus chain. The outer `Focus`, as an ancestor of `EditableText`, **is indeed on the focus chain** — but the problem is that `EditableText` returns `KeyEventResult.handled` when handling Enter, so **the event bubble is cut off before it reaches the outer `Focus`**. That's the real reason "wrapping the TextField with an outer Focus fails to intercept Enter": it's not that the node is off the chain, but that the event is already consumed before it arrives.
 
@@ -98,10 +97,10 @@ Same Enter key — why does the letter area work but the arrow-key area doesn't?
 
 Because in Flutter, these two "Enters" are **different key codes**:
 
-| Key | `LogicalKeyboardKey` |
-| --- | --- |
-| Main keyboard Enter | `enter` |
-| Enter above the arrow-key area / on the numpad | `numpadEnter` |
+| Key                                            | `LogicalKeyboardKey` |
+| ---------------------------------------------- | -------------------- |
+| Main keyboard Enter                            | `enter`              |
+| Enter above the arrow-key area / on the numpad | `numpadEnter`        |
 
 And my check was:
 
@@ -274,13 +273,13 @@ These details almost never appear on mobile — mobile has only one soft keyboar
 
 ## Glossary
 
-| Term | Description |
-| --- | --- |
-| `LogicalKeyboardKey` | Flutter's "logical key" abstraction (after key-position + layout mapping), e.g., `enter` / `numpadEnter` |
-| `PhysicalKeyboardKey` | Physical key position (USB HID code), independent of keyboard layout |
-| `KeyEventResult` | Keyboard event handler result: `handled` (consumed, no longer propagates) / `ignored` (passed through, continues propagating) |
-| Focus Chain | The path along which keyboard events propagate from "focus node → ancestors", unrelated to widget containment |
-| `HardwareKeyboard` | Flutter's maintained global keyboard state (keys / modifiers / lock keys) query entry |
+| Term                  | Description                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `LogicalKeyboardKey`  | Flutter's "logical key" abstraction (after key-position + layout mapping), e.g., `enter` / `numpadEnter`                      |
+| `PhysicalKeyboardKey` | Physical key position (USB HID code), independent of keyboard layout                                                          |
+| `KeyEventResult`      | Keyboard event handler result: `handled` (consumed, no longer propagates) / `ignored` (passed through, continues propagating) |
+| Focus Chain           | The path along which keyboard events propagate from "focus node → ancestors", unrelated to widget containment                 |
+| `HardwareKeyboard`    | Flutter's maintained global keyboard state (keys / modifiers / lock keys) query entry                                         |
 
 ---
 

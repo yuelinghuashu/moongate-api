@@ -2,8 +2,7 @@
 title: "Vue 3 Teleport Component Unit Testing Guide: 5 jsdom Traps and 2 Bugs Caught Along the Way"
 description: "While writing 204 unit tests for our component library Moongate Vue, Teleport components kept tripping us up in the jsdom environment — 5 traps, plus 2 hidden bugs uncovered along the way. A full post-mortem with reproducible minimal examples."
 date: 2026-08-05
-permalink: 59513f20-2b16-4652-89b3-1d9ba7cfac05
-series: ''
+series: ""
 level: P4
 tags:
   - Vue
@@ -31,7 +30,9 @@ After digging in, we found it wasn't a coincidence — it was the inevitable res
 
 ### Trap 1: Teleport Content Sits at the Top Level of body — the Wrapper Can't Find It
 
-**Symptom**: `wrapper.find('.mg-modal-overlay')` returns empty, even when the component is mounted with `attachTo: document.body`.
+**Symptom**:
+
+`wrapper.find('.mg-modal-overlay')` returns empty, even when the component is mounted with `attachTo: document.body`.
 
 **Root cause**: Teleport's target element is `body`, and its rendered content becomes a **direct child of `body`** — it's **not inside the `wrapper.element` subtree**. Even though you can reach the component instance via `wrapper.vm`, the `v-if` content rendered by Teleport lives outside the DOM tree managed by the wrapper.
 
@@ -57,7 +58,7 @@ expect(document.body.querySelector(".mg-modal-overlay")).not.toBeNull()
 
 ### Trap 2: Relying on Auto-Unmount Triggers `insertBefore on null`
 
-**Symptom**: all assertions pass, but Vitest throws an async error when it finishes:
+**Symptom**: All assertions pass, but Vitest throws an async error when it finishes:
 
 ```bash
 TypeError: Cannot read properties of null (reading 'insertBefore')
@@ -69,7 +70,7 @@ TypeError: Cannot read properties of null (reading 'insertBefore')
 
 Teleport components trigger this especially easily, because their insertion point (body) is the target **most likely to be cleared** in a test environment.
 
-**Solution**: explicitly unmount the wrapper at the end of the test, so Teleport has a full chance to detach itself:
+**Solution**: Explicitly unmount the wrapper at the end of the test, so Teleport has a full chance to detach itself:
 
 ```ts
 import { mount } from "@vue/test-utils"
@@ -94,7 +95,7 @@ afterEach(async () => {
 
 ### Trap 3: DOM Pollution Between Tests
 
-**Symptom**: the first test renders a Modal, and the second test's query for `.mg-modal-overlay` unexpectedly finds an element **left over from the previous round**; or conversely, the second test can't find what it expects.
+**Symptom**: The first test renders a Modal, and the second test's query for `.mg-modal-overlay` unexpectedly finds an element **left over from the previous round**; or conversely, the second test can't find what it expects.
 
 **Root cause**: Teleport adds content to `document.body`, but the test framework's auto cleanup doesn't necessarily destroy it. Especially when a component holds **module-level caches** (like our `createOverlay` shared container Map), lingering references let the DOM pile up.
 
@@ -107,7 +108,7 @@ afterEach(() => {
 
 Clearing body directly is **problematic**, because Vue still references these nodes internally — the next tick's patch operates on removed nodes and explodes (that's exactly where Trap 2's error comes from).
 
-**Solution**: flush first, then clear:
+**Solution**: Flush first, then clear:
 
 ```ts
 afterEach(async () => {
@@ -136,15 +137,11 @@ afterEach(async () => {
 
 ### Trap 4: Wrong Cleanup Order — Clearing Body First Leaves Vue Without a Parent Node
 
-**Symptom**: oddly, putting `document.body.innerHTML = ''` at the START of `afterEach` causes an error, while putting it at the END works fine.
+**Symptom**: Oddly, putting `document.body.innerHTML = ''` at the START of `afterEach` causes an error, while putting it at the END works fine.
 
 **Root cause**: Vue's scheduler doesn't know the test environment exists. If you clear body before Vue has finished the last tick's DOM patch, the parent node is already null by the time it patches.
 
-The correct cleanup order must be:
-
-```text
-unmount all wrappers / destroyAllOverlays  →  flushPromises (useRealTimers if fake timers are in use)  →  clear body  →  restoreAllMocks
-```
+**Solution**: The correct cleanup order must be: `unmount all wrappers / destroyAllOverlays → flushPromises (useRealTimers if fake timers are in use) → clear body → restoreAllMocks`.
 
 **This is the easiest one to overlook.** Many people (myself included) instinctively think "clearing body — when could that ever be a problem?", and then Vue teaches you otherwise, by crashing.
 
@@ -152,9 +149,11 @@ unmount all wrappers / destroyAllOverlays  →  flushPromises (useRealTimers if 
 
 ### Trap 5: Asserting Events Right After `v-model` Closes, Before the DOM Patch Happens
 
-**Symptom**: after clicking the close button, `wrapper.emitted('update:modelValue')` has a value, but querying `document.body.querySelector('.mg-modal')` right after still finds the element (it's still there).
+**Symptom**: After clicking the close button, `wrapper.emitted('update:modelValue')` has a value, but querying `document.body.querySelector('.mg-modal')` right after still finds the element (it's still there).
 
-**Root cause**: `emit('update:modelValue', false)` is synchronous, but removing Teleport DOM is an **async patch**. The event has been dispatched; the DOM hasn't updated yet.
+**Root cause**:
+
+`emit('update:modelValue', false)` is synchronous, but removing Teleport DOM is an **async patch**. The event has been dispatched; the DOM hasn't updated yet.
 
 **Solution**:
 
@@ -174,13 +173,13 @@ expect(document.body.querySelector(".mg-modal")).toBeNull()
 
 ### Summary: The Golden Rules of Teleport Testing
 
-| Rule | In one sentence |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **Mount** | Always `attachTo: document.body` |
-| **Assert** | Query Teleport content with `document.body.querySelector` |
-| **Unmount** | Explicitly `await wrapper.unmount()`, don't rely on auto cleanup |
+| Rule        | In one sentence                                                                                                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mount**   | Always `attachTo: document.body`                                                                                                                                                   |
+| **Assert**  | Query Teleport content with `document.body.querySelector`                                                                                                                          |
+| **Unmount** | Explicitly `await wrapper.unmount()`, don't rely on auto cleanup                                                                                                                   |
 | **Cleanup** | Unmount → `flushPromises()` (use `useRealTimers()` if fake timers are in use; never `runAllTimersAsync()` or you risk an infinite loop) → clear body. The order cannot be reversed |
-| **Timing** | Events are synchronous, DOM is async — `flushPromises()` before asserting |
+| **Timing**  | Events are synchronous, DOM is async — `flushPromises()` before asserting                                                                                                          |
 
 ---
 
@@ -190,7 +189,7 @@ While writing the tests, failing assertions unexpectedly exposed two hidden defe
 
 ### Bug 1: The Input Component's `change` Event Completely Vanished
 
-**Symptom**: the component declares a `change` event, but no test can ever receive it:
+**Symptom**: The component declares a `change` event, but no test can ever receive it:
 
 ```ts
 // declared in Input.vue
@@ -204,7 +203,7 @@ wrapper.trigger("change")
 expect(wrapper.emitted("change")).toHaveLength(1) // ❌ fails
 ```
 
-**Root cause**: the template only binds `@input`, `@blur`, and `@focus` — **`@change` is missing**. To understand why the event "completely disappears", you first need to understand Vue 3's event passthrough mechanism:
+**Root cause**: The template only binds `@input`, `@blur`, and `@focus` — **`@change` is missing**. To understand why the event "completely disappears", you first need to understand Vue 3's event passthrough mechanism:
 
 > In Vue 3, events listened on in a component's template that are **not declared in `emits`** are passed through to the root element as native events (they go into `$attrs`); **once declared in `emits`**, Vue considers the event explicitly handled by the component and stops passing it through.
 
@@ -223,15 +222,15 @@ So once `change` is declared via `defineEmits`, Vue no longer passes it through 
 />
 ```
 
-**Lesson**: events declared in `defineEmits` without a corresponding handler bound in the template get "swallowed" (neither fired nor passed through). **This rule applies to every component library** — especially components like tables and forms that depend on native event passthrough.
+**Lesson**: Events declared in `defineEmits` without a corresponding handler bound in the template get "swallowed" (neither fired nor passed through). **This rule applies to every component library** — especially components like tables and forms that depend on native event passthrough.
 
 ---
 
 ### Bug 2: Orphaned References in the `createOverlay` Shared Container
 
-**Symptom**: after a test clears body, the next test creates a Message/Toast, and the container query mysteriously fails.
+**Symptom**: After a test clears body, the next test creates a Message/Toast, and the container query mysteriously fails.
 
-**Root cause**: our `createOverlay` caches shared containers in a module-level `Map` (used for stacking messages):
+**Root cause**: Our `createOverlay` caches shared containers in a module-level `Map` (used for stacking messages):
 
 ```ts
 // createOverlay.ts
@@ -250,7 +249,7 @@ function getSharedContainer(containerClass: string) {
 
 After a test runs `document.body.innerHTML = ''`, the container reference in the Map is **already detached from the DOM** (`isConnected === false`), but the cache wasn't cleared. The next test calls `createOverlay`, gets the orphan node, mounts content into it, and can't find it from `document.body` → failure.
 
-**Fix**: add an `isConnected` check to the destroy logic, and provide a synchronous cleanup API:
+**Solution**: Add an `isConnected` check to the destroy logic, and provide a synchronous cleanup API:
 
 ```ts
 // ① If the container may have been removed externally, detach it from the DOM synchronously
@@ -270,7 +269,7 @@ export function destroyAllOverlays(): void {
 }
 ```
 
-**Lesson**: for utilities that mount dynamically (lifecycle managed manually via `createApp`), **never rely solely on "the element exists" to decide whether to reuse it** — you must check whether the element is still connected to the document tree (`isConnected`).
+**Lesson**: For utilities that mount dynamically (lifecycle managed manually via `createApp`), **never rely solely on "the element exists" to decide whether to reuse it** — you must check whether the element is still connected to the document tree (`isConnected`).
 
 ---
 

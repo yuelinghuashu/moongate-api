@@ -21,7 +21,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Title:       "Go Tutorial",
 		Description: "Learn Go programming",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/docs/go-tutorial",
 		Slug:        "go-tutorial",
 		Level:       domain.LevelP1,
 		Series:      stringPtr("go-series"),
@@ -33,7 +32,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Title:       "Vue Guide",
 		Description: "Vue.js framework guide",
 		Date:        time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/docs/vue-guide",
 		Slug:        "vue-guide",
 		Level:       domain.LevelP2,
 		Series:      stringPtr("vue-series"),
@@ -45,7 +43,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Title:       "Advanced Go",
 		Description: "Deep dive into Go concurrency",
 		Date:        time.Date(2025, 3, 20, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/docs/advanced-go",
 		Slug:        "advanced-go",
 		Level:       domain.LevelP3,
 		Series:      stringPtr("go-series"),
@@ -58,7 +55,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Title:       "Go Tutorial (EN)",
 		Description: "Learn Go programming (EN)",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/docs/go-tutorial",
 		Slug:        "go-tutorial",
 		Level:       domain.LevelP1,
 		Series:      stringPtr("go-series"),
@@ -71,29 +67,23 @@ func setupDocsTestRouter() *gin.Engine {
 		Title:       "English Only Doc",
 		Description: "No Chinese version",
 		Date:        time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/docs/en-only",
 		Slug:        "en-only",
 		Level:       domain.LevelP4,
 		Tags:        []string{"English"},
 		Content:     "<p>English only content</p>",
 	}
 
-	store := map[string]*domain.Doc{
-		doc1.Permalink: doc1,
-		doc2.Permalink: doc2,
-		doc3.Permalink: doc3,
-	}
 	storeBySlug := map[string]*domain.Doc{
 		doc1.Slug: doc1,
 		doc2.Slug: doc2,
 		doc3.Slug: doc3,
 	}
 	storeEn := map[string]*domain.Doc{
-		doc1En.Slug: doc1En,
+		doc1En.Slug:   doc1En,
 		docEnOnly.Slug: docEnOnly,
 	}
 
-	handler := NewDocsHandler(store, storeBySlug, storeEn)
+	handler := NewDocsHandler(storeBySlug, storeEn)
 	r.GET("/api/docs", handler.GetDocs)
 	r.GET("/api/docs/:slug", handler.GetDocBySlug)
 

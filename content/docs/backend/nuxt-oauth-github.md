@@ -2,7 +2,6 @@
 title: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境完整版）
 description: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境完整版）
 date: 2026-02-15
-permalink: 87fa418e-f74e-4d83-8d79-01d44761b3eb
 series: backend
 level: P2
 tags:
@@ -115,8 +114,13 @@ GitHubAPI-->>后端: 10. 返回用户数据 (id, login, avatar_url...)
 - Cookie 属性：`HttpOnly`（防 XSS）、`SameSite=Lax`（防 CSRF）、`Secure`（生产环境强制 HTTPS）。
 - 后续请求自动携带该 Cookie，后端通过 `getUserSession(event)` 解密还原数据。
 
-**优点**：无需数据库，适合 Serverless 部署；数据加密防篡改。  
-**缺点**：Cookie 大小限制 4KB；无法主动全局使所有 session 失效。
+#### 优点
+
+无需数据库，适合 Serverless 部署；数据加密防篡改。
+
+#### 缺点
+
+Cookie 大小限制 4KB；无法主动全局使所有 session 失效。
 
 ### 3.2 前端 useUserSession
 
@@ -162,7 +166,9 @@ npx nuxi@latest module add auth-utils
    .env
    ```
 
-**原理**：`.env.example` 作为文档，告诉其他开发者需要哪些环境变量；`.env` 包含真实敏感信息，仅存在于本地。
+**原理**：
+
+`.env.example` 作为文档，告诉其他开发者需要哪些环境变量；`.env` 包含真实敏感信息，仅存在于本地。
 
 ### 4.3 在 GitHub 创建开发环境的 OAuth App
 
@@ -190,7 +196,9 @@ export default defineNuxtConfig({
 })
 ```
 
-**原理**：`runtimeConfig` 自动将 `NUXT_OAUTH_GITHUB_*` 注入对应字段，无需硬编码。
+**原理**：
+
+`runtimeConfig` 自动将 `NUXT_OAUTH_GITHUB_*` 注入对应字段，无需硬编码。
 
 ### 4.5 ### 创建服务端路由处理回调
 
@@ -221,9 +229,13 @@ export default defineOAuthGitHubEventHandler({
 })
 ```
 
-**注意**：以上代码使用了 `requireNuxtAuthSession`，但实际 `nuxt-auth-utils` 模块的 API 可能略有不同，请以[官方文档](https://github.com/Atinux/nuxt-auth-utils)为准。如果模块提供了专门的 `defineOAuthGitHubEventHandler`，建议直接使用。
+#### 注意
 
-**原理**：`defineOAuthGitHubEventHandler` 封装了授权码交换和 token 获取；`setUserSession` 加密数据存入 Cookie。
+以上代码使用了 `requireNuxtAuthSession`，但实际 `nuxt-auth-utils` 模块的 API 可能略有不同，请以[官方文档](https://github.com/Atinux/nuxt-auth-utils)为准。如果模块提供了专门的 `defineOAuthGitHubEventHandler`，建议直接使用。
+
+**原理**：
+
+`defineOAuthGitHubEventHandler` 封装了授权码交换和 token 获取；`setUserSession` 加密数据存入 Cookie。
 
 ### 4.6 前端登录按钮
 
@@ -247,7 +259,9 @@ const loginWithGitHub = () => {
 </template>
 ```
 
-**原理**：`useUserSession` 自动获取用户信息；`navigateTo(..., { external: true })` 触发外部重定向；`clear()` 清除 session Cookie。
+**原理**：
+
+`useUserSession` 自动获取用户信息；`navigateTo(..., { external: true })` 触发外部重定向；`clear()` 清除 session Cookie。
 
 ### 4.7 启动开发服务器
 
@@ -356,7 +370,9 @@ export default defineOAuthGitHubEventHandler({
 })
 ```
 
-**安全说明**：在 store-redirect.post.ts 中增加了路径校验，防止开放重定向漏洞。
+##### 安全说明
+
+在 store-redirect.post.ts 中增加了路径校验，防止开放重定向漏洞。
 
 ### 5.4 水合问题的处理
 
@@ -388,7 +404,9 @@ export default defineOAuthGitHubEventHandler({
 | 开发环境 | `.env` 文件        | 本地文件（已 gitignore）        |
 | 生产环境 | **无** `.env` 文件 | 系统环境变量 / 托管平台 Secrets |
 
-**Nuxt 4 的设计原则**：生产环境不读取 `.env` 文件，所有环境变量必须通过运行环境提供（如 Vercel/Netlify 的环境变量面板、Linux 系统环境变量、Docker 环境变量等）。
+#### Nuxt 4 的设计原则
+
+生产环境不读取 `.env` 文件，所有环境变量必须通过运行环境提供（如 Vercel/Netlify 的环境变量面板、Linux 系统环境变量、Docker 环境变量等）。
 **千万不要将 `.env` 文件上传到服务器**，也不要在构建过程中打包进去。
 
 ### 6.2 创建生产环境的 GitHub OAuth App
@@ -510,7 +528,9 @@ jobs:
             pm2 restart ecosystem.config.js --update-env
 ```
 
-**关键点**：使用 `echo -n` 去除换行符，避免密码末尾被污染导致加密不匹配。
+#### 关键点
+
+使用 `echo -n` 去除换行符，避免密码末尾被污染导致加密不匹配。
 
 ### 6.5 验证生产环境
 
@@ -523,7 +543,8 @@ jobs:
 
 ### 7.1 静态资源 404（CSS/JS 无法加载）
 
-**现象**：页面无样式，控制台大量 `.css`、`.js` 请求 404。  
+**现象**：页面无样式，控制台大量 `.css`、`.js` 请求 404。
+
 **原因**：
 
 - Nuxt 构建后的静态文件（`.output/public/`）未正确同步到服务器。
@@ -534,7 +555,8 @@ jobs:
 
 ### 7.2 `/api/_auth/session` 返回 500
 
-**现象**：登录后无法获取用户信息，接口报错。  
+**现象**：登录后无法获取用户信息，接口报错。
+
 **原因**：
 
 - `NUXT_SESSION_PASSWORD` 未正确传递，或**值末尾包含换行符**（常见于 GitHub Actions 中直接 `echo` 变量）。
@@ -545,7 +567,8 @@ jobs:
 
 ### 7.3 OAuth 回调成功但页面未登录
 
-**现象**：GitHub 跳转回首页，但右上角仍显示“登录”。  
+**现象**：GitHub 跳转回首页，但右上角仍显示“登录”。
+
 **原因**：
 
 - `setUserSession` 未执行（回调路由有误）。
@@ -556,16 +579,20 @@ jobs:
 
 ### 7.4 `redirect_uri_mismatch`
 
-**现象**：GitHub 返回错误“The redirect_uri MUST match the registered callback URL”。  
-**原因**：生产环境使用的回调 URL 未在 GitHub OAuth App 中注册。  
+**现象**：GitHub 返回错误“The redirect_uri MUST match the registered callback URL”。
+
+**原因**：生产环境使用的回调 URL 未在 GitHub OAuth App 中注册。
+
 **解决**：
 
 - 登录 GitHub，进入生产环境 OAuth App 设置，将 `https://你的域名/api/auth/github` 添加到回调 URL 列表。
 
 ### 7.5 登录后 Pinia store 报错
 
-**现象**：控制台出现 `t.$pinia.state.value.xxx is undefined`。  
-**原因**：在 Pinia store 初始化完成前，某个组件试图访问 store 属性（常见于登录后的重定向瞬间）。  
+**现象**：控制台出现 `t.$pinia.state.value.xxx is undefined`。
+
+**原因**：在 Pinia store 初始化完成前，某个组件试图访问 store 属性（常见于登录后的重定向瞬间）。
+
 **解决**：
 
 - 在访问 store 属性前加防御性判断：`store?.xxx ?? defaultValue`。

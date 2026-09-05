@@ -2,7 +2,6 @@
 title: "Vue 3 Component Library TypeScript Props Export: A Deceptively Simple Trap"
 description: "A deep dive into the contract gap between the Vue SFC compiler and TypeScript module resolution, revealing why `export type { ButtonProps } from './Button.vue'` fails in consumer projects — and the complete fix."
 date: 2026-08-18
-permalink: 89d16e92-a29d-4468-9a9c-f3dce28b4524
 series: ''
 level: P5
 tags:
@@ -44,7 +43,7 @@ import type { ButtonProps } from "moongate-vue"
 // ❌ Module '"moongate-vue"' has no exported member 'ButtonProps'
 ```
 
-**The build passed, so why can't consumers get the types?**
+### The build passed, so why can't consumers get the types?
 
 ## The Troubleshooting Path
 
@@ -187,7 +186,9 @@ Confirmed via a minimal reproduction test (vue-tsc 6.0.3 + compiler-sfc 3.5.35 +
 
 > **Note 1**: Vue 3.3+ officially claims `defineProps` can reference externally imported types. In practice, `compiler-sfc` (the Vite build pipeline) can indeed resolve basic cross-file types. But `vue-tsc` (the type-check pipeline) under a `tsconfig.json` with a `"types"` field walks `@vue/language-core`'s SFC module resolution path, which **consistently rejects** cross-file type imports. Since real projects almost always configure `"types": ["vite/client", "node"]` and friends, this difference means in practice: **type checking on the consumer side always fails.**
 
-**Conclusion**: the `T` in `defineProps<T>()` **can only reference types defined in the same file** — even if `compiler-sfc` compiles it during the build, `vue-tsc` errors during type checking. For a component library, both gates must pass for it to count as usable.
+#### Conclusion
+
+the `T` in `defineProps<T>()` **can only reference types defined in the same file** — even if `compiler-sfc` compiles it during the build, `vue-tsc` errors during type checking. For a component library, both gates must pass for it to count as usable.
 
 ### Can `vueCompilerOptions.types` Bypass It?
 
@@ -278,7 +279,9 @@ After the build, `dist/index.d.ts` has **0 `.vue` type references**, so consumer
 
 The `ButtonProps` inside the component (for `defineProps` compilation) and the `ButtonProps` in `types/props.ts` (for external export) are two separate definitions that must be kept in sync manually.
 
-**Decision guide**: for libraries under 50 components, the cost of maintaining two copies by hand is far lower than refactoring the whole project to runtime declarations (`ExtractPropTypes`). If the library is expected to exceed 50 components, adopt the runtime-declaration approach from the start.
+#### Decision guide
+
+for libraries under 50 components, the cost of maintaining two copies by hand is far lower than refactoring the whole project to runtime declarations (`ExtractPropTypes`). If the library is expected to exceed 50 components, adopt the runtime-declaration approach from the start.
 
 ---
 

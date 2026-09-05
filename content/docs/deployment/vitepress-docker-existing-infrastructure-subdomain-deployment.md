@@ -2,7 +2,6 @@
 title: VitePress 文档站接入已有 Docker 基础设施：子域名部署（扩展篇）
 description: 本文记录如何将 VitePress 文档站部署为子域名，并接入已有 docker-compose 管理的动态站点（如 Nuxt 博客），共用同一 Caddy 反向代理。
 date: 2026-06-07
-permalink: 177f4b4d-186b-4162-8969-930042f7b804
 series: deployment
 level: P4
 tags:
@@ -26,13 +25,13 @@ tags:
 
 ## 📌 前置说明
 
-**本文的部署环境**：
+### 本文的部署环境
 
 - **主站点**：Nuxt 构建的个人博客（`moongate.top`），通过 docker-compose 管理（PostgreSQL + Nuxt + Caddy）
 - **文档站**：VitePress 构建的组件库文档，部署到子域名 `vue.moongate.top`
 - **目标**：将文档站容器接入现有的 Caddy 反向代理，复用同一套 Docker 网络和域名基础设施
 
-**如果你是从零开始部署**（没有现有 Caddy、没有 docker-compose）：
+### 如果你是从零开始部署
 
 - 本文部分内容（如网络连接）可简化
 - 直接 `docker run -p 80:80` 即可运行
@@ -451,7 +450,7 @@ VitePress 文档站接入已有 Docker 基础设施的关键步骤：
 4. **Caddy 代理**：在网关 Caddyfile 中添加子域名配置，指定 `root * /docs`
 5. **DNS 解析**：为子域名添加 A 记录
 
-**架构亮点**：
+### 架构亮点
 
 - 双 Caddy 架构：网关 Caddy 处理 HTTPS 和路由，容器内 Caddy 仅服务静态文件
 - 内网通信：容器间通过 Docker 内部网络通信，无需暴露端口到宿主机

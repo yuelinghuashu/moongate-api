@@ -1,7 +1,6 @@
 ---
 title: Flutter 桌面端：输入框设计的细节与边界
 description: 从「第一次回车换行，第二次才提交」这个 bug 说起，深入 Flutter 的 Focus 链、键码区分、Shift+Enter 语义与输入历史持久化。
-permalink: 66503c7c-d972-44cc-89d1-a8df5262c224
 date: 2026-08-13 23:00:00
 series: flutter-practice
 level: P3

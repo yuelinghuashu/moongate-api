@@ -2,7 +2,6 @@
 title: 解决Nuxt Content渲染问题：从基础配置到渲染显示完整指南
 description: 记录了我从零开始配置 @nuxt/content 模块，渲染 Markdown 内容的完整过程。
 date: 2025-12-28
-permalink: 25972ca7-bbc7-412b-820b-9be8ba604057
 series: performance
 level: P2
 tags: 
@@ -128,7 +127,9 @@ pnpm add better-sqlite3
 
 ---
 
-**选择**：方案一适用于任何 Node 版本，对 pnpm 项目通用；方案二更简洁，但需要较高版本的 Node 环境和对实验性特性的接受度。请根据实际情况选择。
+##### 选择
+
+方案一适用于任何 Node 版本，对 pnpm 项目通用；方案二更简洁，但需要较高版本的 Node 环境和对实验性特性的接受度。请根据实际情况选择。
 
 ## 2. 基础配置
 
@@ -156,6 +157,8 @@ export default defineNuxtConfig({
 - ✅ 前端框架无缝集成
 
 ## 代码示例
+
+```
 
 ```javascript
 // 这是一个 JavaScript 示例

@@ -2,7 +2,6 @@
 title: Vue 3 简单组件开发实战：从 Button 组件看 API 设计
 description: 以 Button 这一简单组件为例，深入探讨 Vue 3 组件库的 API 设计哲学，涵盖 Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库的对比，揭示极简 API 背后的设计权衡。
 date: 2026-05-07
-permalink: e6526a2f-4d33-4817-9ef0-1cbfb71ef3e7
 series: moongate-vue
 level: P3
 tags:
@@ -99,7 +98,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 ```
 
-**为什么默认 `type="button"`**？这是从实际项目踩坑中学到的重要决策。如果使用原生 `<button>` 的默认类型 `submit`，当按钮放在 `<form>` 里时，点击会意外提交表单。将其显式默认为 `button` 可避免绝大多数不期望的表单行为。
+#### 为什么默认 `type="button"`
+
+这是从实际项目踩坑中学到的重要决策。如果使用原生 `<button>` 的默认类型 `submit`，当按钮放在 `<form>` 里时，点击会意外提交表单。将其显式默认为 `button` 可避免绝大多数不期望的表单行为。
 
 ### 3.2 变体系统：variant + color
 

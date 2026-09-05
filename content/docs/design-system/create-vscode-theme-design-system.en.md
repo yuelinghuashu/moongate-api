@@ -1,8 +1,7 @@
 ---
-title: 'Design System: DTCG Three-Layer Architecture & Dark/Light Variants'
+title: "Design System: DTCG Three-Layer Architecture & Dark/Light Variants"
 description: Use the DTCG design token standard to manage colors and build dark/light variants with visual weight parity.
 date: 2026-08-06 04:00:00
-permalink: 97e09fc8-13a0-4703-958d-44700fe20a62
 level: P3
 series: design-system
 tags:
@@ -90,9 +89,13 @@ gray-700: "#2d3748" # dark border
 # ... a complete hue-lightness scale
 ```
 
-**Naming convention**: `hue-lightness`, for example `blue-500`, `green-400`, `gray-900`. This naming is not just for looks — it makes "how the same hue changes across lightness levels" traceable.
+#### Naming convention
 
-**The value of primitives**: when you need to "make the primary color of all themes bluer", you only adjust two primitives, `blue-500` and `blue-700` — every semantic color referencing them updates automatically.
+`hue-lightness`, for example `blue-500`, `green-400`, `gray-900`. This naming is not just for looks — it makes "how the same hue changes across lightness levels" traceable.
+
+#### The value of primitives
+
+when you need to "make the primary color of all themes bluer", you only adjust two primitives, `blue-500` and `blue-700` — every semantic color referencing them updates automatically.
 
 ### 2.2 Layer 2: Semantics
 
@@ -145,7 +148,9 @@ surfaceFloating: "{gray-100}"
 surfaceTooltip: "{gray-200}"
 ```
 
-**Key principle**: the semantic-layer variable names of **all variants must be identical**. This is the foundation of rule reuse — `workbench.yaml` and `languages/*.yaml` do not need to know whether the current theme is dark or light; they only reference `${primary}`, `${surfaceRaised}`, and let the semantics layer decide the concrete values.
+#### Key principle
+
+the semantic-layer variable names of **all variants must be identical**. This is the foundation of rule reuse — `workbench.yaml` and `languages/*.yaml` do not need to know whether the current theme is dark or light; they only reference `${primary}`, `${surfaceRaised}`, and let the semantics layer decide the concrete values.
 
 ### 2.3 Layer 3: Components
 
@@ -181,10 +186,10 @@ class: "${warning}"
 
 In Moongate's architecture, the two kinds of "references" have completely different meanings:
 
-| Syntax       | Meaning                                    | Where it is used        | Example                                   |
-| ------------ | ------------------------------------------ | ----------------------- | ----------------------------------------- |
-| `{token}`    | **Cross-layer reference**: reference another token | Semantics references primitives | `primary: "{blue-500}"`          |
-| `${variable}` | **Variable substitution**: replaced by the final color at build time | Components reference semantics | `editor.background: "${surfaceGround}"` |
+| Syntax        | Meaning                                                              | Where it is used                | Example                                 |
+| ------------- | -------------------------------------------------------------------- | ------------------------------- | --------------------------------------- |
+| `{token}`     | **Cross-layer reference**: reference another token                   | Semantics references primitives | `primary: "{blue-500}"`                 |
+| `${variable}` | **Variable substitution**: replaced by the final color at build time | Components reference semantics  | `editor.background: "${surfaceGround}"` |
 
 - The semantics layer references primitives with `{token}`; the build script resolves token references recursively (with cycle detection — you will see this in the build system article).
 - The components layer references semantic variables with `${variable}`; the build script substitutes the final color value (supporting transparency suffixes such as `${primary}20`).
@@ -208,14 +213,14 @@ Take `primary`: on dark, the bright blue `#3b82f6` (60% lightness) looks great. 
 
 ### 3.2 Moongate's Compensation Examples
 
-| Semantic role | Dark version         | Light version        | Adjustment method                            |
-| --------------| -------------------- | -------------------- | -------------------------------------------- |
-| primary       | `#3b82f6` (60% L)    | `#0284c7` (48% L)    | Blue unchanged, lightness down ~20%, fits white |
-| success       | `#34d399` (65%)      | `#059669` (40%)      | Green more grounded, keeps contrast          |
-| warning       | `#fbbf24` (75%)      | `#b45309` (35%)      | Bright yellow to amber, avoids disappearing on white |
-| error         | `#f87171` (60%)      | `#b91c1c` (35%)      | Deep red keeps its warning feel             |
+| Semantic role | Dark version      | Light version     | Adjustment method                                    |
+| ------------- | ----------------- | ----------------- | ---------------------------------------------------- |
+| primary       | `#3b82f6` (60% L) | `#0284c7` (48% L) | Blue unchanged, lightness down ~20%, fits white      |
+| success       | `#34d399` (65%)   | `#059669` (40%)   | Green more grounded, keeps contrast                  |
+| warning       | `#fbbf24` (75%)   | `#b45309` (35%)   | Bright yellow to amber, avoids disappearing on white |
+| error         | `#f87171` (60%)   | `#b91c1c` (35%)   | Deep red keeps its warning feel                      |
 
-**Compensation rules**:
+#### Compensation rules
 
 - **Hue (H) stays unchanged** — this is the core of semantic consistency. `primary` stays blue forever, so users do not need to relearn when switching themes.
 - **Lightness (L) decreases** — bright colors from the dark theme need to be darker to reach equal contrast on white. Usually 20–30% lower.
@@ -236,14 +241,14 @@ Beyond syntax colors, the UI needs a consistent "sense of space" across both the
 - Light mode: the higher the elevation, the brighter the surface too (using brighter whites/light grays).
 - The step size is consistent between levels, producing a smooth layering feel.
 
-**Moongate's four elevation levels** (latest values in v2.6.0):
+#### Moongate's four elevation levels
 
-| Elevation level | Purpose | Dark mode | Light mode | Notes |
-| ----------------| ------- | --------- | ---------- | ----- |
-| `surfaceGround`   | Ground (editor)          | `#0f172a` | `#f9fafb` | base level |
-| `surfaceRaised`   | Sidebar, activity bar, tab bar | `#1a2538` | `#ffffff` | dark +5%, light pure white |
-| `surfaceFloating` | Panels, floating cards, menus | `#25364a` | `#f1f5f9` | dark another +5%, light cool light gray |
-| `surfaceTooltip`  | Tooltips, popups         | `#2e3b4d` | `#e2e8f0` | highest level |
+| Elevation level   | Purpose                        | Dark mode | Light mode | Notes                                   |
+| ----------------- | ------------------------------ | --------- | ---------- | --------------------------------------- |
+| `surfaceGround`   | Ground (editor)                | `#0f172a` | `#f9fafb`  | base level                              |
+| `surfaceRaised`   | Sidebar, activity bar, tab bar | `#1a2538` | `#ffffff`  | dark +5%, light pure white              |
+| `surfaceFloating` | Panels, floating cards, menus  | `#25364a` | `#f1f5f9`  | dark another +5%, light cool light gray |
+| `surfaceTooltip`  | Tooltips, popups               | `#2e3b4d` | `#e2e8f0`  | highest level                           |
 
 > 📌 **Note**: whether the light mode uses "higher = brighter" or "higher = darker" is a design choice. Moongate chooses the light mode with floating layers **brighter** (whiter) than the background, creating a "stacked sheets of paper" transparency; the dark mode uses "higher = brighter", letting floating layers gently rise from the background. Both modes follow the physical metaphor of "the higher, the more prominent".
 
@@ -290,7 +295,9 @@ function resolveTokens(obj, tokenMap, depth = 0) {
     return obj.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, key) => {
       const value = tokenMap[key]
       if (value === undefined) {
-        console.warn(`⚠️ Warning: token "${key}" is not defined, leaving it as-is`)
+        console.warn(
+          `⚠️ Warning: token "${key}" is not defined, leaving it as-is`,
+        )
         return match
       }
       return resolveTokens(value, tokenMap, depth + 1)
@@ -316,7 +323,9 @@ function replaceVariables(obj, colors) {
       (match, key, alpha) => {
         const value = colors[key]
         if (value === undefined) {
-          console.warn(`⚠️ Warning: variable "${key}" is not defined, leaving it as-is`)
+          console.warn(
+            `⚠️ Warning: variable "${key}" is not defined, leaving it as-is`,
+          )
           return match
         }
         return value + (alpha || "")
@@ -398,7 +407,7 @@ semanticFiles.forEach((semanticFile) => {
 })
 ```
 
-**Core logic**:
+### Core logic
 
 1. Load primitives.
 2. Scan the `semantics/` directory; each semantics file (`dark.yaml` / `light.yaml`) maps to one theme.
@@ -491,14 +500,14 @@ Moongate does exactly this — the blog, the design-system docs, and the VS Code
 
 ## 7. Common Problems and Pitfalls
 
-| Problem | Likely cause | Solution |
-| ------- | ------------ | -------- |
-| **Theme does not appear in the color theme list** | Not registered correctly in `package.json`, or wrong JSON file path | Check the `contributes.themes` entries; make sure `path` points to the right file |
-| **Light theme renders as dark** | `uiTheme` mistakenly set to `"vs-dark"` | Light themes should use `"vs"` |
-| **Color variables not replaced, still `${var}`** | Typo in variable name, or the semantics layer does not define it | Check names match; make sure every semantic variable exists in both `dark.yaml` and `light.yaml` |
-| **Dark/light themes differ too much visually** | Unreasonable gravity compensation, uneven lightness adjustment | Follow the rule: hue unchanged, lightness lowered regularly, saturation adjusted moderately |
-| **One theme errors after adding a new semantic variable** | `dark.yaml` and `light.yaml` variable names diverge | All variants' semantic-layer variable names must be identical |
-| **Build script "file not found"** | A required YAML file is missing | Ensure `src/core/primitives/`, `src/core/semantics/`, `src/languages/`, etc. exist and contain the needed files |
+| Problem                                                   | Likely cause                                                        | Solution                                                                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Theme does not appear in the color theme list**         | Not registered correctly in `package.json`, or wrong JSON file path | Check the `contributes.themes` entries; make sure `path` points to the right file                               |
+| **Light theme renders as dark**                           | `uiTheme` mistakenly set to `"vs-dark"`                             | Light themes should use `"vs"`                                                                                  |
+| **Color variables not replaced, still `${var}`**          | Typo in variable name, or the semantics layer does not define it    | Check names match; make sure every semantic variable exists in both `dark.yaml` and `light.yaml`                |
+| **Dark/light themes differ too much visually**            | Unreasonable gravity compensation, uneven lightness adjustment      | Follow the rule: hue unchanged, lightness lowered regularly, saturation adjusted moderately                     |
+| **One theme errors after adding a new semantic variable** | `dark.yaml` and `light.yaml` variable names diverge                 | All variants' semantic-layer variable names must be identical                                                   |
+| **Build script "file not found"**                         | A required YAML file is missing                                     | Ensure `src/core/primitives/`, `src/core/semantics/`, `src/languages/`, etc. exist and contain the needed files |
 
 ---
 
@@ -523,5 +532,6 @@ Those are exactly what the next article solves — **how to turn the build scrip
 > **📎 Implementation Reference**
 >
 > This series is built upon the Moongate Theme project. You can explore the complete source code and install it directly:
+>
 > - **Code**: [github.com/yuelinghuashu/moongate-theme](https://github.com/yuelinghuashu/moongate-theme)
 > - **Install**: [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yuelinghuashu.moongate-theme)

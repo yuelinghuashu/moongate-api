@@ -2,7 +2,6 @@
 title: 构建体系：可测试、可验证的工程实践
 description: 从单体脚本到模块化工程体系——ESM 模块拆分、WCAG 对比度自动校验、scope 自动验证、自动化测试与多格式产物生成，让构建脚本自身成为一套可信赖的工程基础设施。
 date: 2026-08-06 06:00:00
-permalink: ef9e2761-be41-4778-8552-22cb86ed3407
 level: P4
 series: design-system
 tags:
@@ -96,7 +95,7 @@ your-theme/
 | `generators.js`      | 多格式产物           | `generateColorCss`、`generateLayoutCss`、`generateScssTokens`、`generateTsTokens`、`generateDesignSystemDoc`               |
 | `scope-validator.js` | scope 验证逻辑       | `verifyAllScopes`、`formatVerificationResult`                                                                              |
 
-**为什么用 ESM 而不是 CommonJS？**
+### 为什么用 ESM 而不是 CommonJS？
 
 - 现代 Node.js（≥ 14）原生支持 ESM，无需额外构建工具。
 - `import` / `export` 是静态的，工具可以静态分析依赖关系，更容易重构和调试。
@@ -162,7 +161,9 @@ function main() {
 main()
 ```
 
-**核心原则**：每个函数只做一件事。`main()` 中每个步骤对应一个命名清晰的函数（`loadPrimitives()`、`loadCommonRules()`、`loadTokenColors()`……），调用者一眼就能看出构建流程的每一步在做什么。
+### 核心原则
+
+每个函数只做一件事。`main()` 中每个步骤对应一个命名清晰的函数（`loadPrimitives()`、`loadCommonRules()`、`loadTokenColors()`……），调用者一眼就能看出构建流程的每一步在做什么。
 
 模块化的骨架搭好了，接下来要解决真正的工程问题：**构建过程必须能够自我证明**。
 
@@ -232,7 +233,9 @@ export function checkContrast(color1, color2, role, themeType) {
 ✅ light · textMuted: 7.25:1
 ```
 
-**关键设计**：`textDim` 和 `textMuted` 使用**阶梯式标准**而非统一 4.5:1——因为「视觉退后」本身就是设计意图，只要保持最低可读性即可。如果所有辅助文字都强制 4.5:1，注释和辅助信息就无法在视觉上「退后」了。
+#### 关键设计
+
+`textDim` 和 `textMuted` 使用**阶梯式标准**而非统一 4.5:1——因为「视觉退后」本身就是设计意图，只要保持最低可读性即可。如果所有辅助文字都强制 4.5:1，注释和辅助信息就无法在视觉上「退后」了。
 
 ### 2.2 结构验证：生成的文件必须自洽
 

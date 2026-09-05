@@ -2,7 +2,6 @@
 title: Nuxt Content + i18n终极集成方案：一套内容支持多语言的完整实现
 description: 本文介绍一种创新方案：只维护一套核心文档（如英文或中文），利用 @nuxtjs/i18n 的路由前缀功能，为用户提供完整的多语言界面体验。访问 /en/article 与 /zh_cn/article 将显示相同的文档内容，但界面语言、导航菜单等将根据URL前缀自动切换。
 date: 2025-12-29
-permalink: e7c84714-d1ba-4c6f-a56a-57c00edc3661
 series: i18n
 level: P1
 tags:

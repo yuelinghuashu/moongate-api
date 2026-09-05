@@ -1,8 +1,7 @@
 ---
-title: 'Theme Engineering: From a Monolithic JSON to Modular YAML'
+title: "Theme Engineering: From a Monolithic JSON to Modular YAML"
 description: Refactor your monolithic theme JSON into modular YAML with a build script, and automate theme generation.
 date: 2026-08-06 02:00:00
-permalink: 7199f437-f5ae-40e9-b08b-fba6968205b5
 level: P3
 series: design-system
 tags:
@@ -87,7 +86,7 @@ border: "#2d3748" # border
 # ... other variables
 ```
 
-**⚠️ Important rules**:
+### ⚠️ Important rules
 
 - Variable names use camelCase or lowercase-with-hyphens, and **only letters, digits, and underscores**.
 - **Do not put transparency in the variable itself** (such as the `20` in `#3b82f620`). Transparency should be added through a suffix like `${primary}20` at the point of use; the build script will concatenate it automatically.
@@ -121,7 +120,9 @@ tokenColors:
   # ... other shared rules
 ```
 
-**Core principle**: whatever `base.yaml` already covers (keywords, strings, comments, operators, variables, and so on), language files must **not redefine**. Language files should only contain rules that are truly unique to that language.
+### Core principle
+
+whatever `base.yaml` already covers (keywords, strings, comments, operators, variables, and so on), language files must **not redefine**. Language files should only contain rules that are truly unique to that language.
 
 Using `src/languages/go.yaml` as an example, it only contains Go-specific syntax elements:
 
@@ -184,7 +185,9 @@ class: "${warning}"
 # ... other semantic rules
 ```
 
-**🔍 Note**: in YAML, keys containing special characters (such as `*.decorator`) must be wrapped in double quotes, otherwise YAML parsing will fail.
+### 🔍 Note
+
+in YAML, keys containing special characters (such as `*.decorator`) must be wrapped in double quotes, otherwise YAML parsing will fail.
 
 ---
 
@@ -310,7 +313,7 @@ fs.writeFileSync(outputFile, JSON.stringify(theme, null, 2))
 console.log("✅ Theme built successfully!")
 ```
 
-**⚠️ Notes**:
+### ⚠️ Notes
 
 - **Automatic scanning instead of manual ordering**: unlike maintaining an `order` array by hand, this directly scans the `languages/` directory and sorts by filename. `base.yaml` naturally sorts first, and the other language files follow in alphabetical order — later rules override earlier rules with the same scope, so language-specific rules naturally take higher priority. To add a language, you only add a YAML file; no need to change the build script.
 - If a color variable is undefined, the script warns and leaves the `${var}` placeholder in the output — which makes the theme invalid. Make sure every variable is defined.
@@ -474,5 +477,6 @@ These are exactly what the next article solves — **design systems: the DTCG th
 > **📎 Implementation Reference**
 >
 > This series is built upon the Moongate Theme project. You can explore the complete source code and install it directly:
+>
 > - **Code**: [github.com/yuelinghuashu/moongate-theme](https://github.com/yuelinghuashu/moongate-theme)
 > - **Install**: [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yuelinghuashu.moongate-theme)

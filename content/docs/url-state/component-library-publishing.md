@@ -2,7 +2,6 @@
 title: 从代码到 npm：Vue 3 组件库发布实战与避坑指南
 description: 记录 moongate-vue 组件库从构建到 npm v1.5.0 发布的完整流程，涵盖 nrm 源管理、2FA 配置、WebAuthn 网络代理、本地链接测试、构建验证、体积预算、自动化脚本及工业级发布检查清单。
 date: 2026-05-20
-permalink: 6b5acf3d-2c8c-421b-ab33-404ad767f18b
 series:
 level: P4
 tags:
@@ -90,7 +89,7 @@ for (const [componentName, kebabName] of Object.entries(componentEntries)) {
 }
 ```
 
-**关键差异（vs 初版）**：
+#### 关键差异（vs 初版）
 
 - **纯 ES Module**：只有 `.js`，没有 `.cjs`——这是刻意选择（现代打包工具均支持 ESM，且 `exports` 中有 `import` 条件即可）
 - **27 个按需导出入口**：用户可 `import Button from 'moongate-vue/button'` 只加载所需组件
@@ -138,7 +137,9 @@ pnpm link /home/dark/projects/moongate-vue
 - [ ] TypeScript 类型提示正常
 - [ ] HMR 热更新工作正常
 
-**注意**：测试完成后，删除链接需：`pnpm remove moongate-vue` + 手动清理 `link:` 条目。
+#### 注意
+
+测试完成后，删除链接需：`pnpm remove moongate-vue` + 手动清理 `link:` 条目。
 
 ---
 

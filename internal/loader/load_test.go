@@ -40,7 +40,6 @@ func TestLoadAll_ValidContent(t *testing.T) {
 title: "Article One"
 description: "First article"
 date: 2025-01-01 00:00:00
-permalink: /docs/article-one
 level: P1
 tags:
   - Go
@@ -53,7 +52,6 @@ Content one.
 title: "Article Two"
 description: "Second article with series"
 date: 2025-01-02 00:00:00
-permalink: /docs/article-two
 level: P2
 series: "go-tutorial"
 tags:
@@ -69,7 +67,6 @@ Content two.
 title: "About Me"
 description: "Bio"
 date: 2025-01-01 00:00:00
-permalink: /about/me
 ---
 
 About content.
@@ -80,20 +77,9 @@ About content.
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	// 验证 Docs 数量
-	if len(store.Docs) != 2 {
-		t.Errorf("Docs count = %d, want 2", len(store.Docs))
-	}
+	// 验证 Docs 数量（按 slug 索引）
 	if len(store.DocsBySlug) != 2 {
 		t.Errorf("DocsBySlug count = %d, want 2", len(store.DocsBySlug))
-	}
-
-	// 验证 permalink 索引
-	if _, ok := store.Docs["/docs/article-one"]; !ok {
-		t.Error("Docs should contain permalink /docs/article-one")
-	}
-	if _, ok := store.Docs["/docs/article-two"]; !ok {
-		t.Error("Docs should contain permalink /docs/article-two")
 	}
 
 	// 验证 slug 索引
@@ -104,15 +90,9 @@ About content.
 		t.Error("DocsBySlug should contain slug article2")
 	}
 
-	// 验证 About 数量
-	if len(store.About) != 1 {
-		t.Errorf("About count = %d, want 1", len(store.About))
-	}
+	// 验证 About 数量（按 slug 索引）
 	if len(store.AboutBySlug) != 1 {
 		t.Errorf("AboutBySlug count = %d, want 1", len(store.AboutBySlug))
-	}
-	if _, ok := store.About["/about/me"]; !ok {
-		t.Error("About should contain permalink /about/me")
 	}
 	if _, ok := store.AboutBySlug["me"]; !ok {
 		t.Error("AboutBySlug should contain slug me")
@@ -126,7 +106,6 @@ func TestLoadAll_EmptySeriesConvertedToNil(t *testing.T) {
 title: "Empty Series"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/empty-series
 level: P3
 series: ""
 ---
@@ -139,9 +118,9 @@ Content.
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	doc := store.Docs["/docs/empty-series"]
+	doc := store.DocsBySlug["empty-series"]
 	if doc == nil {
-		t.Fatal("Doc should exist for /docs/empty-series")
+		t.Fatal("Doc should exist for slug empty-series")
 	}
 
 	// 空字符串 series 应被转换为 nil
@@ -158,7 +137,6 @@ func TestLoadAll_SkipsInvalidFiles(t *testing.T) {
 title: "Valid"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/valid
 level: P1
 ---
 
@@ -176,8 +154,8 @@ Content.
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	if len(store.Docs) != 1 {
-		t.Errorf("Docs count = %d, want 1 (invalid files should be skipped)", len(store.Docs))
+	if len(store.DocsBySlug) != 1 {
+		t.Errorf("DocsBySlug count = %d, want 1 (invalid files should be skipped)", len(store.DocsBySlug))
 	}
 }
 
@@ -195,7 +173,6 @@ func TestLoadAll_RecursiveSubdirectories(t *testing.T) {
 title: "Standalone"
 description: "No series"
 date: 2025-01-01 00:00:00
-permalink: /docs/standalone
 level: P1
 ---
 
@@ -207,7 +184,6 @@ Standalone content.
 title: "Narrative Part 1"
 description: "First part"
 date: 2025-01-02 00:00:00
-permalink: /docs/narrative-part-1
 level: P2
 series: narrative-engine
 ---
@@ -219,7 +195,6 @@ Part 1 content.
 title: "Narrative Part 2"
 description: "Second part"
 date: 2025-01-03 00:00:00
-permalink: /docs/narrative-part-2
 level: P2
 series: narrative-engine
 ---
@@ -233,9 +208,6 @@ Part 2 content.
 	}
 
 	// 顶层 + 子目录共 3 个文档
-	if len(store.Docs) != 3 {
-		t.Errorf("Docs count = %d, want 3", len(store.Docs))
-	}
 	if len(store.DocsBySlug) != 3 {
 		t.Errorf("DocsBySlug count = %d, want 3", len(store.DocsBySlug))
 	}
@@ -249,9 +221,9 @@ Part 2 content.
 	}
 
 	// 验证 series 正确关联
-	doc := store.Docs["/docs/narrative-part-1"]
+	doc := store.DocsBySlug["narrative-part-1"]
 	if doc == nil {
-		t.Fatal("Doc should exist for /docs/narrative-part-1")
+		t.Fatal("Doc should exist for slug narrative-part-1")
 	}
 	if doc.Series == nil || *doc.Series != "narrative-engine" {
 		t.Errorf("Series = %v, want narrative-engine", doc.Series)
@@ -271,8 +243,8 @@ func TestLoadAll_NonExistentDir(t *testing.T) {
 	if store == nil {
 		t.Error("LoadAll() should return non-nil store even for non-existent directory")
 	}
-	if len(store.Docs) != 0 {
-		t.Errorf("Docs count = %d, want 0 for non-existent directory", len(store.Docs))
+	if len(store.DocsBySlug) != 0 {
+		t.Errorf("DocsBySlug count = %d, want 0 for non-existent directory", len(store.DocsBySlug))
 	}
 }
 
@@ -284,7 +256,6 @@ func TestLoadAll_EnglishTranslationFiles(t *testing.T) {
 title: "Article"
 description: "中文摘要"
 date: 2025-01-01 00:00:00
-permalink: /docs/article
 level: P2
 series: go-tutorial
 tags:
@@ -299,7 +270,6 @@ tags:
 title: "Article (EN)"
 description: "English description"
 date: 2025-01-01 00:00:00
-permalink: /docs/article
 level: P2
 series: go-tutorial
 tags:
@@ -314,10 +284,7 @@ English content
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	// 中文照常进入 Docs / DocsBySlug
-	if len(store.Docs) != 1 {
-		t.Errorf("Docs count = %d, want 1", len(store.Docs))
-	}
+	// 中文照常进入 DocsBySlug
 	if len(store.DocsBySlug) != 1 {
 		t.Errorf("DocsBySlug count = %d, want 1", len(store.DocsBySlug))
 	}
@@ -346,7 +313,6 @@ func TestLoadAll_EnglishTranslationMissingCounterpart(t *testing.T) {
 title: "EN Only"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/en-only
 level: P1
 tags:
   - English
@@ -360,8 +326,8 @@ English only
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	if len(store.Docs) != 0 {
-		t.Errorf("Docs count = %d, want 0", len(store.Docs))
+	if len(store.DocsBySlug) != 0 {
+		t.Errorf("DocsBySlug count = %d, want 0", len(store.DocsBySlug))
 	}
 	if len(store.DocsEn) != 1 {
 		t.Errorf("DocsEn count = %d, want 1", len(store.DocsEn))

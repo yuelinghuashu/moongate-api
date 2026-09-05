@@ -18,7 +18,6 @@ func setupAboutTestRouter() *gin.Engine {
 		Title:       "My Story",
 		Description: "My developer journey",
 		Date:        time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/about/story",
 		Slug:        "story",
 		Content:     "<p>Story content</p>",
 	}
@@ -27,21 +26,16 @@ func setupAboutTestRouter() *gin.Engine {
 		Title:       "My Philosophy",
 		Description: "How I think about code",
 		Date:        time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC),
-		Permalink:   "/about/philosophy",
 		Slug:        "philosophy",
 		Content:     "<p>Philosophy content</p>",
 	}
 
-	store := map[string]*domain.About{
-		about1.Permalink: about1,
-		about2.Permalink: about2,
-	}
 	storeBySlug := map[string]*domain.About{
 		about1.Slug: about1,
 		about2.Slug: about2,
 	}
 
-	handler := NewAboutHandler(store, storeBySlug)
+	handler := NewAboutHandler(storeBySlug)
 	r.GET("/api/about", handler.GetAboutList)
 	r.GET("/api/about/:slug", handler.GetAbout)
 

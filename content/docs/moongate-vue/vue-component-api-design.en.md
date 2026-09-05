@@ -2,7 +2,6 @@
 title: 'Vue 3 Simple Component Development: API Design from the Button Component'
 description: 'Using the Button component as an example, explore Vue 3 component library API design philosophy: Props definition, variant system, size trade-offs, slot design, state handling, accessibility, and the design trade-offs behind a minimal API.'
 date: 2026-05-07
-permalink: e6526a2f-4d33-4817-9ef0-1cbfb71ef3e7
 level: P3
 series: moongate-vue
 tags:
@@ -90,7 +89,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 ```
 
-**Why default to `type="button"`?** This is an important lesson learned from actual project pitfalls. If you use the native `<button>` default type `submit`, clicking the button inside a `<form>` will accidentally submit the form. Explicitly defaulting to `button` avoids the vast majority of unintended form behaviors.
+#### Why default to `type="button"`?
+
+This is an important lesson learned from actual project pitfalls. If you use the native `<button>` default type `submit`, clicking the button inside a `<form>` will accidentally submit the form. Explicitly defaulting to `button` avoids the vast majority of unintended form behaviors.
 
 ### 3.2 Variant System: variant + color
 

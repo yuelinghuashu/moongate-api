@@ -2,7 +2,6 @@
 title: Moon Gate 故事：当月亮与代码交汇
 description: 从月灵花束到 Moon Gate，一个关于命名、意象与品牌演进的故事。推开月之门，让月光照进代码。
 date: 2025-12-29
-permalink: iANWJ-HXYG-FFOn1
 ---
 
 ## 缘起：一个美丽的错误

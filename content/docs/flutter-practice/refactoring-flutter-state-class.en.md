@@ -2,14 +2,13 @@
 title: Three Attempts to Refactor a Large Flutter State Class — and the Final Solution
 description: When an 800-line State class mixes contract trees, stage operations, and navigation — how do you safely split it? A complete refactoring journey from Mixin and part to Widget Composition.
 date: 2026-08-11
-permalink: 5f6571c9-eff4-44b3-8704-05e8fc6ed750
 level: P3
 series: flutter-practice
 tags:
   - Flutter
   - Dart
   - State Management
-  - Refactoring
+  - Engineering
   - Engineering
 ---
 
@@ -52,7 +51,8 @@ mixin HomeContractActions on ConsumerState<HomeScreen> {
 }
 ```
 
-**Error:**  
+### Error
+
 `The method '_handleMasterMenu' isn't defined for the type '_HomeScreenState'`
 
 ### Why?
@@ -194,7 +194,7 @@ return ContractTreeSection(
 );
 ```
 
-**Results (split ≠ deleting code; it's about rehoming responsibilities):**
+#### Results (split ≠ deleting code; it's about rehoming responsibilities)
 
 | File                         | Before | After | Responsibility                                                  |
 | ---------------------------- | ------ | ----- | --------------------------------------------------------------- |

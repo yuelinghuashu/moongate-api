@@ -2,10 +2,9 @@
 title: Nuxt 中 URL 与状态双向绑定指南：从原理到实践
 description: 深入探讨 Nuxt 中 URL 与状态双向绑定的原理，解决后退按钮数据不刷新、输入框与 URL 不一致等常见问题。从错误尝试到正确实践，提供手写 watch 和 Pinia 两种稳定可靠的 SSR 安全方案，并对比与 localStorage 的适用场景。
 date: 2026-02-19
-permalink: 1d0af69a-a000-4735-9db1-c09708338403
 series: url-state
 level: P3
-tags: 
+tags:
   - Nuxt
   - Vue
   - State Management
@@ -47,8 +46,8 @@ tags:
 
 ```ts
 watch([() => pagination.page, () => pagination.size], () => {
-  router.push({ query: { page: pagination.page, size: pagination.size } });
-});
+  router.push({ query: { page: pagination.page, size: pagination.size } })
+})
 ```
 
 **问题**：如果 URL 中还有 `search` 参数，当用户点击返回按钮时，`route.query` 的 `search` 变了，但内部的 `searchValue` 没有更新，导致数据获取时使用的是旧搜索词。
@@ -62,21 +61,25 @@ watch(() => route.query, () => {
 })
 ```
 
-**问题**：`refresh` 会强制重新执行 fetcher，但如果你的 fetcher 内部依赖的响应式变量没有更新，可能还是旧数据。而且手动调用容易产生重复请求，破坏数据流的单向性。
+**问题**：
+
+`refresh` 会强制重新执行 fetcher，但如果你的 fetcher 内部依赖的响应式变量没有更新，可能还是旧数据。而且手动调用容易产生重复请求，破坏数据流的单向性。
 
 ### ❌ 错误 3：`useAsyncData` 的 `watch` 依赖不全
 
 ```ts
-watch: [() => pagination.page, () => pagination.size]; // 漏了 searchValue
+watch: [() => pagination.page, () => pagination.size] // 漏了 searchValue
 ```
 
-**问题**：`searchValue` 变化时，`useAsyncData` 不会自动重新获取，数据与 URL 不匹配。
+**问题**：
+
+`searchValue` 变化时，`useAsyncData` 不会自动重新获取，数据与 URL 不匹配。
 
 ### ❌ 错误 4：忽略数组参数的处理
 
 ```ts
 // 假设 URL 中有 ?tag=Nuxt,Vue
-const tags = ref(route.query.tag?.split(",")); // 如果 tag 不存在，会报错
+const tags = ref(route.query.tag?.split(",")) // 如果 tag 不存在，会报错
 ```
 
 **问题**：没有处理 `undefined` 或数组格式（如 `?tag=Nuxt&tag=Vue`），且序列化时未考虑数组。
@@ -124,87 +127,87 @@ const tags = ref(route.query.tag?.split(",")); // 如果 tag 不存在，会报�
 
 ```ts
 // 1. 从 URL 初始化内部状态
-const route = useRoute();
-const router = useRouter();
+const route = useRoute()
+const router = useRouter()
 
-const searchInput = ref(route.query.search?.toString() || "");
-const searchOption = ref(Number(route.query.option) || 1);
-const page = ref(Number(route.query.page) || 1);
-const size = ref(Number(route.query.size) || 10);
-const level = ref(route.query.level?.toString() || "");
-const viewMode = ref(Number(route.query.viewMode) || 1);
-const tags = ref<string[]>([]);
+const searchInput = ref(route.query.search?.toString() || "")
+const searchOption = ref(Number(route.query.option) || 1)
+const page = ref(Number(route.query.page) || 1)
+const size = ref(Number(route.query.size) || 10)
+const level = ref(route.query.level?.toString() || "")
+const viewMode = ref(Number(route.query.viewMode) || 1)
+const tags = ref<string[]>([])
 
 // 解析 URL 中的数组参数（支持逗号分隔或重复键名）
 const parseTagsFromQuery = () => {
-  const tagParam = route.query.tag;
+  const tagParam = route.query.tag
   tags.value = tagParam
     ? Array.isArray(tagParam)
       ? tagParam
       : tagParam.split(",")
-    : [];
-};
-parseTagsFromQuery();
+    : []
+}
+parseTagsFromQuery()
 
 // 2. Watch 1：URL → 内部状态（处理后退/直接访问）
 watch(
   () => route.query,
   (q) => {
-    searchInput.value = q.search?.toString() || "";
-    searchOption.value = Number(q.option) || 1;
-    page.value = Number(q.page) || 1;
-    size.value = Number(q.size) || 10;
-    level.value = q.level?.toString() || "";
-    viewMode.value = Number(q.viewMode) || 1;
-    parseTagsFromQuery();
+    searchInput.value = q.search?.toString() || ""
+    searchOption.value = Number(q.option) || 1
+    page.value = Number(q.page) || 1
+    size.value = Number(q.size) || 10
+    level.value = q.level?.toString() || ""
+    viewMode.value = Number(q.viewMode) || 1
+    parseTagsFromQuery()
   },
   { immediate: true },
-);
+)
 
 // 3. Watch 2：内部状态 → URL（用户操作时同步）
 watch([searchInput, searchOption, page, size, level, viewMode, tags], () => {
-  const query: Record<string, string> = {};
-  if (searchInput.value) query.search = searchInput.value;
-  if (searchOption.value !== 1) query.option = String(searchOption.value);
-  if (page.value !== 1) query.page = String(page.value);
-  if (size.value !== 10) query.size = String(size.value);
-  if (level.value) query.level = level.value;
-  if (viewMode.value !== 1) query.viewMode = String(viewMode.value);
-  if (tags.value.length) query.tag = tags.value.join(",");
+  const query: Record<string, string> = {}
+  if (searchInput.value) query.search = searchInput.value
+  if (searchOption.value !== 1) query.option = String(searchOption.value)
+  if (page.value !== 1) query.page = String(page.value)
+  if (size.value !== 10) query.size = String(size.value)
+  if (level.value) query.level = level.value
+  if (viewMode.value !== 1) query.viewMode = String(viewMode.value)
+  if (tags.value.length) query.tag = tags.value.join(",")
 
   // 避免无意义的重复跳转
   if (JSON.stringify(route.query) !== JSON.stringify(query)) {
-    router.push({ query });
+    router.push({ query })
   }
-});
+})
 
 // 4. 数据获取：useAsyncData 自动刷新
 const { data } = useAsyncData(
   "docs",
   async () => {
     // 使用当前状态构建查询
-    let query = queryCollection("docs").order("date", "DESC");
+    let query = queryCollection("docs").order("date", "DESC")
     if (searchInput.value) {
       /* ... */
     }
-    if (level.value) query = query.where("level", "=", level.value);
+    if (level.value) query = query.where("level", "=", level.value)
     if (tags.value.length) {
       tags.value.forEach((tag) => {
-        query = query.where("tags", "LIKE", `%${tag}%`);
-      });
+        query = query.where("tags", "LIKE", `%${tag}%`)
+      })
     }
     return query
       .skip((page.value - 1) * size.value)
       .limit(size.value)
-      .all();
+      .all()
   },
   {
     watch: [searchInput, searchOption, page, size, level, viewMode, tags], // 直接监听 ref
   },
-);
+)
 ```
 
-**关键点**：
+#### 关键点
 
 - 数组参数（`tags`）在解析时兼容逗号分隔和重复键名，序列化时统一用逗号分隔。
 - `watch` 中直接使用 ref 本身，确保数组内部变化（如 `push`/`pop`）能被正确捕获。
@@ -217,11 +220,11 @@ const { data } = useAsyncData(
 在完成手写版本后，我了解到 `@vueuse/router` 提供了 `useRouteQuery` 这个工具，它可以用更少的代码实现类似功能：
 
 ```ts
-import { useRouteQuery } from "@vueuse/router";
-const search = useRouteQuery("search", "");
-const searchOption = useRouteQuery("option", 1, { transform: Number });
-const page = useRouteQuery("page", 1, { transform: Number });
-const size = useRouteQuery("size", 10, { transform: Number });
+import { useRouteQuery } from "@vueuse/router"
+const search = useRouteQuery("search", "")
+const searchOption = useRouteQuery("option", 1, { transform: Number })
+const page = useRouteQuery("page", 1, { transform: Number })
+const size = useRouteQuery("size", 10, { transform: Number })
 ```
 
 于是我用它重构了代码，开发环境一切正常。然而在部署到生产环境后，页面却返回了 500 错误：
@@ -268,7 +271,7 @@ Invalid value used as weak map key
   <TagFilter :is-desktop="isDesktop" ... />
 </template>
 <script setup>
-const { isDesktop } = useResponsive();
+const { isDesktop } = useResponsive()
 </script>
 ```
 
@@ -276,7 +279,7 @@ const { isDesktop } = useResponsive();
 
 ```vue
 <script setup>
-const props = defineProps(["isDesktop"]);
+const props = defineProps(["isDesktop"])
 // 内部使用 props.isDesktop，不再调用 useResponsive
 </script>
 ```
@@ -294,11 +297,11 @@ URL 状态同步不仅适用于分页、搜索等基础操作，还能与用户�
 ```ts
 useEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft" && hasPrevPage.value) {
-    e.preventDefault();
-    page.value -= 1; // page 变化会自动触发 URL 更新和数据刷新
+    e.preventDefault()
+    page.value -= 1 // page 变化会自动触发 URL 更新和数据刷新
   }
   // ...
-});
+})
 ```
 
 ### 6.2 移动端无限滚动
@@ -306,9 +309,9 @@ useEventListener("keydown", (e) => {
 ```ts
 useSwipe({
   onUp: () => {
-    if (hasNextPage.value) page.value += 1;
+    if (hasNextPage.value) page.value += 1
   },
-});
+})
 ```
 
 这些交互只需修改 `page`、`tags` 等 ref，URL 和数据会自动同步，无需额外代码。
@@ -330,62 +333,62 @@ useSwipe({
 
 ```ts
 // stores/urlQuery.ts
-import { defineStore } from "pinia";
+import { defineStore } from "pinia"
 
 export const useUrlQueryStore = defineStore("urlQuery", () => {
-  const route = useRoute();
-  const router = useRouter();
+  const route = useRoute()
+  const router = useRouter()
 
-  const search = ref(route.query.search?.toString() || "");
-  const option = ref(Number(route.query.option) || 1);
-  const page = ref(Number(route.query.page) || 1);
-  const size = ref(Number(route.query.size) || 10);
-  const level = ref(route.query.level?.toString() || "");
-  const viewMode = ref(Number(route.query.viewMode) || 1);
-  const tags = ref<string[]>([]);
+  const search = ref(route.query.search?.toString() || "")
+  const option = ref(Number(route.query.option) || 1)
+  const page = ref(Number(route.query.page) || 1)
+  const size = ref(Number(route.query.size) || 10)
+  const level = ref(route.query.level?.toString() || "")
+  const viewMode = ref(Number(route.query.viewMode) || 1)
+  const tags = ref<string[]>([])
 
   const parseTags = () => {
-    const tagParam = route.query.tag;
+    const tagParam = route.query.tag
     tags.value = tagParam
       ? Array.isArray(tagParam)
         ? tagParam
         : tagParam.split(",")
-      : [];
-  };
-  parseTags();
+      : []
+  }
+  parseTags()
 
   watch(
     () => route.query,
     (q) => {
-      search.value = q.search?.toString() || "";
-      option.value = Number(q.option) || 1;
-      page.value = Number(q.page) || 1;
-      size.value = Number(q.size) || 10;
-      level.value = q.level?.toString() || "";
-      viewMode.value = Number(q.viewMode) || 1;
-      parseTags();
+      search.value = q.search?.toString() || ""
+      option.value = Number(q.option) || 1
+      page.value = Number(q.page) || 1
+      size.value = Number(q.size) || 10
+      level.value = q.level?.toString() || ""
+      viewMode.value = Number(q.viewMode) || 1
+      parseTags()
     },
-  );
+  )
 
   const pushQuery = () => {
-    const query: Record<string, string> = {};
-    if (search.value) query.search = search.value;
-    if (option.value !== 1) query.option = String(option.value);
-    if (page.value !== 1) query.page = String(page.value);
-    if (size.value !== 10) query.size = String(size.value);
-    if (level.value) query.level = level.value;
-    if (viewMode.value !== 1) query.viewMode = String(viewMode.value);
-    if (tags.value.length) query.tag = tags.value.join(",");
+    const query: Record<string, string> = {}
+    if (search.value) query.search = search.value
+    if (option.value !== 1) query.option = String(option.value)
+    if (page.value !== 1) query.page = String(page.value)
+    if (size.value !== 10) query.size = String(size.value)
+    if (level.value) query.level = level.value
+    if (viewMode.value !== 1) query.viewMode = String(viewMode.value)
+    if (tags.value.length) query.tag = tags.value.join(",")
 
     if (JSON.stringify(route.query) !== JSON.stringify(query)) {
-      router.push({ query });
+      router.push({ query })
     }
-  };
+  }
 
-  watch([search, option, page, size, level, viewMode, tags], () => pushQuery());
+  watch([search, option, page, size, level, viewMode, tags], () => pushQuery())
 
-  return { search, option, page, size, level, viewMode, tags };
-});
+  return { search, option, page, size, level, viewMode, tags }
+})
 ```
 
 </details>

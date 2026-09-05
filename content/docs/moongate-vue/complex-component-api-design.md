@@ -2,7 +2,6 @@
 title: Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计与状态管理
 description: 以 Select 和 Pagination 为例，深入探讨 Vue 3 复杂组件的 API 设计、数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级组件背后的设计权衡与实现细节。
 date: 2026-05-19
-permalink: 62e1afa3-c02e-4bf8-bc52-36f3b13032e9
 series: moongate-vue
 level: P3
 tags:

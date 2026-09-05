@@ -2,7 +2,6 @@
 title: Nuxt 集成 RSS 服务完全指南：从模块到手写的优雅之路
 description: 手把手教你绕过第三方模块的坑，亲手构建完全可控的 RSS/Atom/JSON Feed 服务。
 date: 2026-02-23
-permalink: 48461e0d-b045-429d-92b8-36eac871d481
 series: ecosystem
 level: P1
 tags:
@@ -33,7 +32,7 @@ tags:
 
 ### 方案一：使用第三方模块（如 `nuxt-feedme`）
 
-**看似简单**：
+#### 看似简单
 
 ```ts
 export default defineNuxtConfig({
@@ -46,7 +45,7 @@ export default defineNuxtConfig({
 })
 ```
 
-**实际可能遇到的坑**：
+#### 实际可能遇到的坑
 
 - ❌ 生产环境 API 404（模块试图调用不存在的开发接口）
 - ❌ 文档老旧，与实际版本脱节
@@ -56,7 +55,7 @@ export default defineNuxtConfig({
 
 ### 方案二：手写 RSS（本文推荐）
 
-**核心优势**：
+#### 核心优势
 
 - ✅ 完全可控，每一行代码都了然于心
 - ✅ 无依赖，零兼容问题
@@ -409,35 +408,13 @@ curl -I http://localhost:3000/feed.xml
 
 ## 常见问题排查
 
-### Q1: RSS 显示 `[object Object]`
-
-**原因**：没有将 `doc.body` 正确转换为 HTML。
-
-**解决**：使用本文提供的 `minimarkToHtml` 函数。
-
-### Q2: 链接是相对路径，没有域名
-
-**原因**：拼接 URL 时遗漏了 `siteUrl`。
-
-**解决**：确保使用 `${siteUrl}${doc.path}`。
-
-### Q3: 日期格式错误
-
-**原因**：直接使用了 ISO 字符串。
-
-**解决**：RSS 2.0 用 `new Date(date).toUTCString()`，Atom 和 JSON 用 `.toISOString()`。
-
-### Q4: 生产环境 404
-
-**原因**：`server/routes/` 下的文件未正确部署。
-
-**解决**：检查构建输出是否包含 `.output/server/` 目录。
-
-### Q5: JSON Feed 在浏览器中显示不全
-
-**原因**：浏览器插件或开发者工具为了性能做了预览截断。
-
-**解决**：直接用 RSS 阅读器测试，或使用 `curl` 查看完整内容。
+| 问题 | 原因 | 解决 |
+| ---- | ---- | ---- |
+| RSS 显示 `[object Object]` | 没有将 `doc.body` 正确转换为 HTML | 使用本文提供的 `minimarkToHtml` 函数 |
+| 链接是相对路径，没有域名 | 拼接 URL 时遗漏了 `siteUrl` | 确保使用 `${siteUrl}${doc.path}` |
+| 日期格式错误 | 直接使用了 ISO 字符串 | RSS 2.0 用 `new Date(date).toUTCString()`，Atom 和 JSON 用 `.toISOString()` |
+| 生产环境 404 | `server/routes/` 下的文件未正确部署 | 检查构建输出是否包含 `.output/server/` 目录 |
+| JSON Feed 在浏览器中显示不全 | 浏览器插件或开发者工具为了性能做了预览截断 | 直接用 RSS 阅读器测试，或使用 `curl` 查看完整内容 |
 
 ---
 
@@ -452,7 +429,9 @@ curl -I http://localhost:3000/feed.xml
 | **生产稳定性** | 容易踩坑             | 稳定可靠                   |
 | **维护成本**   | 依赖作者更新         | 自己掌控                   |
 
-**记住**：RSS 的本质就是“查数据 + 拼 XML/JSON”，没有任何复杂逻辑需要模块来封装。
+### 记住
+
+RSS 的本质就是“查数据 + 拼 XML/JSON”，没有任何复杂逻辑需要模块来封装。
 
 ---
 

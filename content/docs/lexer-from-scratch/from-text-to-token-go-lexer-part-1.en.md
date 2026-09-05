@@ -1,8 +1,7 @@
 ---
-title: 'Building a Lexer from Scratch (Part 1): Token — the Smallest Unit a Computer Can Understand'
-description: 'Starting from the pain point that computers cannot understand text, learn what a Token is, define your first Token struct in Go, and take the first step toward a lexer.'
+title: "Building a Lexer from Scratch (Part 1): Token — the Smallest Unit a Computer Can Understand"
+description: "Starting from the pain point that computers cannot understand text, learn what a Token is, define your first Token struct in Go, and take the first step toward a lexer."
 date: 2026-07-13 20:00:00
-permalink: d6784b4c-89b0-4a75-b303-10b49c67d576
 series: lexer-from-scratch
 level: P1
 tags:
@@ -63,13 +62,13 @@ For example, split:
 
 into:
 
-| Piece | Label | Meaning |
-| -------------- | --------------- | ------------ |
-| `【` | `LEFT_BRACKET` | left bracket |
-| `角色名` | `TEXT` | plain text ("character name") |
-| `】` | `RIGHT_BRACKET` | right bracket |
-| `\n` | (newline) | a line break in the text |
-| `贝利亚奥特曼` | `TEXT` | plain text ("Belial Ultraman") |
+| Piece          | Label           | Meaning                        |
+| -------------- | --------------- | ------------------------------ |
+| `【`           | `LEFT_BRACKET`  | left bracket                   |
+| `角色名`       | `TEXT`          | plain text ("character name")  |
+| `】`           | `RIGHT_BRACKET` | right bracket                  |
+| `\n`           | (newline)       | a line break in the text       |
+| `贝利亚奥特曼` | `TEXT`          | plain text ("Belial Ultraman") |
 
 Now the program can tell:
 
@@ -112,7 +111,9 @@ mephisto/
         └── lexer.go
 ```
 
-**Note:** all parsing-related code lives under the `parser/` directory. As the series progresses, we always work inside the same package — the directory only *gains files*, it never *switches packages*. From start to finish, you only need to follow the evolution of a single directory: `internal/parser/`.
+#### Note
+
+all parsing-related code lives under the `parser/` directory. As the series progresses, we always work inside the same package — the directory only _gains files_, it never _switches packages_. From start to finish, you only need to follow the evolution of a single directory: `internal/parser/`.
 
 ### 4.2 Initialize the Go Module
 
@@ -146,11 +147,11 @@ type Token struct {
 }
 ```
 
-**Why use `string` instead of `int` for the type?**
+#### Why use `string` instead of `int` for the type?
 
 If the type were a number, debugging would print a number and you'd have to dig through the code to figure out what `0` means. With `string`, `fmt.Println(tok.Type)` prints `"LEFT_BRACKET"` directly — much more readable. A lexer typically deals with only a few hundred tokens, so the performance cost of `string` is negligible.
 
-**Why are the `Token` fields capitalized?**
+#### Why are the `Token` fields capitalized?
 
 In Go, **fields starting with an uppercase letter are exported; lowercase fields are private**. `Token` is used by `main.go`, so its fields must be capitalized, otherwise the external package cannot access them.
 
@@ -210,17 +211,17 @@ If you see the file contents printed, the project runs:
 
 This part accomplished one thing: **laying the foundation for the whole series.**
 
-| What we did | Why |
-| ----------------------------- | -------------------------------- |
+| What we did                     | Why                                                            |
+| ------------------------------- | -------------------------------------------------------------- |
 | Understood the concept of Token | A Token is the smallest unit of text a computer can understand |
-| Defined `TokenType` and `Token` | The data structures the Lexer will need |
-| Set up the project skeleton | Everything that follows builds on this base |
+| Defined `TokenType` and `Token` | The data structures the Lexer will need                        |
+| Set up the project skeleton     | Everything that follows builds on this base                    |
 
 **Next up: implementing the Lexer — making the program automatically "spit out" tokens from text.**
 
 ## Complete Code
 
-**`parser/token.go`**
+### `parser/token.go`
 
 ```go
 package parser
@@ -239,7 +240,7 @@ type Token struct {
 }
 ```
 
-**`main.go`**
+### `main.go`
 
 ```go
 package main

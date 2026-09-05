@@ -2,7 +2,6 @@
 title: 为评论区添加内容过滤与安全防护
 description: 为 Nuxt 评论区增加敏感词过滤、文档归属验证、防重复提交与限流，构建多层安全防护体系。包含前端实时验证、后端严格校验、递归 CTE 归属验证及生产环境建议。
 date: 2026-03-23
-permalink: e87b100b-4980-433c-8ae0-4c490bcfc60c
 series: comment
 level: P3
 tags:
@@ -268,7 +267,7 @@ export const useCommentStore = defineStore("comment", () => {
 
 在评论和回复的 API 中，必须再次调用 `validateComment`，确保任何绕过前端的请求都被拦截。所有 API 统一返回对象格式（不使用 `throw createError`），以便前端统一处理。
 
-**修改 `server/api/comment/post.ts`**：
+#### 修改 `server/api/comment/post.ts`
 
 ```ts
 import { eq } from "drizzle-orm"

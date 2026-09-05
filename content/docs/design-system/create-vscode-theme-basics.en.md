@@ -2,7 +2,6 @@
 title: 'VS Code Theme: From Handwritten JSON to Publishing'
 description: Learn how to create, configure, and publish your own VS Code theme from scratch, without any scaffolding.
 date: 2026-08-06 00:00:00
-permalink: 7a7bec85-c90e-4770-92d3-4ef537ba2960
 level: P1
 series: design-system
 tags:
@@ -120,7 +119,9 @@ The `colors` object defines the **UI colors** of the editor — backgrounds, tit
 }
 ```
 
-**⚠️ Important**: the **order** of the `tokenColors` array matters — later rules override earlier rules with the same `scope`. This is also why, once the theme is engineered, a standalone `base.yaml` is used for shared rules, with language-specific rules layered on top.
+#### ⚠️ Important
+
+the **order** of the `tokenColors` array matters — later rules override earlier rules with the same `scope`. This is also why, once the theme is engineered, a standalone `base.yaml` is used for shared rules, with language-specific rules layered on top.
 
 ---
 
@@ -300,7 +301,7 @@ vsce publish
 
 The theme will be uploaded within seconds, and you can search for it in VS Code after about 5–10 minutes.
 
-**Common publishing errors**:
+#### Common publishing errors
 
 - `Token verification failed`: permissions were not set correctly, or the token expired. Generate a new one.
 - `Version already exists`: the version number already exists. Update the `version` field in `package.json`.
@@ -317,7 +318,9 @@ If you run into trouble with the command-line approach, you can easily upload th
 5. Select your `.vsix` file and upload it.
 6. The theme will appear on the marketplace within a few minutes.
 
-**Advantages**: it completely bypasses command-line token verification, and the whole process is visual.
+#### Advantages
+
+it completely bypasses command-line token verification, and the whole process is visual.
 
 ---
 

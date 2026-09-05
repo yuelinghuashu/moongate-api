@@ -22,13 +22,13 @@ func main() {
 	if err != nil {
 		log.Printf("⚠️ 加载内容失败: %v", err)
 	} else {
-		log.Printf("✅ 加载了 %d 篇技术文章", len(contentStore.Docs))
-		log.Printf("✅ 加载了 %d 篇关于文章", len(contentStore.About))
+		log.Printf("✅ 加载了 %d 篇技术文章", len(contentStore.DocsBySlug))
+		log.Printf("✅ 加载了 %d 篇关于文章", len(contentStore.AboutBySlug))
 	}
 
 	// 3. 创建路由
-	docsHandler := api.NewDocsHandler(contentStore.Docs, contentStore.DocsBySlug, contentStore.DocsEn)
-	aboutHandler := api.NewAboutHandler(contentStore.About, contentStore.AboutBySlug)
+	docsHandler := api.NewDocsHandler(contentStore.DocsBySlug, contentStore.DocsEn)
+	aboutHandler := api.NewAboutHandler(contentStore.AboutBySlug)
 
 	r := gin.Default()
 

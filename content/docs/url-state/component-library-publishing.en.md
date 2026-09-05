@@ -2,7 +2,6 @@
 title: 'From Code to npm: Publishing a Vue 3 Component Library and Avoiding Pitfalls'
 description: 'Complete workflow of publishing the moongate-vue component library to npm: build verification pipeline, distribution contract, nrm registry management, 2FA and WebAuthn network pitfalls, local link testing, bundle budget, automation scripts, and a production release checklist.'
 date: 2026-05-20
-permalink: 6b5acf3d-2c8c-421b-ab33-404ad767f18b
 level: P4
 series: 
 tags:
@@ -90,7 +89,7 @@ for (const [componentName, kebabName] of Object.entries(componentEntries)) {
 }
 ```
 
-**Key Differences (vs initial version)**:
+#### Key Differences (vs initial version)
 
 - **Pure ES Module**: Only `.js`, no `.cjs` — this is a deliberate choice (all modern bundlers support ESM, and having an `import` condition in `exports` suffices)
 - **27 on-demand export entries**: Users can `import Button from 'moongate-vue/button'` to load only the needed component
@@ -137,7 +136,9 @@ Testing checklist:
 - [ ] TypeScript type hints work correctly
 - [ ] HMR hot reload works
 
-**Note**: After testing, to remove the link you need: `pnpm remove moongate-vue` + manually clean up `link:` entries.
+#### Note
+
+After testing, to remove the link you need: `pnpm remove moongate-vue` + manually clean up `link:` entries.
 
 ---
 

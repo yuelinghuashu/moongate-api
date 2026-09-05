@@ -2,10 +2,9 @@
 title: Nuxt 4 中安全实现状态持久化：根治水合失败指南
 description: 介绍 Nuxt 4 中安全实现状态持久化的原理，以及如何用 useLocalStorage 解决 Nuxt 4 的 SSR 水合失败问题。
 date: 2026-02-11
-permalink: d455ccf1-d190-44a4-a1ce-e30feb3cca3f
 series: performance
 level: P1
-tags: 
+tags:
   - Nuxt
   - State Management
   - Hydration
@@ -41,7 +40,7 @@ Nuxt 的 SSR 流程：
 
 ```ts
 // 错误示例：直接在组件顶层读取 localStorage
-const viewMode = ref(localStorage.getItem("viewMode") === "2" ? 2 : 1);
+const viewMode = ref(localStorage.getItem("viewMode") === "2" ? 2 : 1)
 // 服务端报错，客户端值不一致 → 水合失败
 ```
 
@@ -57,19 +56,19 @@ const viewMode = ref(localStorage.getItem("viewMode") === "2" ? 2 : 1);
 export const useSettingsStore = defineStore(
   "settings",
   () => {
-    const colorMode = useColorMode(); // SSR 安全
-    const { locale } = useI18n(); // SSR 安全
+    const colorMode = useColorMode() // SSR 安全
+    const { locale } = useI18n() // SSR 安全
 
     const preferences = ref({
       theme: colorMode.preference,
       language: locale.value,
       searchOption: 1,
-    });
+    })
 
-    return { preferences };
+    return { preferences }
   },
   { persist: true },
-); // 插件只在客户端恢复状态
+) // 插件只在客户端恢复状态
 ```
 
 ### 2. UI 状态（高风险）
@@ -82,9 +81,9 @@ export const useSettingsStore = defineStore(
 
 ```vue
 <script setup>
-import { useLocalStorage } from "@vueuse/core";
+import { useLocalStorage } from "@vueuse/core"
 // 服务端返回默认值 1，客户端自动同步 localStorage
-const viewMode = useLocalStorage("viewMode", 1);
+const viewMode = useLocalStorage("viewMode", 1)
 </script>
 <template>
   <USelect v-model="viewMode" :items="viewModeOptions" />
@@ -95,7 +94,7 @@ const viewMode = useLocalStorage("viewMode", 1);
 </template>
 ```
 
-**为什么能解决？**
+### 为什么能解决？
 
 `useLocalStorage` 的核心是 **依赖注入 + 可选链**：
 
@@ -103,8 +102,8 @@ const viewMode = useLocalStorage("viewMode", 1);
 // 简化版原理
 function useLocalStorage(key, initialValue) {
   // 关键：window?.localStorage 在服务端是 undefined
-  const storage = import.meta.client ? localStorage : null;
-  return useStorage(key, initialValue, storage);
+  const storage = import.meta.client ? localStorage : null
+  return useStorage(key, initialValue, storage)
 }
 ```
 
@@ -125,7 +124,9 @@ function useLocalStorage(key, initialValue) {
 | SSR 行为 | 正确配置时安全，但初始值只能用默认值 | 检测到无 storage → 安全降级 |
 | 适用场景 | 配置型状态                           | UI 状态                     |
 
-**核心检验标准**：问自己“这个状态的初始值需要在服务端决定 DOM 结构吗？”
+### 核心检验标准
+
+问自己“这个状态的初始值需要在服务端决定 DOM 结构吗？”
 
 - 是 → `useLocalStorage`
 - 否 → Pinia + 持久化插件（确保初始值 SSR 安全）
@@ -152,12 +153,12 @@ flowchart TD
 
 ```vue
 <script setup>
-import { useLocalStorage } from "@vueuse/core";
-const viewMode = useLocalStorage("viewMode", 1);
+import { useLocalStorage } from "@vueuse/core"
+const viewMode = useLocalStorage("viewMode", 1)
 const viewModeOptions = [
   { id: 1, name: "详细模式" },
   { id: 2, name: "简洁模式" },
-];
+]
 </script>
 <template>
   <USelect v-model="viewMode" :items="viewModeOptions" />

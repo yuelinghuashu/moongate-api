@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 4: Parsing Rules and Interpolation'
+title: "LLM Narrative Engines, Part 4: Parsing Rules and Interpolation"
 description: How do you parse condition-action expressions? How does the {variable} interpolation syntax work? This post covers the last two pieces of the parsing layer — turning rules from text into executable structures.
 date: 2026-07-20 19:00:00
-permalink: c7f60196-3aa2-4191-9796-544aa5ba7a3e
 level: P3
 series: narrative-engine
 tags:
@@ -167,7 +166,7 @@ Interpolation substitution happens in **three different scenarios**:
 
 3. **Prompt construction**: Worldview and background text are passed to the LLM **as-is**, without engine-side substitution. The LLM naturally understands `{角色名}` from context (e.g., "You are 贝利亚奥特曼").
 
-**Why not substitute in scenario 3?**
+#### Why not substitute in scenario 3?
 
 Because substitution changes the raw form of the text. If we replace `{角色名}的故乡是光之国` with `贝利亚奥特曼的故乡是光之国`, the LLM receives a "hardened" narrative. Keeping `{角色名}` as-is lets the LLM dynamically decide how to use the name during generation — in some narrative branches, the character name might change (e.g., the character is renamed or forgotten), and keeping the placeholder is actually more flexible.
 
@@ -202,7 +201,7 @@ Append to memory: "贝利亚奥特曼的故乡是光之国" written to memory
 LLM narrative: generates response with the new memory
 ```
 
-**Why is substitution done at runtime?**
+### Why is substitution done at runtime?
 
 Because the engine supports multiple branching storylines. If substitution happened at load time, all branches would share the same static value and couldn't evolve independently. Runtime substitution means each branch reads its own state — when the state changes, the interpolation result changes with it.
 
@@ -224,7 +223,7 @@ At this point, the parsing layer covers all syntax units:
 | Plain text lists  | `parsePlainList`                | Low        | Extracts lines one by one                                |
 | **Interpolation** | `ReplacePlaceholders` (runtime) | Medium     | Preserved at parse time, substituted at runtime          |
 
-**The most critical boundary:**
+### The most critical boundary
 
 > The parser only "reads" — it turns text into structured data.
 > The engine "computes" — condition evaluation, variable substitution, action execution.

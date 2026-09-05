@@ -2,7 +2,6 @@
 title: Godot 4 + C# 踩坑记：五个深坑，附速查表与最小复现
 description: 总结 Godot 4 + C# 开发中五个最隐蔽的陷阱（脚本加载、配置覆盖、构建污染、测试运行、命名冲突），附带源码级根因分析、速查表和工程化脚手架，适合已能编译运行的开发者。
 date: 2026-08-23
-permalink: 4ecf940a-cff8-4b29-8b31-e72d193db8a7
 level: P5
 tags:
   - Godot
@@ -57,7 +56,7 @@ tags:
 
 想省心：把下面三份文件放进项目根目录即可。想理解原理：看坑三/坑四。
 
-**① `Directory.Build.props`**（全局排除，所有子项目自动继承）：
+### ① `Directory.Build.props`
 
 ```xml
 <!-- 放项目根目录；MSBuild 自动导入到其下所有项目 -->
@@ -73,7 +72,7 @@ tags:
 </Project>
 ```
 
-**② `build.sh`**（检测编辑器 → 构建 → 测试）：
+### ② `build.sh`
 
 ```bash
 #!/usr/bin/env bash
@@ -104,7 +103,7 @@ dotnet build tianxing.sln
 dotnet test tianxing.sln
 ```
 
-**③ `.gitignore` 补充段**（防构建产物入库）：
+### ③ `.gitignore` 补充段
 
 ```gitignore
 bin/
@@ -187,7 +186,7 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 **根因**：编辑器在项目打开期间持有 `project.godot` 的内存副本；只要编辑器侧发生保存，就以旧副本为准写回——**外部修改被旧内存副本覆盖**。Godot 4.x（4.7.2 实测）在编辑器窗口获焦、检测到文件被外部改动时，通常会弹出 "Files have been modified outside Godot" 对话框（Reload from disk / Ignore external changes）；**但该提示不拦截后续保存**——无视提示直接进行任何编辑器侧保存（包括在对话框里选 "Ignore external changes"），外部修改仍会被静默丢弃。仅退出编辑器不会写回 project.godot（与版本控制无关，纯编辑器行为）。
 
-**解法（安全修改流程）**：
+### 解法（安全修改流程）
 
 - ✅ 推荐：在编辑器内通过 **项目设置** 面板修改
 - ✅ 或：关闭编辑器 → 文本编辑器修改 → 重新打开编辑器（此时才会读到新配置）
@@ -202,14 +201,16 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 ## 坑三：CS0579 特性重复——构建污染，需要排除 + 隔离构建
 
-**现象**：`dotnet build` 稳定报错，指向 `.godot/mono/temp/obj/` 下的生成文件：
+**现象**：
+
+`dotnet build` 稳定报错，指向 `.godot/mono/temp/obj/` 下的生成文件：
 
 ```
 error CS0579: “System.Reflection.AssemblyCompanyAttribute”特性重复
 error CS0579: “global::System.Runtime.Versioning.TargetFrameworkAttribute”特性重复
 ```
 
-**最小复现**（多项目；4.7.2 + .NET SDK 9/10 实测）：
+**最小复现**：
 
 1. 解决方案根目录同时含一个 Godot 项目（Godot.NET.Sdk，中间产物在 `.godot/mono/temp/obj`）和一个兄弟项目，如 `tests/`（普通 Microsoft.NET.Sdk 类库）
 2. 构建解决方案 → 兄弟项目的生成文件落在 `tests/obj/**`
@@ -225,7 +226,7 @@ error CS0579: “global::System.Runtime.Versioning.TargetFrameworkAttribute”�
 
 </details>
 
-**解法（按安全性排序）**：
+### 解法（按安全性排序）
 
 ① **最稳：关闭编辑器再构建**。没有并发写，没有污染源。
 
@@ -328,7 +329,7 @@ error CS0104: “Timer”是“Godot.Timer”和“System.Threading.Timer”之�
 
 **根因**：两个命名空间都有 `Timer`，编译器无法自动判定。
 
-**解法（二选一）**：
+### 解法（二选一）
 
 ① 字段与构造都显式限定：
 

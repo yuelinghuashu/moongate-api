@@ -2,7 +2,6 @@
 title: VS Code 主题：从手写 JSON 到可发布
 description: 不依赖脚手架，从零手写最小主题 JSON，理解 colors 与 tokenColors 的核心机制，掌握调试、打包与发布的完整流程，构建属于你的第一个 VS Code 主题。
 date: 2026-08-06 00:00:00
-permalink: 7a7bec85-c90e-4770-92d3-4ef537ba2960
 level: P1
 series: design-system
 tags:
@@ -133,7 +132,9 @@ mkdir themes
 }
 ```
 
-**⚠️ 重要**：`tokenColors` 数组的**顺序很重要**——后面的规则会覆盖前面相同 `scope` 的规则。这也是为什么工程化之后我们会用一个独立的 `base.yaml` 管理通用规则，再在语言文件中叠加专属规则。
+#### ⚠️ 重要
+
+`tokenColors` 数组的**顺序很重要**——后面的规则会覆盖前面相同 `scope` 的规则。这也是为什么工程化之后我们会用一个独立的 `base.yaml` 管理通用规则，再在语言文件中叠加专属规则。
 
 ---
 
@@ -313,7 +314,7 @@ vsce publish
 
 几秒后主题就会上传。约 5-10 分钟即可在 VS Code 中搜索到。
 
-**常见发布错误**：
+#### 常见发布错误
 
 - `Token verification failed`：权限未正确设置或 Token 过期，重新生成。
 - `Version already exists`：版本号重复，更新 `package.json` 中的 `version`。
@@ -330,7 +331,9 @@ vsce publish
 5. 选择你的 `.vsix` 文件上传。
 6. 几分钟后主题就会出现在市场中。
 
-**优点**：完全绕过命令行 token 验证，过程可视化。
+#### 优点
+
+完全绕过命令行 token 验证，过程可视化。
 
 ---
 

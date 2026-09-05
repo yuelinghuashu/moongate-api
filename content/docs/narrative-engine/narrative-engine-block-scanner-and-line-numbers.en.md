@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 3: Block Scanner and Line Numbers'
+title: "LLM Narrative Engines, Part 3: Block Scanner and Line Numbers"
 description: From format design to parser implementation — a handwritten block scanner that reports "line 12" instead of "position 246." Precise line number binding is the core value of a custom parser.
 date: 2026-07-20 17:00:00
-permalink: a6a93745-4f18-4778-98bb-e1405b4e5770
 level: P3
 series: narrative-engine
 tags:
@@ -75,7 +74,9 @@ I split the parsing into two phases:
 | **Block Scanner** (Lexer) | Split into blocks, record line numbers | Raw text  | `[]Block`          |
 | **Structured Parser**     | Parse into structured data             | `[]Block` | `*domain.Contract` |
 
-**Key design decision**: line numbers are bound during the scan phase. The parser receives them pre-attached and never needs to calculate offsets. This means error reporting always has precise, absolute line numbers.
+### Key design decision
+
+line numbers are bound during the scan phase. The parser receives them pre-attached and never needs to calculate offsets. This means error reporting always has precise, absolute line numbers.
 
 Two data structures:
 
@@ -165,9 +166,9 @@ func Lex(text string) ([]Block, error) {
 }
 ```
 
-**Two key design decisions:**
+### Two key design decisions
 
-**1. Whitelist first**
+### 1. Whitelist first
 
 `isBlockTitle` only recognizes a predefined set of titles:
 
@@ -183,7 +184,7 @@ var knownBlocks = map[string]bool{
 
 If a creator writes `【脚色名】` (a typo), the scanner won't treat it as a block start — it will return an error pointing to that line. The exact error message depends on context: if the line appears outside any block, it's "content appears outside any block"; if it appears inside a block, the block's parser will catch it. Either way, the line number is precise.
 
-**2. Line number binding**
+### 2. Line number binding
 
 Every line carries its `lineNumber` at storage time, never offset. This is the foundation of precise error reporting.
 

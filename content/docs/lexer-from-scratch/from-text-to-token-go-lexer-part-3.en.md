@@ -1,8 +1,7 @@
 ---
-title: 'Building a Lexer from Scratch (Part 3): Moving the Pointer and Starting the Lexer Conveyor Belt'
-description: 'Implement the core lexer engine: move the cursor pointer, query the symbol table, and slice a text string into a structured stream of tokens.'
+title: "Building a Lexer from Scratch (Part 3): Moving the Pointer and Starting the Lexer Conveyor Belt"
+description: "Implement the core lexer engine: move the cursor pointer, query the symbol table, and slice a text string into a structured stream of tokens."
 date: 2026-07-13 22:00:00
-permalink: 7d80bcad-0ef8-4a03-a22c-11a19494ce5a
 series: lexer-from-scratch
 level: P1
 tags:
@@ -256,10 +255,10 @@ Look! Through our Lexer, the computer successfully turned a cold, structureless 
 
 With this part, our **Lexer is fully born**!
 
-| What we did | Why |
-| -------------------------------------- | ----------------------------------------------------------------------- |
-| Designed the cursor state machine (`position`) | Established the low-level conveyor-belt model for iterating multi-byte text |
-| Implemented the purely table-driven `NextToken()` | Carried the data-driven idea to its end, removed redundant functions, and made symbol dispatch maximally efficient |
+| What we did                                           | Why                                                                                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Designed the cursor state machine (`position`)        | Established the low-level conveyor-belt model for iterating multi-byte text                                                    |
+| Implemented the purely table-driven `NextToken()`     | Carried the data-driven idea to its end, removed redundant functions, and made symbol dispatch maximally efficient             |
 | Implemented the ultra-minimal `readText()` truncation | As soon as the peeked character matches `symbolMap`, it's automatically a boundary — eliminating all scattered detection logic |
 
 And with that, the battle of lexical analysis is complete.

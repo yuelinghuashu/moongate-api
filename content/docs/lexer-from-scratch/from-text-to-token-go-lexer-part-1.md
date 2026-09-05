@@ -1,7 +1,6 @@
 ---
 title: 从零实现词法分析器（一）：Token——计算机的最小理解单位
 description: 从计算机不认识文本的痛点出发，理解 Token 的概念，并用 Go 定义第一个 Token 结构体，完成词法分析器的第一步。
-permalink: d6784b4c-89b0-4a75-b303-10b49c67d576
 date: 2026-07-13 20:00:00
 series: lexer-from-scratch
 level: P1
@@ -112,7 +111,9 @@ mephisto/
         └── lexer.go
 ```
 
-**注意：** 所有解析相关的代码都放在 `parser/` 目录下，这样随着系列文章的推进，我们始终在同一个包里工作，目录结构的变化只是“新增文件”，不是“切换包”。读者从头到尾只需要关注 `internal/parser/` 这一个目录的演进。
+#### 注意
+
+所有解析相关的代码都放在 `parser/` 目录下，这样随着系列文章的推进，我们始终在同一个包里工作，目录结构的变化只是“新增文件”，不是“切换包”。读者从头到尾只需要关注 `internal/parser/` 这一个目录的演进。
 
 ### 4.2 初始化 Go 模块
 
@@ -146,11 +147,11 @@ type Token struct {
 }
 ```
 
-**为什么用 `string` 而不是 `int` 定义类型？**
+#### 为什么用 `string` 而不是 `int` 定义类型？
 
 如果用一个数字表示类型，调试时打印出来的是一串数字，需要翻代码才能知道 `0` 代表什么。而用 `string`，`fmt.Println(tok.Type)` 直接打印 `"LEFT_BRACKET"`，可读性高得多。词法分析器处理的 Token 数量通常只有几百个，`string` 的性能开销可以忽略不计。
 
-**为什么 `Token` 的字段要大写？**
+#### 为什么 `Token` 的字段要大写？
 
 在 Go 里，**大写字母开头的字段是公开的**，小写是私有的。`Token` 会被 `main.go` 使用，所以它的字段必须大写，否则外部包无法访问。
 
@@ -220,7 +221,7 @@ go run main.go testdata/sample.meph
 
 ## 完整代码
 
-**`parser/token.go`**
+### `parser/token.go`
 
 ```go
 package parser
@@ -239,7 +240,7 @@ type Token struct {
 }
 ```
 
-**`main.go`**
+### `main.go`
 
 ```go
 package main

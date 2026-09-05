@@ -1,7 +1,6 @@
 ---
 title: MCP stdio 协议的 3 个隐秘陷阱：当单元测试全绿，但 MCP Server 无法工作
 description: 深入剖析 MCP stdio 协议的三个隐秘陷阱，记录一次真实的调试经历——从 401 个测试全绿到线上完全无响应，最终排查出 process.exit、stdout 污染和异步竞态三个致命 Bug，并给出端到端测试的解决方案。
-permalink: a1473eea-0a80-4118-9fff-ccc71223a5bc
 date: 2026-08-16
 series:
 level: P5
@@ -116,7 +115,7 @@ process.exit(exitCode)
 
 **MCP Server 刚出生就死了。**
 
-### 修复
+**修复**：
 
 ```typescript
 #!/usr/bin/env node
@@ -133,9 +132,7 @@ if (process.argv[2] !== "mcp-server" && process.argv[2] !== "mcp") {
 
 > ⚠️ **注意**：这个修复方案当时看起来没问题，但后来在同一天的测试中暴露了它的**局限性**——见下方的「Bug #1.5：同源 Bug 复发」。
 
-### 深层教训
-
-这是 CLI 工具转服务化时的**第一坑**：
+**深层教训**：这是 CLI 工具转服务化时的**第一坑**：
 
 | 模式                                      | 生命周期                  | 退出时机                            |
 | ----------------------------------------- | ------------------------- | ----------------------------------- |
@@ -217,7 +214,9 @@ if (!isLongRunning) {
 
 当代码中出现「排除列表」（`if (cmd !== "A" && cmd !== "B")`）时，说明你在**枚举具体命令**，而不是表达「哪些命令是长期运行的」这个**本质属性**。一旦有新的长期运行命令出现（比如 `--watch`），同样的 bug 就会复发。
 
-**检查清单**：如果你的 CLI 未来要加任何「持续监听」功能（watch / serve / daemon），第一时间检查 `bin/index.ts` 的 `isLongRunning` 列表——它必须包含新命令。
+#### 检查清单
+
+如果你的 CLI 未来要加任何「持续监听」功能（watch / serve / daemon），第一时间检查 `bin/index.ts` 的 `isLongRunning` 列表——它必须包含新命令。
 
 ---
 
@@ -294,7 +293,7 @@ MCP 客户端（VSCode / Claude Desktop / Cursor）在解析 stdout 时，期望
 - 单测环境中，`scan_stories` 的 handler 被直接调用，stdout 内容没人解析 → 测试通过
 - 真实环境中，MCP 客户端严格解析 stdout → 立刻崩溃
 
-### 修复
+**修复**：
 
 ```typescript
 // 修复前
@@ -313,9 +312,7 @@ if (!config.wordCount) {
 
 同时 `loadStoryContentAsync` 中的 `console.log(locale.generatedText(...))` 也一并改掉。
 
-### 深层教训
-
-**stdio 协议中的 stdout 不是给你打日志的。** 它是两个进程之间的协议通道。任何额外的输出——哪怕是看起来无害的一行日志——都会导致协议解析失败。
+**深层教训**：**stdio 协议中的 stdout 不是给你打日志的。** 它是两个进程之间的协议通道。任何额外的输出——哪怕是看起来无害的一行日志——都会导致协议解析失败。
 
 这是一个**运行时静默失败**的问题：代码不会抛异常，测试不会失败，只有真实客户端会"莫名其妙"不工作。
 
@@ -364,9 +361,7 @@ export function startMcpServer(rootDir: string, tools: RegisteredTool[]): void {
 
 这就是**异步竞态**：`close` 通知"输入流已关闭"，但它不等你的 Promise 完成。
 
-### 修复
-
-用 `pending` Set 跟踪所有 in-flight 请求，在 `close` 时等待它们全部完成再退出：
+**修复**：用 `pending` Set 跟踪所有 in-flight 请求，在 `close` 时等待它们全部完成再退出：
 
 ```typescript
 export function startMcpServer(rootDir: string, tools: RegisteredTool[]): void {
@@ -408,9 +403,7 @@ export function startMcpServer(rootDir: string, tools: RegisteredTool[]): void {
 }
 ```
 
-### 深层教训
-
-在 Node.js 的事件循环中，**`readline` 的 `close` 事件只代表"输入流关闭"，不代表"你的异步回调已执行"**。
+**深层教训**：在 Node.js 的事件循环中，**`readline` 的 `close` 事件只代表"输入流关闭"，不代表"你的异步回调已执行"**。
 
 这是所有 stdio 协议服务器的通用问题：stdin EOF 到达时，你可能仍然有 queued 的 Promise。你需要显式地跟踪和等待它们：
 

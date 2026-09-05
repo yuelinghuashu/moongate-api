@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 1: From Freeform to Constrained'
+title: "LLM Narrative Engines, Part 1: From Freeform to Constrained"
 description: Why JSON and YAML fail for narrative engines, and how a custom DSL (.meph) solves the consistency problem — trading parser complexity for creator experience.
 date: 2026-07-20 13:00:00
-permalink: 2a621c9e-8825-4528-84bc-c0cd8a4a9e40
 level: P3
 series: narrative-engine
 tags:
@@ -207,7 +206,7 @@ Even if only one out of ten users is a minimalist who craves a simpler config �
 
 Back to that `.meph` contract from the beginning. Its design is based on three principles:
 
-**1. Use human language for boundaries, eliminate bracket-phobia**
+### 1. Use human language for boundaries, eliminate bracket-phobia
 
 Creators see `【角色名】`, not `{` and `}`. Chinese guillemets are more natural than curly braces for Chinese-speaking creators. `【角色名】` itself says what this section contains — no comments needed.
 
@@ -215,11 +214,11 @@ More importantly, block titles are restricted to a whitelist (`角色名`, `锚�
 
 (The specific message depends on whether the typo appears inside a block or outside one, but the line number is always precise.)
 
-**2. Distinguish "semantic blocks" rather than "data structures"**
+### 2. Distinguish "semantic blocks" rather than "data structures"
 
 In JSON, the creator decides whether to use an object or an array — that's an implementation detail. In `.meph`, the creator only needs to know "this is a list" or "this is a paragraph." The parser identifies the structure based on the block title — the creator doesn't declare it.
 
-**3. Syntax mirrors natural logic**
+### 3. Syntax mirrors natural logic
 
 Rules use the intuitive `[name] if condition -> action` form. Condition logic uses readable expressions like `包含 "keyword"` and `状态.key > value`, not symbolic operators.
 

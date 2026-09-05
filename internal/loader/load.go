@@ -9,13 +9,11 @@ import (
 )
 
 // Store 内存数据存储，存放所有解析后的内容。
-// Docs 和 About 分别以 permalink 为 key 存储。
+// DocsBySlug 和 AboutBySlug 以 slug（文件名）为 key 存储。
 // DocsEn 以 slug 为 key 存储英文译文（文件名形如 <slug>.en.md）。
 type Store struct {
-	Docs        map[string]*domain.Doc   // key = permalink（中文/默认）
 	DocsBySlug  map[string]*domain.Doc   // key = slug（中文/默认）
 	DocsEn      map[string]*domain.Doc   // key = slug（英文译文）
-	About       map[string]*domain.About // key = permalink
 	AboutBySlug map[string]*domain.About // key = slug
 }
 
@@ -24,10 +22,8 @@ type Store struct {
 // 分别加载技术文章和独立页面。
 func LoadAll(contentDir string) (*Store, error) {
 	store := &Store{
-		Docs:        make(map[string]*domain.Doc),
 		DocsBySlug:  make(map[string]*domain.Doc),
 		DocsEn:      make(map[string]*domain.Doc),
-		About:       make(map[string]*domain.About),
 		AboutBySlug: make(map[string]*domain.About),
 	}
 
@@ -88,7 +84,6 @@ func loadDocs(dir string, store *Store) error {
 			return nil
 		}
 
-		store.Docs[doc.Permalink] = &doc  // 存储 permalink 索引
 		store.DocsBySlug[doc.Slug] = &doc // 存储 slug 索引
 		return nil
 	})
@@ -109,7 +104,6 @@ func loadAbout(dir string, store *Store) error {
 			continue
 		}
 
-		store.About[about.Permalink] = &about  // 存储 permalink 索引
 		store.AboutBySlug[about.Slug] = &about // 存储 slug 索引
 	}
 

@@ -2,7 +2,6 @@
 title: Nuxt 实战：在个人博客中集成 Shiki 自定义 VSCode 主题
 description: 从加载自定义主题到深浅色联动，再到彻底解决 SSR 闪动问题。一份完整的 Nuxt + Shiki 自定义主题集成指南。
 date: 2026-07-11 22:00:00
-permalink: 65b51060-10b8-4e9e-9ba4-c67d2b6afd36
 series: design-system
 level: P2
 tags:

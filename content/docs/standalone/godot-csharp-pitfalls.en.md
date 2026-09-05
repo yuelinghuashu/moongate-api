@@ -2,7 +2,6 @@
 title: "Godot 4 + C# Pitfall Notes: Five Deep Traps, with a Cheat Sheet and Minimal Reproductions"
 description: Five of the most subtle Godot 4 + C# traps (script loading, config overwrites, build pollution, test runs, naming conflicts), with source-level root-cause analysis, a cheat sheet, and engineering scaffolding — for developers who can already compile and run.
 date: 2026-08-23
-permalink: 4ecf940a-cff8-4b29-8b31-e72d193db8a7
 level: P5
 series: ""
 tags:
@@ -58,7 +57,7 @@ tags:
 
 Want the easy path: drop these three files into your project root and you're done. Want to understand why: see traps 3 and 4.
 
-**① `Directory.Build.props`** (global excludes, auto-inherited by every subproject):
+### ① `Directory.Build.props`
 
 ```xml
 <!-- Place in the project root; MSBuild auto-imports it into every project below -->
@@ -74,7 +73,7 @@ Want the easy path: drop these three files into your project root and you're don
 </Project>
 ```
 
-**② `build.sh`** (detect editor → build → test):
+### ② `build.sh`
 
 ```bash
 #!/usr/bin/env bash
@@ -105,7 +104,7 @@ dotnet build tianxing.sln
 dotnet test tianxing.sln
 ```
 
-**③ `.gitignore` additions** (keep build artifacts out of the repo):
+### ③ `.gitignore` additions
 
 ```gitignore
 bin/
@@ -188,7 +187,7 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 **Root cause**: the editor holds an in-memory copy of `project.godot` while a project is open; whenever the project settings are saved from the editor, it writes back from its own stale copy — **external changes are overwritten by the stale in-memory copy**. Since Godot 4.x (verified on 4.7.2), the editor usually warns when it detects the file changed on disk: when the editor window regains focus it pops up a "Files have been modified outside Godot" dialog offering "Reload from disk" or "Ignore external changes". **But the warning does not block later saves** — if you ignore the dialog and then save any project setting from the editor (including clicking "Ignore external changes" in that dialog), the external changes are still silently discarded. Quitting the editor does not write `project.godot` back by itself (nothing to do with version control; pure editor behavior).
 
-**Fix (safe modification workflow)**:
+### Fix (safe modification workflow)
 
 - ✅ Recommended: edit via the editor's **Project Settings** panel
 - ✅ Or: close the editor → edit with a text editor → reopen the editor (only now will it read the new config)
@@ -203,14 +202,16 @@ ERROR: System.NullReferenceException ... at GameManager.Instance...
 
 ## Trap 3: CS0579 Duplicate Attributes — Build Pollution Needs Excludes + Isolated Builds
 
-**Symptom**: `dotnet build` fails reliably, pointing at generated files under `.godot/mono/temp/obj/`:
+**Symptom**:
+
+`dotnet build` fails reliably, pointing at generated files under `.godot/mono/temp/obj/`:
 
 ```text
 error CS0579: Duplicate 'System.Reflection.AssemblyCompanyAttribute' attribute
 error CS0579: Duplicate 'global::System.Runtime.Versioning.TargetFrameworkAttribute' attribute
 ```
 
-**Minimal reproduction** (multi-project; verified on 4.7.2 + .NET SDK 9/10):
+**Minimal reproduction**:
 
 1. A solution root contains a Godot project (Godot.NET.Sdk, intermediates in `.godot/mono/temp/obj`) and a sibling project, e.g. `tests/` with plain Microsoft.NET.Sdk
 2. Build the solution → the sibling's generated files land in `tests/obj/**`
@@ -226,7 +227,7 @@ The real trap is sibling projects: their leftover `bin/`/`obj/` generated files 
 
 </details>
 
-**Fixes (ordered by safety)**:
+### Fixes (ordered by safety)
 
 ① **Most reliable: close the editor and build**. No concurrent writes, no pollution source.
 
@@ -329,7 +330,7 @@ error CS0104: 'Timer' is an ambiguous reference between 'Godot.Timer' and 'Syste
 
 **Root cause**: both namespaces define a `Timer`; the compiler can't decide for you.
 
-**Fix (pick one)**:
+### Fix (pick one)
 
 ① Fully qualify both the field and the constructor:
 

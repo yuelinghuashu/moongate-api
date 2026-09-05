@@ -2,7 +2,6 @@
 title: Nuxt 评论区完美支持 Markdown：从解析、高亮到安全渲染
 description: 手把手教你为 Nuxt 博客评论区添加安全、美观、功能完整的 Markdown 渲染支持，代码块配色与文档（Nuxt Content）自动统一，深浅色模式无缝切换。
 date: 2026-02-21
-permalink: 85853cc1-2371-4b61-a6ef-90fda07a3116
 series: comment
 level: P3
 tags:
@@ -123,7 +122,9 @@ tags:
 - 即使勉强支持 Markdown，代码块样式与文档正文（通常由 Nuxt Content 渲染）不一致，显得格格不入。
 - 担心 XSS 攻击，不敢直接渲染用户输入的 HTML。
 
-**本文目标**：手把手教你为 Nuxt 博客评论区添加**安全、美观、功能完整**的 Markdown 渲染支持，并且代码块配色与文档（Nuxt Content v3）**自动保持统一**，深浅色模式无缝切换。
+### 本文目标
+
+手把手教你为 Nuxt 博客评论区添加**安全、美观、功能完整**的 Markdown 渲染支持，并且代码块配色与文档（Nuxt Content v3）**自动保持统一**，深浅色模式无缝切换。
 
 ---
 
@@ -669,19 +670,19 @@ watch([() => props.content, () => colorMode.value], renderContent, {
 
 ## 附录：常见问题
 
-**Q：我用的不是 Nuxt UI，如何实现主题切换？**
+### Q：我用的不是 Nuxt UI，如何实现主题切换？
 
 A：可以使用 `@vueuse/core` 的 `usePreferredDark` 手动监听系统主题，动态改变 Shiki 的 `theme` 参数。
 
-**Q：如何支持更多编程语言？**
+### Q：如何支持更多编程语言？
 
 A：语言标识符请参考 [Shiki 官方语言列表](https://shiki.zhcndoc.com/languages)。Shiki 会自动加载所需语言，无需额外配置。若使用插件预加载，只需在 `langs` 数组中添加对应 ID。
 
-**Q：渲染速度慢怎么办？**
+### Q：渲染速度慢怎么办？
 
 A：如果选择预加载方案，确保 Shiki 实例全局单例（插件方式已满足）。如果选择懒加载方案，首次加载某种语言时会有短暂延迟，但之后会缓存。若评论数量极大，可考虑对代码块渲染做虚拟滚动。
 
-**Q：如何确认文档实际使用的主题？**
+### Q：如何确认文档实际使用的主题？
 
 A：打开浏览器开发者工具，选中文档中的一个代码块，查看 `<pre>` 或 `<code>` 标签的类名，通常包含主题名称（如 `material-theme-palenight`）。也可在 `nuxt.config.ts` 中查看 `content.highlight.theme` 配置。
 

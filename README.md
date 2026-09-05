@@ -35,7 +35,7 @@
 ### 中英双语
 
 - 英文译文与中文文章放在同一目录，文件名为 `<slug>.en.md`（如 `content/docs/url-state/component-library-publishing.en.md`），slug 自动去掉 `.en` 后缀与中文配对。
-- 英文文件的 frontmatter 以中文为标准：`date/permalink/level/series/tags` 与中文一致，`title/description` 为英文。
+- 英文文件的 frontmatter 以中文为标准：`date/level/series/tags` 与中文一致，`title/description` 为英文。
 - API 通过 `?lang=en` 请求英文版本：有译文返回英文（`lang:"en"`），无译文回退中文（`isFallback:true`）；不传 `lang` 或传其他值（如 `ja`）时始终返回中文，行为与旧版一致。
 - 响应新增字段：`lang`（实际语言）、`isFallback`（是否回退）、`hasTranslation`（是否存在英文译文）。
 
@@ -46,7 +46,6 @@
 title: "文章标题"
 description: "简短摘要"
 date: 2025-01-15 10:00:00
-permalink: UUID
 level: P2 # P1-P5 难度等级
 series: "系列名称" # 可选
 tags:

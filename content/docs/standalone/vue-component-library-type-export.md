@@ -2,7 +2,6 @@
 title: Vue 3 组件库的 TypeScript Props 类型导出：一个看似简单的坑
 description: 深度解析 Vue SFC 编译器与 TypeScript 模块解析之间的契约缺口，揭示 `export type { ButtonProps } from './Button.vue'` 在消费者项目中失败的完整原因及解决方案。
 date: 2026-08-18
-permalink: 89d16e92-a29d-4468-9a9c-f3dce28b4524
 series:
 level: P5
 tags:
@@ -44,7 +43,7 @@ import type { ButtonProps } from "moongate-vue"
 // ❌ 模块 "moongate-vue" 没有导出的成员 "ButtonProps"
 ```
 
-**明明构建通过了，为什么消费者拿不到类型？**
+### 明明构建通过了，为什么消费者拿不到类型？
 
 ## 排障路径
 
@@ -187,7 +186,9 @@ defineProps<ButtonProps>()
 
 > **注 1**：Vue 3.3+ 官方声明支持 `defineProps` 引用外部导入的类型。实测中，`compiler-sfc`（Vite 构建管道）确实能解析跨文件的基础类型。但 `vue-tsc`（类型检查管道）在带 `"types"` 字段的 `tsconfig.json` 下，走的是 `@vue/language-core` 的 SFC 模块解析路径，对跨文件类型导入**一致地拒绝**。由于真实项目几乎必然配置了 `"types": ["vite/client", "node"]` 等，这个差异在实践中意味着：**消费者端的类型检查始终会失败**。
 
-**结论**：`defineProps<T>()` 的 `T` **只能引用同文件定义的类型**——即使 `compiler-sfc` 在构建时能编译通过，`vue-tsc` 在类型检查阶段也会报错。对于组件库而言，两道关卡都必须通过才算可用。
+#### 结论
+
+`defineProps<T>()` 的 `T` **只能引用同文件定义的类型**——即使 `compiler-sfc` 在构建时能编译通过，`vue-tsc` 在类型检查阶段也会报错。对于组件库而言，两道关卡都必须通过才算可用。
 
 ### `vueCompilerOptions.types` 能绕过吗？
 
@@ -278,7 +279,9 @@ export type { ButtonProps } from "./types/props"
 
 组件内的 `ButtonProps`（供 `defineProps` 编译）和 `types/props.ts` 中的 `ButtonProps`（供对外导出）是两份独立的定义，需要手动保持一致。
 
-**决策参考**：对于 50 个组件以内的库，手写双份的维护成本远低于将整个项目重构为运行时声明（`ExtractPropTypes`）的改造成本。如果库的规模预期超过 50 个组件，建议从一开始就采用运行时声明方案。
+#### 决策参考
+
+对于 50 个组件以内的库，手写双份的维护成本远低于将整个项目重构为运行时声明（`ExtractPropTypes`）的改造成本。如果库的规模预期超过 50 个组件，建议从一开始就采用运行时声明方案。
 
 ---
 

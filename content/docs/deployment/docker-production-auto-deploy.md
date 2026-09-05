@@ -2,7 +2,6 @@
 title: GitHub Actions + Docker 生产级自动化部署（进阶篇）
 description: 通过容器化技术实现环境一致性，自动构建镜像并分发至私有仓库，用 Docker Compose 编排服务，彻底告别环境依赖。
 date: 2026-03-16 23:00:00
-permalink: 947f4f24-fc9b-4c71-8fe5-cc85d2a7a794
 series: deployment
 level: P4
 tags:
@@ -194,7 +193,7 @@ networks:
 
 </details>
 
-**关键点**：
+#### 关键点
 
 - `name` 固定项目名，避免因目录名变化导致网络不一致。
 - 所有服务在同一网络，通过服务名通信。
@@ -314,7 +313,7 @@ docker image prune -f --filter "until=24h"
 
 > **完整可复制版本**：将上述差异化命令合并进入门篇的 workflow，替换对应的 `Deploy to server` 步骤脚本，并在 `envs` 列表中追加所有 NUXT\_\* 变量即可。
 
-**进阶要点**：
+### 进阶要点
 
 - 使用 `cache-from` 加速构建。
 - 远程脚本中执行数据库迁移（使用 `npm install -g` 确保有 `drizzle-kit`，避免依赖缺失）。

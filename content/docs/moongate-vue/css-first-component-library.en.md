@@ -1,8 +1,7 @@
 ---
-title: 'CSS-First + Thin Component Wrappers: A 25KB Component Library in Practice'
+title: "CSS-First + Thin Component Wrappers: A 25KB Component Library in Practice"
 description: Design-token-driven Vue 3 component library architecture. Four-layer CSS architecture, minimal Vue components, Vite multi-entry build, automated bundle budget verification, keeping the library under 25KB gzipped.
 date: 2026-04-19
-permalink: 7b75c994-ce43-4f78-89e1-817c295f3f00
 level: P3
 series: moongate-vue
 tags:
@@ -101,7 +100,7 @@ Using v1.5.0's actual code as an example, the template core has only three parts
 </button>
 ```
 
-**Component characteristics**:
+### Component characteristics
 
 - No `<style>` block, all styles come from global CSS
 - Complete implementation is about 110 lines, minimal and clean (see [Part 3 §9](./vue-component-api-design))
@@ -226,7 +225,7 @@ The `utilities/` directory retains a set of minimal **semantic utility classes**
 }
 ```
 
-**Characteristics**:
+### Characteristics
 
 - Only the most commonly used ~20 classes, add as needed
 - Values bound to design tokens (`var(--ui-*)`), maintaining theme consistency
@@ -279,7 +278,9 @@ import "moongate-vue/reset.css"
 
 {% endcollapsible %}
 
-**Core difference in one sentence**: Atomic approaches win on size, this approach wins on maintainability, readability, and multi-framework reuse — for a component library, the latter matters more.
+#### Core difference in one sentence
+
+Atomic approaches win on size, this approach wins on maintainability, readability, and multi-framework reuse — for a component library, the latter matters more.
 
 ## Summary
 

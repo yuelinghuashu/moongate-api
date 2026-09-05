@@ -2,7 +2,6 @@
 title: Moon Gate 设计：以月为名，构建极简秩序
 description: 从月灵花束到 Moon Gate，记录一个关于月亮与代码的设计故事。极简、冷静、以月为名的秩序——直角是边界，月光是光效，极简是灵魂。
 date: 2025-12-29 14:00:00
-permalink: nZnrfFtEUyJiKTFx
 ---
 
 ## 一、起点：确立核心，拒绝妥协

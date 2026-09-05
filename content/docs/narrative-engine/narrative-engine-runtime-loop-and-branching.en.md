@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 6: Runtime Loop and Branching'
+title: "LLM Narrative Engines, Part 6: Runtime Loop and Branching"
 description: You have a contract — now how do you bring it to life? Five-layer sandwich prompt, streaming full-width indentation, Mother-Child branching, memory extraction — building a complete runtime loop.
 date: 2026-07-20 23:00:00
-permalink: e5f9b2c3-4d6e-5f7a-8b9c-2c3d4e5f6a7b
 level: P3
 series: narrative-engine
 tags:
@@ -139,7 +138,7 @@ This solves the "empty world" problem in narrative. If the LLM only responds to 
 
 After every turn, the engine automatically saves the current state to a child file.
 
-**Naming convention** (v1.1.0 onward, aligned with the Flutter version, **dot-separated**):
+### Naming convention
 
 - Master `story.meph` → default child `story.child.meph`
 - Branch `--branch dark` → `story.dark.meph`
@@ -184,22 +183,30 @@ story.meph (master, read-only)
 
 Each branch evolves independently, without interfering with the others. The project includes `data/dantes.meph` alongside an already-run `data/dantes.child.meph` save.
 
-**Save timing**: instead of writing to disk every turn (which would be inefficient), it's split into two layers:
+### Save timing
+
+instead of writing to disk every turn (which would be inefficient), it's split into two layers:
 
 1. **After each turn**: the Session layer (`cmd/mephisto/session.go`) calls `engine.Save()` to persist progress in real time
 2. **On exit**: a `defer` saves one more time, ensuring the final state is written before exit
 
-**Rule freshness during save**: `Save()` has a clever design — before saving, it reads the child file from disk (if it exists) and uses the `【规则】` block from disk as the latest rules. This means the user's real-time edits to the rules section in their editor won't be overwritten by the auto-save. This also supports **rule hot-reload** introduced in v1.0.3: `session.go` watches the child file for changes via `fsnotify`, with a 500ms debounce, then calls `ReloadContract` to re-parse — replacing only the rules while preserving state and history. This makes "edit rules → save → instantly effective" a reality.
+### Rule freshness during save
 
-**Loading**:
+`Save()` has a clever design — before saving, it reads the child file from disk (if it exists) and uses the `【规则】` block from disk as the latest rules. This means the user's real-time edits to the rules section in their editor won't be overwritten by the auto-save. This also supports **rule hot-reload** introduced in v1.0.3: `session.go` watches the child file for changes via `fsnotify`, with a 500ms debounce, then calls `ReloadContract` to re-parse — replacing only the rules while preserving state and history. This makes "edit rules → save → instantly effective" a reality.
+
+### Loading
 
 - Default: load the child if it exists
 - `--reset`: ignore the child, start fresh from the master
 - `--branch dark`: load the corresponding branch file
 
-**Note**: Running a child file directly will overwrite it — the engine treats any `.meph` file as a master and generates a corresponding child. To avoid losing progress, don't run `run` directly on child files.
+### Note
 
-**The value of this design**: creators can fork storylines at critical moments, exploring different directions without losing any progress.
+Running a child file directly will overwrite it — the engine treats any `.meph` file as a master and generates a corresponding child. To avoid losing progress, don't run `run` directly on child files.
+
+### The value of this design
+
+creators can fork storylines at critical moments, exploring different directions without losing any progress.
 
 ---
 
@@ -257,7 +264,7 @@ func (e *Engine) Run(input string, onChunk func(string)) (string, error) {
 3. **Semantic deduplication**: `shared.DeduplicateMemories` uses keyword Jaccard similarity for deduplication — semantically similar memories with different wording are automatically merged. For example: "Faust meets Mephistopheles in his study" and "Mephistopheles visits Faust's study late at night" — both memories share keywords like Faust, Mephistopheles, and study, so they're judged to describe the same event and merged into one
 4. **Append + compress**: when the count exceeds the limit (`MaxLimit = 30`), auto-compress — keep the most recent 5 entries plus 3-5 summary entries
 
-**Why this design?**
+### Why this design?
 
 1. **User-unaware**: streaming is already complete, the user is reading or thinking about the response. Memory extraction happens silently in the background — the user doesn't "wait"
 2. **Simple logic**: synchronous calls are easier to control than async goroutines — no race conditions, no "memory isn't written yet when saving"
@@ -310,7 +317,7 @@ This is Mephisto's runtime.
 
 This system doesn't come without cost:
 
-**1. Memory extraction depends on LLM quality**
+### 1. Memory extraction depends on LLM quality
 
 If the main model is in poor state, extracted summaries may drift — even altering key facts (e.g., writing "banished" instead of "defeated"). This is a "hallucination" risk.
 
@@ -321,11 +328,11 @@ Two layers of mitigation:
 
 Future enhancement: **post-extraction validation** — after extraction results return, the engine checks for conflicts with core settings. If a conflict is found, discard that memory entry.
 
-**2. Branch switching requires manual management**
+### 2. Branch switching requires manual management
 
 Child files are stored independently. Switching branches requires the user to explicitly specify `--branch`. Unlike real version control with diff and merge, branches don't auto-sync.
 
-**3. Streaming output occupies the terminal**
+### 3. Streaming output occupies the terminal
 
 Full-width indentation and streaming look great in the terminal, but if the user wants to copy-paste text, the indentation and newlines come along — sometimes interfering.
 

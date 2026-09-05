@@ -2,7 +2,6 @@
 title: GitHub Actions + Docker 极简自动化部署教程（入门篇）
 description: 从零开始，用最简洁的方式将你的应用打包成 Docker 镜像，并通过 GitHub Actions 实现自动构建、推送和服务器部署。适合 Docker 新手快速上手 CI/CD 流水线。
 date: 2026-03-16 22:00:00
-permalink: fb702a74-215e-4f19-bcde-53486f3b10fe
 series: deployment
 level: P4
 tags:
@@ -323,4 +322,6 @@ docker compose up -d --build
 
 现在你已经拥有了一套极简但可工作的自动化部署流水线。每次推送代码到 main 分支，都会自动构建镜像、推送到阿里云、并在服务器上重启应用。
 
-**接下来可以探索**：添加健康检查、使用 Caddy 反向代理（避免直接暴露端口）、多环境配置、数据库迁移自动化等进阶功能（参见本系列进阶篇）。
+### 接下来可以探索
+
+添加健康检查、使用 Caddy 反向代理（避免直接暴露端口）、多环境配置、数据库迁移自动化等进阶功能（参见本系列进阶篇）。

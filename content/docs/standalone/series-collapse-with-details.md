@@ -2,10 +2,9 @@
 title: 用原生 <details> 实现系列折叠页：从“点两次”到“稳定可控”
 description: 本文记录了在博客系列页面中使用原生 `<details>` 实现折叠列表时，添加“全部折叠/展开”按钮遇到的“点两次”问题，通过放弃 `toggle` 事件监听、直接同步状态变量和使用 `setTimeout` 等待 DOM 更新，最终实现稳定可控的全局控制功能。包含完整代码和原理分析。
 date: 2026-03-24
-permalink: 566b3b37-191a-4423-9dd6-1f6a97c571c4
 series:
 level: P3
-tags: 
+tags:
   - HTML
   - CSS
   - JavaScript
@@ -62,26 +61,28 @@ tags:
 为了实现全局控制，我需要一个变量来记录当前是否有系列处于展开状态，并据此决定按钮的行为（全部折叠或全部展开）。
 
 ```ts
-const isAnyExpanded = ref(false);
+const isAnyExpanded = ref(false)
 
 // 更新全局状态：遍历所有 <details>，检查是否有 open 属性为 true
 const updateAnyExpanded = () => {
-  const details = document.querySelectorAll("details");
-  isAnyExpanded.value = Array.from(details).some((detail) => detail.open);
-};
+  const details = document.querySelectorAll("details")
+  isAnyExpanded.value = Array.from(details).some((detail) => detail.open)
+}
 
 // 全部折叠/展开
 const toggleAll = () => {
-  const details = document.querySelectorAll("details");
-  const shouldExpand = !isAnyExpanded.value;
+  const details = document.querySelectorAll("details")
+  const shouldExpand = !isAnyExpanded.value
   details.forEach((detail) => {
-    detail.open = shouldExpand;
-  });
-  updateAnyExpanded(); // 更新状态
-};
+    detail.open = shouldExpand
+  })
+  updateAnyExpanded() // 更新状态
+}
 ```
 
-**问题出现了**：点击“全部折叠/展开”按钮时，需要点击**两次**才能生效。第一次点击似乎没有反应，第二次才能正确切换所有系列的状态。
+### 问题出现了
+
+点击“全部折叠/展开”按钮时，需要点击**两次**才能生效。第一次点击似乎没有反应，第二次才能正确切换所有系列的状态。
 
 ---
 
@@ -108,14 +109,14 @@ const toggleAll = () => {
 
 ```ts
 const toggleAll = () => {
-  const details = document.querySelectorAll("details");
-  const shouldExpand = !isAnyExpanded.value; // 目标状态
+  const details = document.querySelectorAll("details")
+  const shouldExpand = !isAnyExpanded.value // 目标状态
   details.forEach((detail) => {
-    detail.open = shouldExpand;
-  });
+    detail.open = shouldExpand
+  })
   // 直接根据本次意图设置状态，不再调用 updateAnyExpanded
-  isAnyExpanded.value = shouldExpand;
-};
+  isAnyExpanded.value = shouldExpand
+}
 ```
 
 ### 手动点击时的状态同步
@@ -125,9 +126,9 @@ const toggleAll = () => {
 ```ts
 const onSummaryClick = () => {
   setTimeout(() => {
-    updateAnyExpanded();
-  }, 0);
-};
+    updateAnyExpanded()
+  }, 0)
+}
 ```
 
 模板中的 `<summary>`：
@@ -143,11 +144,12 @@ const onSummaryClick = () => {
 
 ```ts
 onMounted(() => {
-  updateAnyExpanded();
-});
+  updateAnyExpanded()
+})
 ```
 
-**为什么用 `setTimeout(..., 0)`？**  
+#### 为什么用 `setTimeout(..., 0)`？
+
 用户点击 `<summary>` 后，浏览器会**同步**修改 `<details>` 的 `open` 属性，但 `toggle` 事件的触发是**异步**的，且 Vue 的响应式更新也可能在下一次微任务中执行。`setTimeout` 将读取操作推迟到下一个宏任务，此时 `open` 属性已经就绪，且任何可能影响状态的其他异步操作（如 `toggle` 事件）也已执行完毕。
 
 > 如果用户快速连续点击同一个 `<summary>`，多个 `setTimeout` 会排队执行，可能导致 `updateAnyExpanded` 被多次调用。虽然最终状态正确，但会有不必要的性能开销。由于系列页面的交互频率极低，这个影响可以忽略；如果希望更严谨，可以增加一个简单的防抖函数，但当前实现已经足够稳定。
@@ -196,44 +198,44 @@ onMounted(() => {
 </template>
 
 <script setup lang="ts">
-import dayjs from "dayjs";
+import dayjs from "dayjs"
 
-const { tm } = useI18nSafe();
+const { tm } = useI18nSafe()
 
 // ==================== 数据获取与分组 ====================
 const { data: docsList } = await useAsyncData("series", () => {
   return queryCollection("docs")
     .order("date", "ASC")
     .select("id", "series", "title", "level", "path", "seo", "date")
-    .all();
-});
+    .all()
+})
 
 // 将文档按 series 分组
 const seriesMap = computed(() => {
-  const map = new Map<string, typeof docsList.value>();
-  if (!docsList.value) return map;
+  const map = new Map<string, typeof docsList.value>()
+  if (!docsList.value) return map
   for (const doc of docsList.value) {
-    if (!doc.series) continue;
-    if (!map.has(doc.series)) map.set(doc.series, []);
-    map.get(doc.series)!.push(doc);
+    if (!doc.series) continue
+    if (!map.has(doc.series)) map.set(doc.series, [])
+    map.get(doc.series)!.push(doc)
   }
-  return map;
-});
+  return map
+})
 
 // 系列列表（从 i18n 获取系列名）
 const seriesList = computed(() => {
-  const seriesObj = tm("series") as Record<string, string>;
+  const seriesObj = tm("series") as Record<string, string>
   return Object.entries(seriesObj).map(([slug, name]) => ({
     slug,
     name,
     docs: seriesMap.value.get(slug) || [],
-  }));
-});
+  }))
+})
 
 // ==================== 折叠/展开所有系列 ====================
 
 // 记录当前是否有任何系列处于展开状态，用于动态切换按钮图标
-const isAnyExpanded = ref(false);
+const isAnyExpanded = ref(false)
 
 /**
  * 更新全局展开状态
@@ -241,9 +243,9 @@ const isAnyExpanded = ref(false);
  * 该函数仅在手动点击 summary 时调用，用于同步按钮状态
  */
 const updateAnyExpanded = () => {
-  const details = document.querySelectorAll("details");
-  isAnyExpanded.value = Array.from(details).some((detail) => detail.open);
-};
+  const details = document.querySelectorAll("details")
+  isAnyExpanded.value = Array.from(details).some((detail) => detail.open)
+}
 
 /**
  * 切换所有系列的展开/折叠状态
@@ -253,14 +255,14 @@ const updateAnyExpanded = () => {
  * 3. 直接更新 isAnyExpanded 为目标状态，无需再次查询 DOM
  */
 const toggleAll = () => {
-  const details = document.querySelectorAll("details");
-  const shouldExpand = !isAnyExpanded.value; // 目标状态：当前全部折叠则展开，否则折叠
+  const details = document.querySelectorAll("details")
+  const shouldExpand = !isAnyExpanded.value // 目标状态：当前全部折叠则展开，否则折叠
   details.forEach((detail) => {
-    detail.open = shouldExpand;
-  });
+    detail.open = shouldExpand
+  })
   // 直接根据本次操作意图设置状态，避免因 toggle 事件干扰而需要两次点击
-  isAnyExpanded.value = shouldExpand;
-};
+  isAnyExpanded.value = shouldExpand
+}
 
 /**
  * 用户手动点击 summary（系列标题）时的回调
@@ -269,19 +271,19 @@ const toggleAll = () => {
  */
 const onSummaryClick = () => {
   setTimeout(() => {
-    updateAnyExpanded();
-  }, 0);
-};
+    updateAnyExpanded()
+  }, 0)
+}
 
 /**
  * 组件挂载后，初始化全局展开状态（页面加载时所有 <details> 默认为折叠）
  */
 onMounted(() => {
-  updateAnyExpanded();
-});
+  updateAnyExpanded()
+})
 
 // ==================== 辅助函数 ====================
-const formatDate = (date: string) => dayjs(date).format("YYYY-MM-DD");
+const formatDate = (date: string) => dayjs(date).format("YYYY-MM-DD")
 </script>
 
 <style scoped>

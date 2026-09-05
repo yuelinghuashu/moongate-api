@@ -1,8 +1,7 @@
 ---
-title: 'Flutter Streaming UI: How the Typewriter Experience of AI Replies Is Built'
+title: "Flutter Streaming UI: How the Typewriter Experience of AI Replies Is Built"
 description: The typewriter effect looks simple — characters appear one by one. But behind "skip without truncation" and "no data loss" lies a full set of engineering decisions. From SSE buffering to skip semantics to testing strategies.
 date: 2026-08-13 22:00:00
-permalink: 5c50dd33-81e8-4281-a26d-32fe5765fc94
 level: P3
 series: flutter-practice
 tags:
@@ -118,7 +117,9 @@ This time it was indeed "immediate" — because the LLM was aborted, the accumul
 
 The user's report: "after clicking skip, the content is truncated, and the rest never shows up."
 
-**The problem**: I interpreted "skip the animation" as "skip the generation". But the user only wanted "not to watch the animation", not "to stop the AI from finishing its response".
+#### The problem
+
+I interpreted "skip the animation" as "skip the generation". But the user only wanted "not to watch the animation", not "to stop the AI from finishing its response".
 
 ### The right answer: silent accumulation, let the LLM finish
 
@@ -280,14 +281,14 @@ The "smoothness" of streaming UI is not luck; it comes from a clear set of seman
 
 ## Glossary
 
-| Term | Description |
-| --- | --- |
-| SSE (Server-Sent Events) | HTTP long-connection server push protocol, the carrier for LLM token/chunk streaming |
-| Batching (Debounce) | Merging multiple arrivals within a time window into one commit, reducing UI rebuild count |
-| `StringBuffer` | Dart's mutable string accumulator; `toString()` builds once, avoiding O(n²) concatenation |
-| `StreamController` | Dart's controllable stream controller; in tests, push chunks manually to simulate server timing |
+| Term                     | Description                                                                                                                             |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE (Server-Sent Events) | HTTP long-connection server push protocol, the carrier for LLM token/chunk streaming                                                    |
+| Batching (Debounce)      | Merging multiple arrivals within a time window into one commit, reducing UI rebuild count                                               |
+| `StringBuffer`           | Dart's mutable string accumulator; `toString()` builds once, avoiding O(n²) concatenation                                               |
+| `StreamController`       | Dart's controllable stream controller; in tests, push chunks manually to simulate server timing                                         |
 | Cooperative cancellation | The mechanism where the client stops reading the SSE stream: break at the next data line rather than aborting the underlying connection |
-| `MockClient.streaming` | The streaming response mock from `package:http/testing`, used with `StreamedResponse` |
+| `MockClient.streaming`   | The streaming response mock from `package:http/testing`, used with `StreamedResponse`                                                   |
 
 ---
 

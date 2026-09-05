@@ -2,7 +2,6 @@
 title: VitePress + vitepress-theme-demoblock 3.x 配置指南
 description: 详解 demoblock 3.x 的配置原理、踩坑记录和最佳实践，补充官方文档缺失的「连接逻辑」。
 date: 2026-06-03
-permalink: 1129affd-8dc5-4dd2-8c76-59a477dc5c06
 level: P1
 series: 
 tags:
@@ -90,13 +89,17 @@ export default {
 - 项目中一开始并没有这个文件
 - 官方没说明这个文件是**生成的**
 
-**答案**：`vitepress-rc` 命令会生成这个文件。
+**答案**：
+
+`vitepress-rc` 命令会生成这个文件。
 
 ### 问题二：`vitepress-rc` 是做什么的？
 
 官方只是列出了一个命令，没说明作用。
 
-**答案**：`vitepress-rc` 会：
+**答案**：
+
+`vitepress-rc` 会：
 
 1. 扫描你的组件目录（默认读取 `docs/.vitepress/components` 或项目根目录的 `components.json`）
 2. 自动注册 demoblock 需要的 Vue 组件
@@ -187,7 +190,7 @@ export default {
 }
 ```
 
-**脚本说明**：
+#### 脚本说明
 
 | 脚本                  | 作用                           |
 | --------------------- | ------------------------------ |
@@ -209,7 +212,7 @@ pnpm docs:dev
 
 ### 第六步：编写文档
 
-**v3 正确写法**（不支持 `:::demo` 后面加描述文字）：
+#### v3 正确写法
 
 ```md
 ## 基础用法
@@ -253,13 +256,15 @@ docs/.vitepress/cache/
 # 注意：不要忽略 useComponents.ts
 ```
 
-**理由**：
+#### 理由
 
 - `useComponents.ts` 内容稳定（只在组件列表变化时改变），体积很小（几 KB）
 - 提交后团队成员 `git clone` 即可直接运行 `pnpm docs:dev`，无需额外生成
 - CI/CD 构建时也不需要重新运行 `vitepress-rc`，减少构建步骤
 
-**如果不提交**：可以使用 `prepare` 钩子在 `pnpm install` 时自动生成：
+#### 如果不提交
+
+可以使用 `prepare` 钩子在 `pnpm install` 时自动生成：
 
 ```json
 {
@@ -288,7 +293,9 @@ pnpm run register:components
 | v2   | `:::demo 这是描述`          |
 | v3   | `:::demo`（不支持描述文字） |
 
-**平替方案**：在 `:::demo` 上方直接写标准 Markdown 文本即可。
+#### 平替方案
+
+在 `:::demo` 上方直接写标准 Markdown 文本即可。
 
 ```md
 ### 基础用法
@@ -310,14 +317,18 @@ pnpm run register:components
 
 如果你的组件库在 `src/components` 目录下，有两种解决方案：
 
-**方案 A**：创建软链接
+#### 方案 A
+
+创建软链接
 
 ```bash
 mkdir -p docs/.vitepress/components
 ln -s ../../../src/components docs/.vitepress/components/ui
 ```
 
-**方案 B**：创建 `components.json`
+#### 方案 B
+
+创建 `components.json`
 
 ```json
 {
@@ -333,7 +344,7 @@ ln -s ../../../src/components docs/.vitepress/components/ui
 - 写了 `vitepress-rc` 命令，没写它的作用
 - 写了 `&&` 串联命令，没写为什么要先执行
 
-**核心要点**：
+### 核心要点
 
 1. `vitepress-rc` 会生成 `useComponents.ts` 文件
 2. 必须先运行 `vitepress-rc`，再启动 VitePress

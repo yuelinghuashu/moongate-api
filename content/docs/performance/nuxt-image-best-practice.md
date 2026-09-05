@@ -2,12 +2,11 @@
 title: Nuxt 图片引用：<NuxtImg> 替代原生 <img> 的一次实践
 description: 介绍了为什么在 Nuxt 项目中，永远优先使用 <NuxtImg> 而不是原生 <img>。
 date: 2026-02-17
-permalink: b798b8c6-f74b-4cf3-a5d9-de54c0e29669
 series: performance
 level: P1
-tags: 
+tags:
   - Nuxt
-  - Image Optimization
+  - Performance
   - Performance
 ---
 
@@ -110,7 +109,7 @@ pnpm add @nuxt/image
 ```typescript
 export default defineNuxtConfig({
   modules: ["@nuxt/image"],
-});
+})
 ```
 
 ### 3. 在组件中使用
@@ -139,7 +138,7 @@ export default defineNuxtConfig({
   app: {
     baseURL: "/blog/",
   },
-});
+})
 ```
 
 - 原生 `<img src="/images/ali-pay.jpg">` 会请求 `/blog/images/ali-pay.jpg`？**不会**，它还是请求 `/images/ali-pay.jpg`，404。
@@ -224,6 +223,14 @@ npx nuxi@latest module add image
 
 ---
 
-**遇到过的坑**：图片路径 `/&/` 错误、组件内图片不显示、部署子目录后图片 404  
-**用过的方案**：原生 `<img>`、显式 import、`<NuxtImg>`  
-**最终的答案**：永远优先用 `<NuxtImg>`
+### 遇到过的坑
+
+图片路径 `/&/` 错误、组件内图片不显示、部署子目录后图片 404
+
+### 用过的方案
+
+原生 `<img>`、显式 import、`<NuxtImg>`
+
+### 最终的答案
+
+永远优先用 `<NuxtImg>`

@@ -2,7 +2,6 @@
 title: 自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）
 description: 在现有 Docker 生产环境中集成自托管的 Umami 分析服务，通过 Caddy 自动 HTTPS 和 GitHub Actions 实现 Nuxt 4 项目的自动化数据跟踪。
 date: 2026-03-18
-permalink: 89857e17-36c9-4a7b-a879-43a1f64f54a6
 series: deployment
 level: P4
 tags:
@@ -166,7 +165,7 @@ volumes:
 
 </details>
 
-**关键点**：
+### 关键点
 
 - 所有服务使用同一网络 `app-network`，通过服务名通信（`umami-db` 和 `umami`）。
 - 数据库和应用均配置健康检查，确保启动顺序。
@@ -328,7 +327,9 @@ NUXT_PUBLIC_UMAMI_HOST=https://umami.your-domain.com
 
 ## 🔧 第六部分：Dockerfile 必须接收构建参数
 
-**关键**：`NUXT_PUBLIC_*` 变量在构建时被嵌入客户端代码，必须在 Docker 构建阶段通过 `ARG` 和 `ENV` 传递。
+### 关键
+
+`NUXT_PUBLIC_*` 变量在构建时被嵌入客户端代码，必须在 Docker 构建阶段通过 `ARG` 和 `ENV` 传递。
 
 编辑项目根目录的 `Dockerfile`，确保包含以下内容：
 
@@ -349,7 +350,9 @@ ENV NUXT_PUBLIC_UMAMI_HOST=$NUXT_PUBLIC_UMAMI_HOST
 # 其余构建步骤保持不变...
 ```
 
-**提醒**：若后续增加其他 `NUXT_PUBLIC_*` 变量，必须同步添加 `ARG` 和 `ENV`。
+### 提醒
+
+若后续增加其他 `NUXT_PUBLIC_*` 变量，必须同步添加 `ARG` 和 `ENV`。
 
 ---
 
@@ -493,7 +496,9 @@ umami.your-domain.com {
 }
 ```
 
-**警告**：这会导致浏览器先弹出 Basic Auth 对话框，通过后再显示 Umami 登录页，可能造成体验不佳。建议仅作为临时方案或与 IP 白名单结合使用。
+##### 警告
+
+这会导致浏览器先弹出 Basic Auth 对话框，通过后再显示 Umami 登录页，可能造成体验不佳。建议仅作为临时方案或与 IP 白名单结合使用。
 
 ### 9.2 数据库安全
 
@@ -610,7 +615,7 @@ docker compose pull umami && docker compose up -d umami
 
 现在，网站访问数据将被清晰记录，且整个过程完全自动化，无需人工干预。后续如需升级 Umami 或修改配置，只需修改 `docker-compose.yml` 中的镜像标签或环境变量，重新部署即可。
 
-**核心维护要点**：
+### 核心维护要点
 
 - 定期更新 Umami 镜像以获取安全补丁（建议测试后再更新）。
 - 监控日志和磁盘使用情况。

@@ -1,8 +1,7 @@
 ---
-title: 'Brand Ecosystem: Design Philosophy & Visual Contract'
+title: "Brand Ecosystem: Design Philosophy & Visual Contract"
 description: Elevate your theme into a design system with design philosophy, a visual contract, and a brand ecosystem.
 date: 2026-08-06 08:00:00
-permalink: 50fad7d3-a637-4908-87f6-e74f2ac069b2
 level: P3
 series: design-system
 tags:
@@ -67,7 +66,7 @@ When users switch themes, the visual weight of the same syntax element stays alm
 
 **General principle**: express physical depth by defining a staircase of background lightness. In dark mode, the higher the surface, the brighter it is (lightness increases); in light mode, the higher the surface, the brighter it is too (but using brighter whites/light grays). The step size stays consistent, forming a smooth sense of layering.
 
-**Moongate example** (latest values in v2.6.0):
+**Moongate example**:
 
 | Elevation level   | Purpose                | Dark mode | Light mode | Brightness change                       |
 | ----------------- | ---------------------- | --------- | ---------- | --------------------------------------- |
@@ -84,7 +83,9 @@ This makes the sidebar gently raised, floating panels lightly elevated, and the 
 
 **General principle**: no matter how well a theme is designed, if the user's monitor is not calibrated, the result suffers. Provide a monitor calibration guide (visual contract) that helps users adjust Gamma, brightness, contrast, and color temperature, and reminds them to turn off "enhancement" features such as dynamic contrast and vivid mode. The end of calibration is not theoretical perfection, but the balance point where the user feels most comfortable.
 
-**Moongate example**: `extras/VISUAL_CONTRACT.md` provides the detailed Visual Contract document (v2.0), with these core steps:
+**Moongate example**:
+
+`extras/VISUAL_CONTRACT.md` provides the detailed Visual Contract document (v2.0), with these core steps:
 
 | Step                     | Action                                                                                                  | Goal                             |
 | ------------------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------- |
@@ -124,9 +125,7 @@ There is no need for Gamma curves and test blocks at hardware-grade precision â€
 
 **General principle**: a complete brand system includes a documentation system (README, CHANGELOG, design docs), community interaction (open source, feedback channels), and ecosystem integration (deep integration with surrounding tools for a consistent experience).
 
-**Moongate example**:
-
-### 3.1 Documentation system
+**Moongate example**: ### 3.1 Documentation system
 
 - **README**: bilingual, with preview images, design philosophy, a highlight list, and recommended configuration.
 - **CHANGELOG**: records changes by version, collapsing old versions and highlighting the current ones.

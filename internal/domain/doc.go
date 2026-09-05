@@ -19,9 +19,8 @@ const (
 type Doc struct {
 	Title       string    `yaml:"title" json:"title"`             // 文章标题
 	Description string    `yaml:"description" json:"description"` // 简短摘要
-	Date        time.Time `yaml:"date" json:"date"`               // 发布日期 (YYYY-MM-DD HH:MM:SS)
-	Permalink   string    `yaml:"permalink" json:"permalink"`     // 唯一标识符，用于构建链接
-	Slug        string    `yaml:"slug,omitempty" json:"slug"`     // URL 友好标识符
+	Date        time.Time `yaml:"date" json:"date"`           // 发布日期 (YYYY-MM-DD HH:MM:SS)
+	Slug        string    `yaml:"slug,omitempty" json:"slug"` // URL 友好标识符
 	Level       Level     `yaml:"level" json:"level"`             // 难度等级：P1-P5
 	Series      *string   `yaml:"series" json:"series"`           // 所属系列，nil 表示无系列
 	Tags        []string  `yaml:"tags" json:"tags"`               // 标签列表，用于分类
@@ -77,7 +76,6 @@ type DocSummary struct {
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
 	Date        time.Time `json:"date"`
-	Permalink   string    `json:"permalink"`
 	Slug        string    `json:"slug"`
 	Level       Level     `json:"level"`
 	Series      *string   `json:"series"`

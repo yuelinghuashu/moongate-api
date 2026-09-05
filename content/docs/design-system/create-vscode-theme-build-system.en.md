@@ -1,8 +1,7 @@
 ---
-title: 'Build System: Testable, Verifiable Engineering Practices'
+title: "Build System: Testable, Verifiable Engineering Practices"
 description: Turn your build script into an industrial-grade, testable, verifiable engineering system.
 date: 2026-08-06 06:00:00
-permalink: ef9e2761-be41-4778-8552-22cb86ed3407
 level: P4
 series: design-system
 tags:
@@ -73,17 +72,17 @@ your-theme/
 
 Responsibilities of each module:
 
-| Module | Responsibility | Key exports |
-| ------ | -------------- | ----------- |
-| `config.js` | Central path management | `PATHS`, `ROOT_DIR` |
-| `tokens.js` | Token resolution and variable substitution | `resolveTokens` (`{token}` cross-layer), `replaceVariables` (`${var}` substitution), `detectPrimitiveReference` (architecture pollution) |
-| `utils.js` | Shared utility functions | `safeLoadYaml`, `normalizeHex`, `detectDuplicateColors`, `getThemeInfo` |
-| `validators.js` | Quality validation | `checkContrast` (WCAG), `validateThemeStructure`, `detectUnusedPrimitives` |
-| `optimizers.js` | Output streamlining | `mergeTokenColors`, `optimizeSemanticTokenColors` |
-| `generators.js` | Multi-format output | `generateColorCss`, `generateLayoutCss`, `generateScssTokens`, `generateTsTokens`, `generateDesignSystemDoc` |
-| `scope-validator.js` | Scope validation logic | `verifyAllScopes`, `formatVerificationResult` |
+| Module               | Responsibility                             | Key exports                                                                                                                              |
+| -------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.js`          | Central path management                    | `PATHS`, `ROOT_DIR`                                                                                                                      |
+| `tokens.js`          | Token resolution and variable substitution | `resolveTokens` (`{token}` cross-layer), `replaceVariables` (`${var}` substitution), `detectPrimitiveReference` (architecture pollution) |
+| `utils.js`           | Shared utility functions                   | `safeLoadYaml`, `normalizeHex`, `detectDuplicateColors`, `getThemeInfo`                                                                  |
+| `validators.js`      | Quality validation                         | `checkContrast` (WCAG), `validateThemeStructure`, `detectUnusedPrimitives`                                                               |
+| `optimizers.js`      | Output streamlining                        | `mergeTokenColors`, `optimizeSemanticTokenColors`                                                                                        |
+| `generators.js`      | Multi-format output                        | `generateColorCss`, `generateLayoutCss`, `generateScssTokens`, `generateTsTokens`, `generateDesignSystemDoc`                             |
+| `scope-validator.js` | Scope validation logic                     | `verifyAllScopes`, `formatVerificationResult`                                                                                            |
 
-**Why ESM instead of CommonJS?**
+### Why ESM instead of CommonJS?
 
 - Modern Node.js (≥ 14) supports ESM natively, with no extra build tooling.
 - `import` / `export` are static, so tooling can statically analyze dependency graphs — easier to refactor and debug.
@@ -95,14 +94,14 @@ Responsibilities of each module:
 
 Before reading the code, build a "data-flow map" describing what each key step takes in and produces:
 
-| Step | Input | Output |
-| ---- | ----- | ------ |
-| `loadPrimitives()` | `primitives/colors.yaml` | Normalized primitive color dictionary |
-| `resolveTokens()` | Primitives + `semantics/*.yaml` | Final semantic color dictionary per variant |
-| `loadTokenColors()` | Rules under `languages/` + `special/` | Merged raw tokenColors rules |
-| `replaceVariables()` | Rule files + semantic color dictionary | Rules with variables substituted by real colors |
-| `mergeTokenColors()` / `optimizeSemanticTokenColors()` | Substituted rules | Streamlined output |
-| `generate*()` | Final color dictionaries + layout tokens | CSS / SCSS / TS tokens and design docs |
+| Step                                                   | Input                                    | Output                                          |
+| ------------------------------------------------------ | ---------------------------------------- | ----------------------------------------------- |
+| `loadPrimitives()`                                     | `primitives/colors.yaml`                 | Normalized primitive color dictionary           |
+| `resolveTokens()`                                      | Primitives + `semantics/*.yaml`          | Final semantic color dictionary per variant     |
+| `loadTokenColors()`                                    | Rules under `languages/` + `special/`    | Merged raw tokenColors rules                    |
+| `replaceVariables()`                                   | Rule files + semantic color dictionary   | Rules with variables substituted by real colors |
+| `mergeTokenColors()` / `optimizeSemanticTokenColors()` | Substituted rules                        | Streamlined output                              |
+| `generate*()`                                          | Final color dictionaries + layout tokens | CSS / SCSS / TS tokens and design docs          |
 
 Keep this map in mind while reading the code — it makes the position of every module function in the pipeline clear.
 
@@ -111,9 +110,22 @@ Keep this map in mind while reading the code — it makes the position of every 
 import { PATHS } from "./lib/config.js"
 import { ensureFileExists, safeLoadYaml } from "./lib/utils.js"
 import { resolveTokens, replaceVariables } from "./lib/tokens.js"
-import { detectUnusedPrimitives, validateThemeStructure, checkContrast } from "./lib/validators.js"
-import { mergeTokenColors, optimizeSemanticTokenColors } from "./lib/optimizers.js"
-import { generateColorCss, generateLayoutCss, generateDesignSystemDoc, generateScssTokens, generateTsTokens } from "./lib/generators.js"
+import {
+  detectUnusedPrimitives,
+  validateThemeStructure,
+  checkContrast,
+} from "./lib/validators.js"
+import {
+  mergeTokenColors,
+  optimizeSemanticTokenColors,
+} from "./lib/optimizers.js"
+import {
+  generateColorCss,
+  generateLayoutCss,
+  generateDesignSystemDoc,
+  generateScssTokens,
+  generateTsTokens,
+} from "./lib/generators.js"
 
 function main() {
   console.log("🚀 Building theme (DTCG standard + industrial-grade QA)...\n")
@@ -136,7 +148,9 @@ function main() {
 main()
 ```
 
-**Core principle**: one function does one thing. Each step in `main()` corresponds to a clearly named function (`loadPrimitives()`, `loadCommonRules()`, `loadTokenColors()`, ...), so a caller can see at a glance what every step of the build does.
+### Core principle
+
+one function does one thing. Each step in `main()` corresponds to a clearly named function (`loadPrimitives()`, `loadCommonRules()`, `loadTokenColors()`, ...), so a caller can see at a glance what every step of the build does.
 
 With the modular skeleton in place, the real engineering problem comes next: **the build process must be able to prove itself**.
 
@@ -150,11 +164,11 @@ The defining trait of an industrial-grade build script: **it does not only gener
 
 Every theme color must be clearly readable against its background. Moongate enforces a minimum contrast ratio against `editor.background` for key text roles:
 
-| Role | Minimum ratio | Note |
-| ---- | ------------- | ---- |
-| `text` (body) | 4.5:1 | WCAG AA |
-| `textDim` (secondary) | 4.0:1 | Slightly below AA, balancing visual hierarchy |
-| `textMuted` (auxiliary) | 3.0:1 | Large-text/auxiliary information acceptable |
+| Role                    | Minimum ratio | Note                                          |
+| ----------------------- | ------------- | --------------------------------------------- |
+| `text` (body)           | 4.5:1         | WCAG AA                                       |
+| `textDim` (secondary)   | 4.0:1         | Slightly below AA, balancing visual hierarchy |
+| `textMuted` (auxiliary) | 3.0:1         | Large-text/auxiliary information acceptable   |
 
 The validation decision can be expressed as a simple tree:
 
@@ -180,11 +194,13 @@ export function checkContrast(color1, color2, role, themeType) {
 
   if (ratio < minRatio) {
     if (role === "textMuted") {
-      console.warn(`⚠️ Contrast slightly low: ${themeType} · ${role} = ${ratio.toFixed(2)}:1`)
+      console.warn(
+        `⚠️ Contrast slightly low: ${themeType} · ${role} = ${ratio.toFixed(2)}:1`,
+      )
     } else {
       throw new Error(
         `❌ Insufficient contrast: ${themeType} · ${role} = ${ratio.toFixed(2)}:1` +
-        `\n   WCAG requires ≥${minRatio}:1`,
+          `\n   WCAG requires ≥${minRatio}:1`,
       )
     }
   } else {
@@ -204,7 +220,9 @@ When the build succeeds, you will see output like:
 ✅ light · textMuted: 7.25:1
 ```
 
-**Key design**: `textDim` and `textMuted` use a **staircase standard** instead of a uniform 4.5:1 — because "visually receding" is itself a design intent; as long as minimal readability is kept. If every auxiliary text were forced to 4.5:1, comments and auxiliary information could no longer "recede" visually.
+#### Key design
+
+`textDim` and `textMuted` use a **staircase standard** instead of a uniform 4.5:1 — because "visually receding" is itself a design intent; as long as minimal readability is kept. If every auxiliary text were forced to 4.5:1, comments and auxiliary information could no longer "recede" visually.
 
 ### 2.2 Structure validation: the generated file must be self-consistent
 
@@ -227,7 +245,9 @@ The semantics layer may reference primitives, and in theory a primitive could re
 export function resolveTokens(obj, tokenMap, depth = 0, path = []) {
   const MAX_DEPTH = 20
   if (depth > MAX_DEPTH) {
-    throw new Error(`[ENGINEERING_FATAL] Token circular reference detected: ${path.join(" → ")}`)
+    throw new Error(
+      `[ENGINEERING_FATAL] Token circular reference detected: ${path.join(" → ")}`,
+    )
   }
   // ...
 }
@@ -327,7 +347,10 @@ Moongate's solution is **`scripts/verify-scopes.js`** — it automatically parse
 
 ```javascript
 // scripts/verify-scopes.js (CLI entry)
-import { verifyAllScopes, formatVerificationResult } from "./lib/scope-validator.js"
+import {
+  verifyAllScopes,
+  formatVerificationResult,
+} from "./lib/scope-validator.js"
 
 const result = verifyAllScopes({ verbose: true })
 
@@ -335,7 +358,9 @@ console.log("🔍 Validating scopes in language config...\n")
 process.stdout.write(formatVerificationResult(result))
 
 if (!result.isValid) {
-  console.error(`\n❌ Found ${result.totalIssues} unmatched scopes — validation failed!`)
+  console.error(
+    `\n❌ Found ${result.totalIssues} unmatched scopes — validation failed!`,
+  )
   process.exit(1)
 }
 ```
@@ -351,13 +376,13 @@ The core flow of `scope-validator.js`:
 
 In Moongate v2.6.0, `verify-scopes.js` helped fix scope issues in **8 language files**. The most representative fixes:
 
-| Language | Before (wrong scope) | After (correct scope) |
-| -------- | --------------------- | ---------------------- |
-| Rust | `support.macro.rust` | `entity.name.function.macro.rust` |
-| Rust | `lifetime` | `entity.name.type.lifetime.rust` |
-| Go | `entity.name.package.go` | `keyword.package.go` |
-| Python | `meta.decorator.python` | `meta.function.decorator.python` |
-| Markdown | `heading.1.markdown`, etc. | `markup.heading.markdown`, etc. |
+| Language | Before (wrong scope)       | After (correct scope)             |
+| -------- | -------------------------- | --------------------------------- |
+| Rust     | `support.macro.rust`       | `entity.name.function.macro.rust` |
+| Rust     | `lifetime`                 | `entity.name.type.lifetime.rust`  |
+| Go       | `entity.name.package.go`   | `keyword.package.go`              |
+| Python   | `meta.decorator.python`    | `meta.function.decorator.python`  |
+| Markdown | `heading.1.markdown`, etc. | `markup.heading.markdown`, etc.   |
 
 Even more importantly, **the validator prevents regressions** — run it once after every language-rule change, and you will know immediately which scopes are "written but never effective".
 
@@ -513,12 +538,12 @@ Both channels are generated from the semantics layer, so **dual-source drift is 
 
 The design system article covered CSS variable export. Moongate goes further and exports the semantics layer into **four formats**, covering the Web, Sass, and TypeScript ecosystems:
 
-| Artifact | Format | Use case |
-| -------- | ------ | -------- |
-| `themes/moongate-colors.css` | CSS variables | Blog, component library, any web project |
+| Artifact                     | Format                 | Use case                                  |
+| ---------------------------- | ---------------------- | ----------------------------------------- |
+| `themes/moongate-colors.css` | CSS variables          | Blog, component library, any web project  |
 | `themes/moongate-layout.css` | CSS variables (layout) | Spacing, typography, breakpoints, z-index |
-| `themes/_tokens.scss` | SCSS | Sass projects |
-| `themes/tokens.ts` | TypeScript | Frontend framework projects |
+| `themes/_tokens.scss`        | SCSS                   | Sass projects                             |
+| `themes/tokens.ts`           | TypeScript             | Frontend framework projects               |
 
 ### 7.1 SCSS tokens
 
@@ -528,15 +553,13 @@ The design system article covered CSS variable export. Moongate goes further and
 $ui-colors-dark: (
   bg: #0f172a,
   primary: #3b82f6,
-  surface-raised: #1a2538,
-  // ...
+  surface-raised: #1a2538, // ...
 );
 
 $ui-colors-light: (
   bg: #f9fafb,
   primary: #0284c7,
-  surface-raised: #ffffff,
-  // ...
+  surface-raised: #ffffff, // ...
 );
 
 // dark-mode convenience variables
@@ -614,20 +637,20 @@ pnpm run package
 
 At this point, your theme build system has completed the jump from "usable" to "industrial-grade":
 
-| Capability | Theme Engineering | Build System |
-| ---------- | ----------------- | ------------ |
-| Modularity | Monolithic `build.js` | `scripts/lib/` single-responsibility modules |
-| Style | CommonJS | ESM |
-| WCAG checks | ❌ | ✅ staircase-style automatic contrast checks |
-| Structure validation | ❌ | ✅ unresolved variable/token detection |
-| Circular references | ❌ | ✅ depth limit + reference chain output |
-| Architecture pollution | ❌ | ✅ primitive-direct-reference warnings |
-| Output optimization | ❌ | ✅ token merge + semantic color pruning |
-| Scope validation | ❌ | ✅ `verify-scopes.js` automatic comparison |
-| Automated testing | ❌ | ✅ 85 tests (`node --test`) |
-| Multi-format output | CSS | CSS + SCSS + TypeScript + design docs |
-| Better Comments | ❌ | ✅ auto-generated + built-in rules |
-| Release gate | manual check | build/test/scope validation auto-intercepts |
+| Capability             | Theme Engineering     | Build System                                 |
+| ---------------------- | --------------------- | -------------------------------------------- |
+| Modularity             | Monolithic `build.js` | `scripts/lib/` single-responsibility modules |
+| Style                  | CommonJS              | ESM                                          |
+| WCAG checks            | ❌                    | ✅ staircase-style automatic contrast checks |
+| Structure validation   | ❌                    | ✅ unresolved variable/token detection       |
+| Circular references    | ❌                    | ✅ depth limit + reference chain output      |
+| Architecture pollution | ❌                    | ✅ primitive-direct-reference warnings       |
+| Output optimization    | ❌                    | ✅ token merge + semantic color pruning      |
+| Scope validation       | ❌                    | ✅ `verify-scopes.js` automatic comparison   |
+| Automated testing      | ❌                    | ✅ 85 tests (`node --test`)                  |
+| Multi-format output    | CSS                   | CSS + SCSS + TypeScript + design docs        |
+| Better Comments        | ❌                    | ✅ auto-generated + built-in rules           |
+| Release gate           | manual check          | build/test/scope validation auto-intercepts  |
 
 This system is not just a production tool for the Moongate theme — it is a reusable **design-system engineering template**. It proves the full path of "scattered colors → engineering assets → reusable on every platform".
 
@@ -640,5 +663,6 @@ That is exactly what the final article of this series answers.
 > **📎 Implementation Reference**
 >
 > This series is built upon the Moongate Theme project. You can explore the complete source code and install it directly:
+>
 > - **Code**: [github.com/yuelinghuashu/moongate-theme](https://github.com/yuelinghuashu/moongate-theme)
 > - **Install**: [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yuelinghuashu.moongate-theme)

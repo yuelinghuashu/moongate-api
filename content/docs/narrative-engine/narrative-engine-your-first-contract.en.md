@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 2: Quick Start — Write Your First Contract'
+title: "LLM Narrative Engines, Part 2: Quick Start — Write Your First Contract"
 description: Write your first .meph contract from scratch, compile it, run it, and watch the LLM generate narrative that follows rules you just wrote. No prior knowledge required.
 date: 2026-07-20 15:00:00
-permalink: 60b6f1fd-145e-4d31-b5b3-9ef1164170ce
 level: P1
 series: narrative-engine
 tags:
@@ -11,7 +10,7 @@ tags:
   - DSL
 ---
 
-> **Before reading this**: If you haven't read the first post, [From Freeform to Constrained Generation](https://dev.to/yuelinghuashu/narrative-engines-with-llms-from-freeform-to-constrained-generation-1l4c), I'd recommend starting there to understand *why* `.meph` exists. This post requires zero prior knowledge — just a terminal and Go 1.26+.
+> **Before reading this**: If you haven't read the first post, [From Freeform to Constrained Generation](https://dev.to/yuelinghuashu/narrative-engines-with-llms-from-freeform-to-constrained-generation-1l4c), I'd recommend starting there to understand _why_ `.meph` exists. This post requires zero prior knowledge — just a terminal and Go 1.26+.
 
 In the previous post, we talked about why `.meph` is a better fit for narrative contracts than JSON or YAML. But talk is cheap.
 
@@ -184,7 +183,9 @@ Current state:
 
 Type `/history` to see the conversation log — your input “I want to experience love” is already recorded as a fate directive.
 
-**This is how the engine works without an LLM:** rule matching, injection, state management — everything runs normally. The LLM is just the final “narrative rendering layer.”
+### This is how the engine works without an LLM
+
+rule matching, injection, state management — everything runs normally. The LLM is just the final “narrative rendering layer.”
 
 ---
 
@@ -273,7 +274,9 @@ Same rules, same input, one number different — and the narrative shifts entire
   “You're finally ready to listen, Mr. Faust.” The voice carried a smile. “Then allow me to introduce myself.”
 ```
 
-**Notice the difference:** at soul integrity 100, Faust is a “contemplative scholar,” calmly skeptical when Mephistopheles appears — “Who are you? Entering my study without permission.” At soul integrity 50, he becomes a “brilliant scholar teetering on the edge of self-destruction,” shouting at Wagner, redefining the pursuit of knowledge as blasphemy. Even Mephistopheles' entrance changes — not emerging from shadow, but erupting from candle flames, his voice resonating directly inside Faust's skull.
+### Notice the difference
+
+at soul integrity 100, Faust is a “contemplative scholar,” calmly skeptical when Mephistopheles appears — “Who are you? Entering my study without permission.” At soul integrity 50, he becomes a “brilliant scholar teetering on the edge of self-destruction,” shouting at Wagner, redefining the pursuit of knowledge as blasphemy. Even Mephistopheles' entrance changes — not emerging from shadow, but erupting from candle flames, his voice resonating directly inside Faust's skull.
 
 A single state value changes, and the entire texture of the narrative transforms. **That's the power of state-driven storytelling.**
 

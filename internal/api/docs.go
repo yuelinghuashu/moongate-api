@@ -12,14 +12,13 @@ import (
 
 // DocsHandler 处理技术文章相关的 HTTP 请求
 type DocsHandler struct {
-	Store       map[string]*domain.Doc // key = permalink（中文/默认）
 	StoreBySlug map[string]*domain.Doc // key = slug（中文/默认）
 	StoreEn     map[string]*domain.Doc // key = slug（英文译文）
 }
 
 // NewDocsHandler 创建一个 DocsHandler 实例
-func NewDocsHandler(store map[string]*domain.Doc, storeBySlug map[string]*domain.Doc, storeEn map[string]*domain.Doc) *DocsHandler {
-	return &DocsHandler{Store: store, StoreBySlug: storeBySlug, StoreEn: storeEn}
+func NewDocsHandler(storeBySlug map[string]*domain.Doc, storeEn map[string]*domain.Doc) *DocsHandler {
+	return &DocsHandler{StoreBySlug: storeBySlug, StoreEn: storeEn}
 }
 
 // requestLang 解析请求语言参数。
@@ -70,7 +69,6 @@ func (h *DocsHandler) buildSummary(doc *domain.Doc, lang string) domain.DocSumma
 		Title:          resolved.Title,
 		Description:    resolved.Description,
 		Date:           resolved.Date,
-		Permalink:      resolved.Permalink,
 		Slug:           resolved.Slug,
 		Level:          resolved.Level,
 		Series:         resolved.Series,
@@ -122,8 +120,8 @@ func (h *DocsHandler) getDocsList(c *gin.Context) {
 	}
 
 	// 5. 把所有文章转成切片
-	docs := make([]*domain.Doc, 0, len(h.Store))
-	for _, doc := range h.Store {
+	docs := make([]*domain.Doc, 0, len(h.StoreBySlug))
+	for _, doc := range h.StoreBySlug {
 		docs = append(docs, doc)
 	}
 
@@ -237,7 +235,7 @@ func (h *DocsHandler) getSeriesGroup(c *gin.Context) {
 	lang := requestLang(c)
 	groups := make(map[string][]domain.DocSummary)
 
-	for _, doc := range h.Store {
+	for _, doc := range h.StoreBySlug {
 		if doc.Series == nil || *doc.Series == "" {
 			continue
 		}

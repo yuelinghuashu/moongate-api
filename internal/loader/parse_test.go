@@ -25,7 +25,6 @@ func TestParseMarkdown_ValidDoc(t *testing.T) {
 title: "Go 测试"
 description: "测试解析功能的文章"
 date: 2025-01-15 10:00:00
-permalink: /docs/go-testing
 level: P2
 tags:
   - Go
@@ -49,9 +48,6 @@ This is a **test** body.
 	if doc.Description != "测试解析功能的文章" {
 		t.Errorf("Description = %q, want %q", doc.Description, "测试解析功能的文章")
 	}
-	if doc.Permalink != "/docs/go-testing" {
-		t.Errorf("Permalink = %q, want %q", doc.Permalink, "/docs/go-testing")
-	}
 	if doc.Level != domain.LevelP2 {
 		t.Errorf("Level = %q, want %q", doc.Level, domain.LevelP2)
 	}
@@ -71,7 +67,6 @@ func TestParseMarkdown_SlugFromFilename(t *testing.T) {
 title: "Test"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/test
 ---
 
 Body text here.
@@ -93,7 +88,6 @@ func TestParseMarkdown_HTMLContent(t *testing.T) {
 title: "Test HTML"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/test-html
 ---
 
 # Heading One
@@ -156,7 +150,6 @@ func TestParseMarkdown_EmptySeries(t *testing.T) {
 title: "Series Test"
 description: "desc"
 date: 2025-01-01 00:00:00
-permalink: /docs/series-test
 series: 
 ---
 
@@ -180,7 +173,6 @@ func TestParseMarkdown_About(t *testing.T) {
 title: "About Me"
 description: "My bio"
 date: 2025-01-01 00:00:00
-permalink: /about/me
 ---
 
 I am a developer.

@@ -1,7 +1,6 @@
 ---
 title: 构建大模型叙事引擎：集成测试与行为冻结
 description: 解析器写完了，但怎么保证以后改代码不会改坏它？Golden File 测试、验证器、滑窗老化测试——用测试将解析行为彻底冻结。
-permalink: f1937ff0-8254-47a9-8b24-61418346fbea
 date: 2026-07-20 21:00:00
 series: narrative-engine
 level: P4
@@ -23,7 +22,6 @@ tags:
 6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
 
 ---
-
 
 > **前置阅读**：建议先读第三篇的“四、Parser”和第四篇的“四、小结”，理解解析器输出 `domain.Contract` 的完整流程。本篇假设你已经知道解析器能把 `.meph` 变成结构体。
 
@@ -72,7 +70,9 @@ func TestParseSample(t *testing.T) {
 
 首次运行会自动生成 `sample.golden`。之后每次运行都会对比，发现差异就报错。如果改动是预期的（比如新增了一个字段），运行 `go test -update` 即可刷新 Golden 文件。
 
-**这个机制的核心价值是：** 让解析器的行为被“冻结”下来。任何改动都必须经过测试验证，不能偷偷改变解析结果。
+### 这个机制的核心价值是
+
+让解析器的行为被“冻结”下来。任何改动都必须经过测试验证，不能偷偷改变解析结果。
 
 ## 三、解析即验证
 

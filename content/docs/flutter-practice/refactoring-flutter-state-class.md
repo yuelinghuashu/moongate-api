@@ -2,14 +2,13 @@
 title: 拆超大 Flutter State 类的三种尝试与最终方案
 description: 当 800 行 State 类混杂契约树、舞台操作、导航等多种职责时，如何安全拆分？本文记录了从 Mixin、part 到 Widget 组合的完整重构历程，深入剖析 Dart 库级私有特性，并给出可复用的决策树与工程保障策略。
 date: 2026-08-11
-permalink: 5f6571c9-eff4-44b3-8704-05e8fc6ed750
 series: flutter-practice
 level: P3
 tags:
   - Flutter
   - Dart
   - State Management
-  - Refactoring
+  - Engineering
   - Engineering
 ---
 
@@ -58,7 +57,9 @@ mixin HomeContractActions on ConsumerState<HomeScreen> {
 }
 ```
 
-**报错**：`The method '_handleMasterMenu' isn't defined for the type '_HomeScreenState'`
+### 报错
+
+`The method '_handleMasterMenu' isn't defined for the type '_HomeScreenState'`
 
 ### 为什么？
 
@@ -195,7 +196,7 @@ return ContractTreeSection(
 );
 ```
 
-**效果（拆分 ≠ 删代码，而是职责重新归位）**：
+#### 效果（拆分 ≠ 删代码，而是职责重新归位）
 
 | 文件                         | 拆分前行数 | 拆分后行数 | 职责                                   |
 | ---------------------------- | ---------- | ---------- | -------------------------------------- |

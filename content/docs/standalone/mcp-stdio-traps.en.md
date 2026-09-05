@@ -2,8 +2,7 @@
 title: "MCP stdio Protocol's 3 Hidden Traps: When All Unit Tests Pass but the MCP Server Won't Respond"
 description: "A deep dive into three hidden traps of the MCP stdio protocol, recording a real debugging journey — from 401 green tests to a completely unresponsive server — tracing the root cause to three fatal bugs: process.exit(), stdout pollution, and an async race, plus an end-to-end testing solution."
 date: 2026-08-16
-permalink: a1473eea-0a80-4118-9fff-ccc71223a5bc
-series: ''
+series: ""
 level: P5
 tags:
   - TypeScript
@@ -33,14 +32,14 @@ On our roadmap, **the MCP Server was a P0-level strategic task** — the gateway
 
 We exposed 6 tools over JSON-RPC 2.0 over stdio:
 
-| MCP tool | Purpose |
-| --------------- | --------------------------------- |
-| `scan_stories` | List all stories and their metadata |
-| `read_chapter` | Read a chapter's content from a story |
+| MCP tool        | Purpose                                   |
+| --------------- | ----------------------------------------- |
+| `scan_stories`  | List all stories and their metadata       |
+| `read_chapter`  | Read a chapter's content from a story     |
 | `write_chapter` | Write body text to a story (atomic write) |
-| `validate` | Validate the config.json of every story |
-| `build` | Trigger a README rebuild |
-| `import_json` | Bulk-import stories from structured JSON |
+| `validate`      | Validate the config.json of every story   |
+| `build`         | Trigger a README rebuild                  |
+| `import_json`   | Bulk-import stories from structured JSON  |
 
 The code structure was clean:
 
@@ -116,7 +115,7 @@ When a user runs `story mcp-server`:
 
 **The MCP Server died the moment it was born.**
 
-### The Fix
+**The Fix**:
 
 ```typescript
 #!/usr/bin/env node
@@ -133,13 +132,11 @@ if (process.argv[2] !== "mcp-server" && process.argv[2] !== "mcp") {
 
 > ⚠️ **Note**: this fix looked fine at the time, but later that same day testing exposed its **limitation** — see "Bug #1.5: The Same Bug Returns" below.
 
-### The Deeper Lesson
+**The Deeper Lesson**: This is the **first trap** when turning a CLI tool into a service:
 
-This is the **first trap** when turning a CLI tool into a service:
-
-| Mode | Lifecycle | When to exit |
-| ----------------------------------------- | ------------------------- | ----------------------------------- |
-| **CLI tool** | Exits after the command finishes | `process.exit(exitCode)` is the right thing |
+| Mode                                           | Lifecycle                                  | When to exit                                                        |
+| ---------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| **CLI tool**                                   | Exits after the command finishes           | `process.exit(exitCode)` is the right thing                         |
 | **Long-running process** (MCP Server / daemon) | Keeps listening for input until EOF/signal | Exit must be driven by a callback triggered by the **input source** |
 
 `process.exit()` is unconditional, immediate, and uninterruptible. It doesn't wait for pending I/O, timers, or Promises. In the MCP Server scenario, that "feature" killed our server outright.
@@ -210,14 +207,16 @@ if (!isLongRunning) {
 
 This was the **biggest lesson** of the whole session:
 
-| Fix approach | Code shape | Problem |
-| -------------------- | -------------------------------------------- | ---------------------------------------- |
+| Fix approach                          | Code shape                                   | Problem                                                                  |
+| ------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
 | **Enumerate instances** (at the time) | `if (cmd !== "mcp-server" && cmd !== "mcp")` | Adding one more long-running command means coming back to edit this line |
-| **Extract an abstraction** (final) | `const isLongRunning = ...` | Any new command just expresses its property inside this set |
+| **Extract an abstraction** (final)    | `const isLongRunning = ...`                  | Any new command just expresses its property inside this set              |
 
 When you see an "exclusion list" in code (`if (cmd !== "A" && cmd !== "B")`), it means you're **enumerating specific commands** instead of expressing the **essential property** of "which commands are long-running". The moment a new long-running command appears (like `--watch`), the same bug returns.
 
-**Checklist**: if your CLI is ever going to add a "keep-listening" feature (watch / serve / daemon), check the `isLongRunning` list in `bin/index.ts` first — it must include the new command.
+#### Checklist
+
+if your CLI is ever going to add a "keep-listening" feature (watch / serve / daemon), check the `isLongRunning` list in `bin/index.ts` first — it must include the new command.
 
 ---
 
@@ -294,7 +293,7 @@ And this kind of bug is especially sneaky:
 - In unit tests, `scan_stories`'s handler is called directly and nobody parses stdout → tests pass
 - In a real environment, the MCP client strictly parses stdout → immediate breakage
 
-### The Fix
+**The Fix**:
 
 ```typescript
 // Before
@@ -313,9 +312,7 @@ if (!config.wordCount) {
 
 The `console.log(locale.generatedText(...))` inside `loadStoryContentAsync` was changed the same way.
 
-### The Deeper Lesson
-
-**In a stdio protocol, stdout is not for logging.** It's the protocol channel between two processes. Any extra output — even a single seemingly harmless log line — breaks protocol parsing.
+**The Deeper Lesson**: **In a stdio protocol, stdout is not for logging.** It's the protocol channel between two processes. Any extra output — even a single seemingly harmless log line — breaks protocol parsing.
 
 This is a **silent runtime failure**: the code doesn't throw, tests don't fail, and only real clients mysteriously stop working.
 
@@ -364,9 +361,7 @@ t5:  the process exits while await handleRequest() is still suspended → the re
 
 This is an **async race**: `close` says "the input stream is closed", but it doesn't wait for your Promises to finish.
 
-### The Fix
-
-Track all in-flight requests with a `pending` Set, and wait for all of them on `close` before exiting:
+**The Fix**: Track all in-flight requests with a `pending` Set, and wait for all of them on `close` before exiting:
 
 ```typescript
 export function startMcpServer(rootDir: string, tools: RegisteredTool[]): void {
@@ -408,9 +403,7 @@ export function startMcpServer(rootDir: string, tools: RegisteredTool[]): void {
 }
 ```
 
-### The Deeper Lesson
-
-In Node.js's event loop, **readline's `close` event only means "the input stream closed", not "your async callbacks have run"**.
+**The Deeper Lesson**: In Node.js's event loop, **readline's `close` event only means "the input stream closed", not "your async callbacks have run"**.
 
 This is a universal problem for every stdio protocol server: when stdin hits EOF, you may still have queued Promises. You need to track and wait for them explicitly:
 
@@ -424,11 +417,11 @@ This is a universal problem for every stdio protocol server: when stdin hits EOF
 
 The biggest insight from this session was **the value of layered testing**:
 
-| Test layer | Our previous coverage | What it would catch |
-| ---------------------------------------------------------- | -------------- | ------------------------- |
-| **Unit tests** (calling handler functions directly) | ✅ 401 all green | Can't catch Bug #1 / #2 / #3 |
-| **Integration tests** (calling `startMcpServer` without a real process) | ❌ none | — |
-| **End-to-end tests** (spawnSync a real child process + real stdin/stdout) | ❌ none | All 3 bugs at once |
+| Test layer                                                                | Our previous coverage | What it would catch          |
+| ------------------------------------------------------------------------- | --------------------- | ---------------------------- |
+| **Unit tests** (calling handler functions directly)                       | ✅ 401 all green      | Can't catch Bug #1 / #2 / #3 |
+| **Integration tests** (calling `startMcpServer` without a real process)   | ❌ none               | —                            |
+| **End-to-end tests** (spawnSync a real child process + real stdin/stdout) | ❌ none               | All 3 bugs at once           |
 
 **Green unit tests don't mean the system works.** You need to start the server in a real process, send requests through real pipes, and parse real stdout — because only end-to-end tests can catch problems at the "process lifecycle" and "protocol integrity" levels.
 

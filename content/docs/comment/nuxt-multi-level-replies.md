@@ -2,7 +2,6 @@
 title: 从零到一：为 Moongate 博客打造一个支持多级引用的评论区
 description: 介绍了 Moongate 博客的评论区设计和实现，包括多级引用、扁平时间线、引用块跳转、用户认证、响应式设计等。
 date: 2026-03-08
-permalink: 2f14097a-5218-4adb-8204-fca2f2eddc85
 series: comment
 level: P3
 tags:
@@ -94,7 +93,7 @@ CREATE INDEX idx_replies_target ON replies(target_id, target_type);
 <details>
 <summary>查看完整 schema</summary>
 
-**`server/db/schema/comments.ts`**
+#### `server/db/schema/comments.ts`
 
 ```ts
 import {
@@ -121,7 +120,7 @@ export type CommentSelect = typeof comments.$inferSelect
 export type CommentInsert = typeof comments.$inferInsert
 ```
 
-**`server/db/schema/replies.ts`**（含枚举）
+#### `server/db/schema/replies.ts`
 
 ```ts
 import {
@@ -151,7 +150,7 @@ export type ReplySelect = typeof replies.$inferSelect
 export type ReplyInsert = typeof replies.$inferInsert
 ```
 
-**`server/db/schema/users.ts`**
+#### `server/db/schema/users.ts`
 
 ```ts
 import {
@@ -229,7 +228,7 @@ export const repliesRelations = relations(replies, ({ one }) => ({
 
 该接口需要返回当前文章的所有评论和回复，并为每条回复附上被引用内容的摘要（`reply_to`）。我们采用两步查询：先获取所有评论，再获取所有回复，然后在内存中组装并排序。
 
-**`server/api/comment/timeline.get.ts`**
+#### `server/api/comment/timeline.get.ts`
 
 <details>
 <summary>完整的获取时间线接口代码</summary>
@@ -348,13 +347,13 @@ export default defineEventHandler(async (event) => {
 
 简单地将用户输入插入 `comments` 表，返回新评论数据。
 
-**`server/api/comment/post.ts`**（略，可参考类似逻辑）
+#### `server/api/comment/post.ts`
 
 ### 3.4 提交回复接口
 
 需要验证目标是否存在，并处理多态引用。注意使用 `createError` 抛出规范错误。
 
-**`server/api/reply/post.ts`**
+#### `server/api/reply/post.ts`
 
 <details>
 <summary>查看完整的回复接口代码</summary>
@@ -436,7 +435,7 @@ export default defineEventHandler(async (event) => {
 
 使用 Pinia 管理评论相关状态，包括当前输入内容、评论列表、加载状态等。
 
-**`stores/comment.ts`**
+### `stores/comment.ts`
 
 <details>
 <summary>查看完整的pinia代码</summary>
@@ -534,7 +533,7 @@ export const useCommentStore = defineStore("comment", () => {
 
 ### 5.1 评论区容器组件
 
-**`components/docs/CommentSection.vue`**
+#### `components/docs/CommentSection.vue`
 
 <details>
 <summary>查看完整组件代码</summary>
@@ -599,7 +598,7 @@ watch(
 
 ### 5.2 评论列表组件
 
-**`components/docs/CommentList.vue`**
+#### `components/docs/CommentList.vue`
 
 <details>
 <summary>查看完整组件代码</summary>

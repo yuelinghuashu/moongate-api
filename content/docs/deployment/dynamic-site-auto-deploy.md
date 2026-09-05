@@ -1,7 +1,6 @@
 ---
 title: GitHub Actions + Caddy 全自动部署动态网站（动态篇）
 description: 深入后端服务的进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理，打造完整的动态应用部署流水线。
-permalink: 051f1e4a-1151-49c2-b61b-e3c43859332b
 date: 2026-01-23
 series: deployment
 level: P4
@@ -330,7 +329,7 @@ jobs:
             pm2 save
 ```
 
-**关键说明**：
+### 关键说明
 
 - **Node.js 24 + pnpm 10**：所有步骤都针对最新版本优化，包括 corepack 的启用和 pnpm 的安装方式。
 - **Nuxt 构建产物**：`.output` 目录必须被同步，rsync 命令中**没有排除** `.output`。
@@ -438,4 +437,6 @@ sudo tail -f /var/log/auth.log
 7. **安全可控**：所有敏感信息通过 GitHub Secrets 管理，服务器上的 `.env` 文件权限严格。
 8. **跨技术栈适配**：本教程的结构可轻松迁移到其他语言和框架。
 
-**下一步**：如果你的项目需要更复杂的多容器编排（如应用、数据库、Redis 等），可以考虑迁移到 Docker 部署（参见本系列《进阶 Docker 篇》）。
+### 下一步
+
+如果你的项目需要更复杂的多容器编排（如应用、数据库、Redis 等），可以考虑迁移到 Docker 部署（参见本系列《进阶 Docker 篇》）。

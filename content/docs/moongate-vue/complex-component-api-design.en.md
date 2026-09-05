@@ -1,8 +1,7 @@
 ---
-title: 'Vue 3 Complex Component Development: API Design for Select and Pagination'
+title: "Vue 3 Complex Component Development: API Design for Select and Pagination"
 description: Using Select and Pagination as examples, explore Vue 3 complex component API design, data format adaptation, type backtracking, searchable/multi-select, ARIA keyboard navigation, composable extraction, and SSR adaptation, revealing the design trade-offs and implementation details behind industrial-grade components.
 date: 2026-05-19
-permalink: 62e1afa3-c02e-4bf8-bc52-36f3b13032e9
 level: P3
 series: moongate-vue
 tags:
@@ -396,29 +395,29 @@ Global Env  ◄── State Coordinator ◄── User Interaction
 
 The v1.5.0 Select has **40+ tests** and Pagination has **14 tests**, covering:
 
-| Concern | Test Content |
-| --- | --- |
-| **Type Backtracking** | Native mode number array `[10,20,30]` still produces a number modelValue after selection |
-| **ARIA Navigation** | `aria-activedescendant` points to highlighted option, each option has a unique id |
-| **Keyboard Operations** | ArrowDown/Up highlight, Enter select, Esc close, boundary doesn't overflow |
-| **Multiple Selection** | Tag rendering, toggle selection, tag deletion, Enter continuous multiple selection |
-| **Edge Cases** | Empty search results, external modelValue change, dropdown stays open on blur |
-| **Accessibility** | axe-core reports no violations for Select (native + searchable) |
+| Concern                 | Test Content                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| **Type Backtracking**   | Native mode number array `[10,20,30]` still produces a number modelValue after selection |
+| **ARIA Navigation**     | `aria-activedescendant` points to highlighted option, each option has a unique id        |
+| **Keyboard Operations** | ArrowDown/Up highlight, Enter select, Esc close, boundary doesn't overflow               |
+| **Multiple Selection**  | Tag rendering, toggle selection, tag deletion, Enter continuous multiple selection       |
+| **Edge Cases**          | Empty search results, external modelValue change, dropdown stays open on blur            |
+| **Accessibility**       | axe-core reports no violations for Select (native + searchable)                          |
 
 Plus **SSR checks**: `renderToString` confirms components don't crash on the server and floating layers are hidden by default.
 
 ## 8. Summary
 
-| Concern | Simple Component (Button) | Complex Component (Select / Pagination) |
-| --- | --- | --- |
-| **Props Count** | Fewer (11) | More (10-15) |
-| **Data Format** | Fixed (string) | Flexible (supports multiple array types, configurable fields, type anti-corruption) |
-| **State Management** | No internal state | Searchable text, multiple selection array, edit state, dropdown visibility |
-| **Accessibility** | Native semantics | WAI-ARIA Combobox pattern (listbox/option/activedescendant) |
-| **Logic Reuse** | Not needed | Composables (useFormField/useFloating/useOverlayBehavior) |
-| **SSR Adaptation** | Automatic | useId hydration safety + isBrowser guard |
-| **i18n** | Minimal text | Global configuration chain (prop > setConfig > built-in) |
-| **Testing Strategy** | Snapshots, event triggers | State combinations, edge cases, keyboard simulation, type backtracking, axe-core |
+| Concern              | Simple Component (Button) | Complex Component (Select / Pagination)                                             |
+| -------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| **Props Count**      | Fewer (11)                | More (10-15)                                                                        |
+| **Data Format**      | Fixed (string)            | Flexible (supports multiple array types, configurable fields, type anti-corruption) |
+| **State Management** | No internal state         | Searchable text, multiple selection array, edit state, dropdown visibility          |
+| **Accessibility**    | Native semantics          | WAI-ARIA Combobox pattern (listbox/option/activedescendant)                         |
+| **Logic Reuse**      | Not needed                | Composables (useFormField/useFloating/useOverlayBehavior)                           |
+| **SSR Adaptation**   | Automatic                 | useId hydration safety + isBrowser guard                                            |
+| **i18n**             | Minimal text              | Global configuration chain (prop > setConfig > built-in)                            |
+| **Testing Strategy** | Snapshots, event triggers | State combinations, edge cases, keyboard simulation, type backtracking, axe-core    |
 
 An excellent complex component, internally, should be like a vacuum cleaner — accommodating all kinds of bizarre backend data formats (through key mapping and type backtracking) — and externally, should be like a gentleman — coupling with the global environment (i18n, SSR, keyboard) in a restrained manner. **High cohesion, low coupling** is fully embodied in these two types of components.
 

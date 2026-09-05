@@ -1,8 +1,7 @@
 ---
-title: 'Building a Lexer from Scratch (Part 2): Managing Every Symbol with a Single Table'
-description: 'Avoid a wall of switch-cases in your lexer: introduce a symbol map (symbolMap) to manage every symbol in one table, with built-in bilingual (Chinese/English) support and a data-driven design.'
+title: "Building a Lexer from Scratch (Part 2): Managing Every Symbol with a Single Table"
+description: "Avoid a wall of switch-cases in your lexer: introduce a symbol map (symbolMap) to manage every symbol in one table, with built-in bilingual (Chinese/English) support and a data-driven design."
 date: 2026-07-13 21:00:00
-permalink: ef2d72a9-756a-4c35-8ad5-53f698ad8986
 series: lexer-from-scratch
 level: P1
 tags:
@@ -51,12 +50,12 @@ But before writing the Lexer, we still need to do one thing: **expand the token 
 
 In the last part we only defined three token types. But in a complete `.meph` file, besides `【`, `】` and plain text, there are more symbols to recognize:
 
-| Symbol | Use | Example |
-| ---------- | --------- | ---------------------------- |
-| `：` / `:` | colon | `好感度：78` ("affection: 78") |
-| `-` | list marker | `- 核心信念："力量就是一切"` ("core belief: might is everything") |
-| `@` | reference symbol | `@[世界观](worlds/eva.meph)` ("worldview") |
-| `#` | tag / comment | `# 硬约束` ("hard constraint") |
+| Symbol     | Use              | Example                                                           |
+| ---------- | ---------------- | ----------------------------------------------------------------- |
+| `：` / `:` | colon            | `好感度：78` ("affection: 78")                                    |
+| `-`        | list marker      | `- 核心信念："力量就是一切"` ("core belief: might is everything") |
+| `@`        | reference symbol | `@[世界观](worlds/eva.meph)` ("worldview")                        |
+| `#`        | tag / comment    | `# 硬约束` ("hard constraint")                                    |
 
 Here is the complete `parser/token.go`:
 
@@ -89,7 +88,9 @@ type Token struct {
 }
 ```
 
-**Note:** `NEWLINE` and `EOF` are only actually used by the Lexer implementation, but we define them now so later parts won't need to go back and modify `token.go`.
+**Note**:
+
+`NEWLINE` and `EOF` are only actually used by the Lexer implementation, but we define them now so later parts won't need to go back and modify `token.go`.
 
 ## 3. The Problem: The Lexer Must Recognize Many Symbols
 
@@ -113,11 +114,11 @@ case '-':
 
 Writing it this way has three problems:
 
-| Problem | Explanation |
-| -------------------- | -------------------------------------------------------- |
-| **Adding a symbol means changing code** | Every new symbol type requires modifying the Lexer source |
-| **Bilingual support is painful** | To support both `【` and `[` as left brackets, the `case`s keep growing |
-| **Logic is scattered** | The "definition" of a symbol and its "detection" are mixed together, which is hard to maintain |
+| Problem                                 | Explanation                                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Adding a symbol means changing code** | Every new symbol type requires modifying the Lexer source                                      |
+| **Bilingual support is painful**        | To support both `【` and `[` as left brackets, the `case`s keep growing                        |
+| **Logic is scattered**                  | The "definition" of a symbol and its "detection" are mixed together, which is hard to maintain |
 
 **We need a better way: separate "what a symbol is" from "how to detect a symbol".**
 
@@ -138,10 +139,10 @@ Before defining the map, settle a key question: what type should we use to store
 
 In Go, there are two ways to iterate over a string:
 
-| Way | Type | Characteristics |
-| ------ | ------ | --------------------------------------- |
-| `byte` | 1 byte | Only handles ASCII characters (English, digits, punctuation) |
-| `rune` | 4 bytes | Handles any Unicode character (Chinese, Emoji) |
+| Way    | Type    | Characteristics                                              |
+| ------ | ------- | ------------------------------------------------------------ |
+| `byte` | 1 byte  | Only handles ASCII characters (English, digits, punctuation) |
+| `rune` | 4 bytes | Handles any Unicode character (Chinese, Emoji)               |
 
 `【` takes **3 bytes** in UTF-8. If we iterate byte by byte, `【` gets split into 3 separate bytes and cannot be recognized correctly.
 
@@ -201,14 +202,14 @@ var symbolMap = map[rune]SymbolInfo{
 }
 ```
 
-**Key design notes:**
+#### Key design notes
 
-| Design point | Explanation |
-| ------------------------------- | ------------------------------------------------------------------------- |
-| **One token type maps to many characters** | `【` and `[` are both `TOKEN_LEFT_BRACKET` — bilingual support comes for free |
-| **Category is used for filtering** | The Lexer can skip spaces via `Category == "whitespace"` |
-| **`\n` is `TOKEN_NEWLINE`** | Newlines carry syntax meaning and are returned as tokens (unlike spaces, which are skipped) |
-| **Space is `TOKEN_TEXT`** | Spaces are never returned (consumed early by `skipWhitespace`); `TOKEN_TEXT` is just a placeholder |
+| Design point                               | Explanation                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| **One token type maps to many characters** | `【` and `[` are both `TOKEN_LEFT_BRACKET` — bilingual support comes for free                      |
+| **Category is used for filtering**         | The Lexer can skip spaces via `Category == "whitespace"`                                           |
+| **`\n` is `TOKEN_NEWLINE`**                | Newlines carry syntax meaning and are returned as tokens (unlike spaces, which are skipped)        |
+| **Space is `TOKEN_TEXT`**                  | Spaces are never returned (consumed early by `skipWhitespace`); `TOKEN_TEXT` is just a placeholder |
 
 ## 7. Looking Up Symbols via the Map
 
@@ -224,7 +225,9 @@ func GetSymbolInfo(ch rune) (SymbolInfo, bool) {
 }
 ```
 
-**This function is the only visible surface of `symbolMap`**: it tells the caller "is this character a symbol we know? If so, what type is it?"
+### This function is the only visible surface of `symbolMap`
+
+it tells the caller "is this character a symbol we know? If so, what type is it?"
 
 In the next part, we'll see how the Lexer uses `symbolMap` internally to drive the entire lexical analysis with a single lookup. For now, let's verify that the table works.
 
@@ -268,22 +271,22 @@ Output:
 '\n' → TOKEN_NEWLINE, found: true
 ```
 
-**What to verify:**
+### What to verify
 
 - Both `【` and `[` return `TOKEN_LEFT_BRACKET` — that is the bilingual support
 - `x` is not in the table — it will be treated as plain text
 - `\n` is in the table and recognized as `TOKEN_NEWLINE` — it carries syntax meaning and is returned
 
-**Note:** spaces are not in the verification list, because they are consumed early by `skipWhitespace()`. We only verify the symbols that the Lexer actually returns.
+**Note**: spaces are not in the verification list, because they are consumed early by `skipWhitespace()`. We only verify the symbols that the Lexer actually returns.
 
 ## 9. The Advantages of This Design
 
-| Advantage | Explanation |
-| ------------------------- | ------------------------------------------- |
+| Advantage                             | Explanation                                                                |
+| ------------------------------------- | -------------------------------------------------------------------------- |
 | **New symbols don't touch the Lexer** | Just add one line to `symbolMap` and the Lexer recognizes it automatically |
-| **Bilingual support for free** | One token type maps to multiple characters |
-| **Detection logic is centralized** | All symbol detection lives in one table |
-| **Category adds another dimension** | Process symbols by group (e.g. skip all whitespace at once) |
+| **Bilingual support for free**        | One token type maps to multiple characters                                 |
+| **Detection logic is centralized**    | All symbol detection lives in one table                                    |
+| **Category adds another dimension**   | Process symbols by group (e.g. skip all whitespace at once)                |
 
 **The core idea: let the data decide everything.**
 
@@ -291,9 +294,9 @@ Output:
 
 This part accomplished two things:
 
-| What we did | Why |
-| ----------------------------- | -------------------------------------------------- |
+| What we did              | Why                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------- |
 | Expanded the token types | The Lexer needs to recognize more symbols (colon, hyphen, reference symbol, etc.) |
-| Created the `symbolMap` | Centralizes all symbols so the Lexer decides by looking up the table |
+| Created the `symbolMap`  | Centralizes all symbols so the Lexer decides by looking up the table              |
 
 **Next part: implementing the Lexer and actually turning text into a stream of tokens.**

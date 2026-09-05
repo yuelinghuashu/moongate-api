@@ -2,7 +2,6 @@
 title: "Nuxt 4 集成 Drizzle ORM (PostgreSQL) 完整教程"
 description: "本教程专注于 Drizzle ORM 在 PostgreSQL 数据库上的 Nuxt 4 集成。如果您使用的是 MySQL、SQLite 等其他数据库，部分配置（如连接驱动、数据类型）会有所不同，请参考 Drizzle 官方文档相应部分。"
 date: 2026-02-16
-permalink: 9f906ca5-0c33-4467-ac12-092e5e204a99
 series: backend
 level: P2
 tags:
@@ -34,7 +33,7 @@ tags:
 
 本教程专注 **PostgreSQL + Nuxt 4** 的 Drizzle ORM 集成。如果您使用 MySQL/SQLite，驱动和类型会有差异，请参考官方文档相应部分。
 
-**前置要求**：
+### 前置要求
 
 - 已有一个 Nuxt 4 项目（`npm create nuxt@latest <project-name>`）
 - 本地已安装 PostgreSQL（或使用云数据库）
@@ -54,7 +53,9 @@ tags:
 | **Schema 组织** | 通常单个文件       | 建议拆分多文件，并**必须包含关系定义** |
 | **运行环境**    | 手动执行脚本       | 通过 API 路由触发，由 Nitro 管理       |
 
-**关键点**：**完全照搬官方文档会在 Nuxt 中失败**，因为 Nuxt 的服务端目录结构和自动导入机制与普通 Node 项目不同。
+### 关键点
+
+**完全照搬官方文档会在 Nuxt 中失败**，因为 Nuxt 的服务端目录结构和自动导入机制与普通 Node 项目不同。
 
 ---
 
@@ -122,7 +123,7 @@ server/
 
 ### 3.1 定义表（以 users 和 comments 为例）
 
-**`server/db/schema/users.ts`**
+#### `server/db/schema/users.ts`
 
 ```ts
 import {
@@ -145,7 +146,7 @@ export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 ```
 
-**`server/db/schema/comments.ts`**
+#### `server/db/schema/comments.ts`
 
 ```ts
 import {
@@ -177,7 +178,7 @@ export type NewComment = typeof comments.$inferInsert
 
 ### 3.2 定义关系（relations）
 
-**`server/db/schema/relations.ts`**
+#### `server/db/schema/relations.ts`
 
 ```ts
 import { relations } from "drizzle-orm"
@@ -200,7 +201,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 ### 3.3 统一导出
 
-**`server/db/schema/index.ts`**
+#### `server/db/schema/index.ts`
 
 ```ts
 export * from "./users"
@@ -214,7 +215,7 @@ export * from "./relations"
 
 Nuxt 中，数据库连接应放在 `server/db/` 下以便导入。
 
-**`server/db.ts`**
+### `server/db.ts`
 
 ```ts
 import { drizzle } from "drizzle-orm/node-postgres"
@@ -239,7 +240,7 @@ export const useDB = () => drizzle(pool, { schema })
 
 创建测试 API 路由，确保一切正常。
 
-**`server/api/test/db.get.ts`**
+### `server/api/test/db.get.ts`
 
 ```ts
 import { sql } from "drizzle-orm"
@@ -308,7 +309,7 @@ npx drizzle-kit push
 
 ### 查询示例（带关系）
 
-**`server/api/comments.get.ts`**
+#### `server/api/comments.get.ts`
 
 ```ts
 import { comments } from "~/server/db/schema" // 需要显式导入表定义
@@ -335,7 +336,7 @@ export default defineEventHandler(async (event) => {
 
 ### 插入示例
 
-**`server/api/comments.post.ts`**
+#### `server/api/comments.post.ts`
 
 ```ts
 import { comments, type NewComment } from "~/server/db/schema"
@@ -363,26 +364,32 @@ export default defineEventHandler(async (event) => {
 ### 错误 1：`Cannot read properties of undefined (reading 'referencedTable')`
 
 **原因**：初始化 `drizzle` 时没有传入完整 schema（缺少 relations）。
+
 **解决**：确保 `useDB()` 中 `drizzle(pool, { schema })` 的 `schema` 对象包含了 `relations` 导出。
 
 ### 错误 2：`useDB()` 未定义
 
 **原因**：文件未放在 `server/utils/` 下，或 Nuxt 自动导入失效（需重启 dev）。
+
 **解决**：检查文件路径，重启 `pnpm dev`。
 
 ### 错误 3：`db.query.comments.findMany` 不存在
 
 **原因**：没有启用 Drizzle 的关系查询 API，需要传入 schema 并确保 `drizzle-orm` 版本支持。
+
 **解决**：确认 `useDB()` 返回的是带有 `query` 属性的实例（即传入了 schema）。
 
 ### 错误 4：迁移时找不到表
 
-**原因**：`drizzle.config.ts` 中的 `schema` 路径错误，或指向的文件没有导出所有表。
+**原因**：
+
+`drizzle.config.ts` 中的 `schema` 路径错误，或指向的文件没有导出所有表。
 **解决**：确保路径正确，且 `schema/index.ts` 导出了所有表。
 
 ### 错误 5：生产环境数据库连接失败
 
 **原因**：环境变量未正确设置，或连接字符串格式错误。
+
 **解决**：在服务器上检查 `NUXT_DATABASE_URL` 是否正确，并确保网络可达。
 
 ---

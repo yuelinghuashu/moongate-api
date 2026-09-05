@@ -9,24 +9,22 @@ import (
 )
 
 type AboutHandler struct {
-	Store       map[string]*domain.About
 	StoreBySlug map[string]*domain.About
 }
 
-func NewAboutHandler(store map[string]*domain.About, storeBySlug map[string]*domain.About) *AboutHandler {
-	return &AboutHandler{Store: store, StoreBySlug: storeBySlug}
+func NewAboutHandler(storeBySlug map[string]*domain.About) *AboutHandler {
+	return &AboutHandler{StoreBySlug: storeBySlug}
 }
 
 // GetAboutList 返回所有 about 页面摘要
 // GET /api/about
 func (h *AboutHandler) GetAboutList(c *gin.Context) {
-	summaries := make([]domain.AboutSummary, 0, len(h.Store))
-	for _, about := range h.Store {
+	summaries := make([]domain.AboutSummary, 0, len(h.StoreBySlug))
+	for _, about := range h.StoreBySlug {
 		summaries = append(summaries, domain.AboutSummary{
 			Title:       about.Title,
 			Description: about.Description,
 			Date:        about.Date,
-			Permalink:   about.Permalink,
 			Slug:        about.Slug,
 		})
 	}

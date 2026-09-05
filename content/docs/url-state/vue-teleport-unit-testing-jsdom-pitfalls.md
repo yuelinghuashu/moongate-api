@@ -2,7 +2,6 @@
 title: Vue 3 Teleport 组件单元测试指南：5 个 jsdom 陷阱与顺手抓到的 2 个 Bug
 description: 为我们的组件库 Moongate Vue 编写 204 个单元测试时，Teleport 组件在 jsdom 环境中踩了 5 个坑，还顺手揪出了 2 个隐藏 bug。本文复盘完整过程，附可复现的最小示例。
 date: 2026-08-05
-permalink: 59513f20-2b16-4652-89b3-1d9ba7cfac05
 series:
 level: P4
 tags:
@@ -31,7 +30,9 @@ TypeError: Cannot read properties of null (reading 'insertBefore')
 
 ### 陷阱 1：Teleport 内容在 body 顶层，wrapper 查不到
 
-**表现**：`wrapper.find('.mg-modal-overlay')` 返回空，即使组件已经通过 `attachTo: document.body` 挂载。
+**表现**：
+
+`wrapper.find('.mg-modal-overlay')` 返回空，即使组件已经通过 `attachTo: document.body` 挂载。
 
 **根因**：Teleport 的目标元素是 `body`，其渲染内容作为 `body` 的**直接子节点**，**不在 `wrapper.element` 子树内**。即使能通过 `wrapper.vm` 访问到组件实例，Teleport 渲染的 `v-if` 内容也在 wrapper 管理的 DOM 树之外。
 
@@ -139,11 +140,7 @@ afterEach(async () => {
 
 **根因**：Vue 的调度器不知道测试环境的存在。如果在 Vue 还没完成 last tick 的 DOM patch 时清空 body，等它去 patch 时父节点已经是 null。
 
-正确的清理顺序必须是：
-
-```text
-卸载所有 wrapper / destroyAllOverlays  →  flushPromises（若用了 fake timers 则 useRealTimers 还原）→  清空 body  →  restoreAllMocks
-```
+**解法**：正确的清理顺序必须是：`卸载所有 wrapper / destroyAllOverlays → flushPromises（若用了 fake timers 则 useRealTimers 还原）→ 清空 body → restoreAllMocks`。
 
 **这是最容易忽略的一条**。很多人（包括我）第一反应是"清空 body 嘛，什么时候不行"，结果 Vue 用崩溃告诉你不可以。
 
@@ -153,7 +150,9 @@ afterEach(async () => {
 
 **表现**：点击关闭按钮后，`wrapper.emitted('update:modelValue')` 有值，但紧接着查询 `document.body.querySelector('.mg-modal')` 仍能查到（元素还在）。
 
-**根因**：`emit('update:modelValue', false)` 是同步的，但 Teleport 移除 DOM 是**异步 patch**。事件已派发、DOM 还没更新。
+**根因**：
+
+`emit('update:modelValue', false)` 是同步的，但 Teleport 移除 DOM 是**异步 patch**。事件已派发、DOM 还没更新。
 
 **解法**：
 
@@ -189,7 +188,7 @@ expect(document.body.querySelector(".mg-modal")).toBeNull()
 
 ### Bug 1：Input 组件的 `change` 事件完全丢失
 
-**现象**：组件声明了 `change` 事件，但无论如何测试都收不到：
+**表现**：组件声明了 `change` 事件，但无论如何测试都收不到：
 
 ```ts
 // Input.vue 中声明了
@@ -222,13 +221,15 @@ expect(wrapper.emitted("change")).toHaveLength(1) // ❌ 失败
 />
 ```
 
-**教训**：`defineEmits` 声明的事件如果没在模板绑定对应处理器，会被"吞掉"（既不触发、也不透传）。**这条例外适用于所有组件库**——尤其是表格、表单这类依赖原生事件透传的组件。
+**教训**：
+
+`defineEmits` 声明的事件如果没在模板绑定对应处理器，会被"吞掉"（既不触发、也不透传）。**这条例外适用于所有组件库**——尤其是表格、表单这类依赖原生事件透传的组件。
 
 ---
 
 ### Bug 2：`createOverlay` 共享容器的孤儿引用
 
-**现象**：测试清空 body 后，下一个用例创建 Message/Toast，查询容器时莫名失败。
+**表现**：测试清空 body 后，下一个用例创建 Message/Toast，查询容器时莫名失败。
 
 **根因**：我们的 `createOverlay` 用模块级 `Map` 缓存共享容器（用于消息堆叠）：
 
@@ -249,7 +250,7 @@ function getSharedContainer(containerClass: string) {
 
 当测试执行 `document.body.innerHTML = ''` 后，Map 里的容器引用**已脱离 DOM**（`isConnected === false`），但缓存没清空。下一个用例调用 `createOverlay` 时拿到孤儿节点，内容挂进去后从 `document.body` 查不到 → 失败。
 
-**修复**：销毁逻辑增加 `isConnected` 检测，并提供同步清理 API：
+**解法**：销毁逻辑增加 `isConnected` 检测，并提供同步清理 API：
 
 ```ts
 // ① 容器可能已被外部移除时，同步从 DOM 摘除

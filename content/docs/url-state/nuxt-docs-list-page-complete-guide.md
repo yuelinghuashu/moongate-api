@@ -2,7 +2,6 @@
 title: 从零到一：构建一个功能完备的文档列表页
 description: 手把手教你用 Nuxt 4 构建一个支持 URL 状态同步、多维度筛选、移动端无限滚动、键盘翻页的文档列表页。包含手写状态管理、SSR 水合问题排查、组件拆分陷阱、标签多选（桌面端 Ctrl/移动端开关）等完整实现，附可复用代码。
 date: 2026-03-21
-permalink: 760e47b3-05bc-4ad6-9d43-ad95426b8127
 level: P3
 series: url-state
 tags: 
@@ -484,7 +483,7 @@ const clearAllFilters = () => {
 
 构建这个文档列表页花了不少时间，但也让我对 Nuxt SSR 的运作机制有了更深的理解。如果你也在类似项目中遇到水合问题或状态同步的困扰，希望这份记录能给你一些启发。所有代码均已在实际项目中稳定运行，欢迎参考。
 
-**相关链接**：
+### 相关链接
 
 - [Nuxt 中 URL 与状态双向绑定指南](./nuxt-url-state-guide)
 - [Nuxt 4 中安全实现状态持久化：根治水合失败指南](./nuxt-state-persistence-guide)

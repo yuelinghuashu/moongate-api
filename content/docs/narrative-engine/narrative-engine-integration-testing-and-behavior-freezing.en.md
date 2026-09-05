@@ -1,8 +1,7 @@
 ---
-title: 'LLM Narrative Engines, Part 5: Integration Testing and Behavior Freezing'
+title: "LLM Narrative Engines, Part 5: Integration Testing and Behavior Freezing"
 description: The parser is written — but how do you ensure future changes don't break it? Golden file tests, validators, and sliding-window aging tests — freezing parsing behavior with tests.
 date: 2026-07-20 21:00:00
-permalink: f1937ff0-8254-47a9-8b24-61418346fbea
 level: P4
 series: narrative-engine
 tags:
@@ -60,7 +59,9 @@ func TestParseSample(t *testing.T) {
 
 On first run, `sample.golden` is auto-generated. Every subsequent run compares against it, reporting differences. If the change is intended (e.g., a new field was added), running `go test -update` refreshes the Golden file.
 
-**The core value of this mechanism:** the parser's behavior is "frozen." Any change must pass test validation — it can't silently alter parse results.
+### The core value of this mechanism
+
+the parser's behavior is "frozen." Any change must pass test validation — it can't silently alter parse results.
 
 ---
 

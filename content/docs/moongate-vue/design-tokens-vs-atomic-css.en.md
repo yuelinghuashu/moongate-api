@@ -2,7 +2,6 @@
 title: 'Design Tokens vs Atomic CSS: A Failed Integration and the Path to Harmony'
 description: A personal developer's attempt to map existing design tokens to UnoCSS failed. Quantified comparison, pragmatic boundaries, and the conclusion that design tokens come first, atomic CSS optional.
 date: 2026-04-18
-permalink: 65f7b804-7301-401d-8461-b04913b29333
 level: P3
 series: moongate-vue
 tags:
@@ -118,7 +117,9 @@ To objectively assess just how "unworthwhile" it is, I compiled a comparison tab
 
 {% endcollapsible %}
 
-**Conclusion**: Sacrificing ~2 KB of size for a massive reduction in maintenance cost. For personal projects, **maintenance cost, semantic clarity, and debugging experience** matter more than extreme size optimization.
+### Conclusion
+
+Sacrificing ~2 KB of size for a massive reduction in maintenance cost. For personal projects, **maintenance cost, semantic clarity, and debugging experience** matter more than extreme size optimization.
 
 > 💡 About the "68 variables": The component library actually consumes roughly half as UI tokens; the other half are editor theme extension variables (ANSI colors, bracket pair colors, etc., shared from a personal theme project). The UnoCSS mapping approach requires maintaining mappings for all 68 variables, which amplifies the mapping cost—while using CSS variables directly naturally supports "only referencing needed variables."
 
@@ -161,7 +162,7 @@ I'm not an opponent of atomic CSS. If the following conditions are met, I'd choo
 - ✅ Entire team familiar with atomic syntax
 - ✅ No need to reuse styles across frameworks
 
-**Not suitable scenarios**:
+### Not suitable scenarios
 
 - ❌ Already have mature design tokens needing long-term maintenance
 - ❌ Need style files reusable across Vue/React/Svelte

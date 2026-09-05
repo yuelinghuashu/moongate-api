@@ -2,7 +2,6 @@
 title: Moon Gate 设计哲学：视觉远近法与月语义化的诞生
 description: 从视觉远近法到月语义化，Moongate 如何将月亮的静谧与代码的秩序融为一体。每一种颜色都有它的月相，每一度灰都有名字。
 date: 2026-02-24 16:00:00
-permalink: iGflVKJ-crTbDV1JHCYup
 ---
 
 ## 一、缘起：月门之后

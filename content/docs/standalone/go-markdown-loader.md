@@ -2,7 +2,6 @@
 title: 用 Go 重构 Markdown 加载：一个前端开发者的实战学习笔记
 description: 从 Nuxt Content 全家桶到 Go 重构代码——一个前端开发者如何用真实项目驱动 Go 语言学习，实现轻量、透明、可控的 Markdown 数据加载方案。
 date: 2026-07-11 20:00:00
-permalink: a01c1247-a8c6-47a8-95c3-484ef8939a9f
 level: P3
 tags:
   - Go
@@ -11,9 +10,11 @@ tags:
 
 > 我需要把 30 多篇 Markdown 文档变成 API 数据源。用 Node.js 能写，用 Python 也能写，但我选择了 Go——不是因为性能，而是因为我想在实战中学 Go。这篇文章记录的不仅是一个技术方案，更是一个前端开发者从 Go 新手到 Go 实践者的完整过程。
 
-**适用读者**：想通过真实项目学 Go 的开发者，以及想从 Nuxt Content 迁移出来的用户。
+## 适用读者
 
-**你将学到**：
+想通过真实项目学 Go 的开发者，以及想从 Nuxt Content 迁移出来的用户。
+
+## 你将学到
 
 - 如何用 Go 实现 Markdown 加载与 API 服务（核心逻辑 ~200 行，完整项目 ~400-500 行）
 - Go 项目结构设计、接口使用、文件处理的核心实践
@@ -42,7 +43,7 @@ tags:
 
 配置逐渐复杂，分散在多个地方：
 
-**`content.config.ts`——集合定义**
+### `content.config.ts`——集合定义
 
 ```typescript
 import { defineContentConfig, defineCollection } from "@nuxt/content"
@@ -77,7 +78,7 @@ export default defineContentConfig({
 })
 ```
 
-**`nuxt.config.ts`——Markdown 渲染配置**
+### `nuxt.config.ts`——Markdown 渲染配置
 
 ```typescript
 const bundledLangs = [
