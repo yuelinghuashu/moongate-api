@@ -24,7 +24,7 @@ tags:
 
 ---
 
-> **前置阅读**：完成[入门篇](./gorm-gin-crud-tutorial)、[多表关联篇](./gorm-gin-relations)、[文件与查询增强篇](./gorm-gin-media-query)——`books` + `comments` + 封面图 + 分页搜索的项目。代码约定与入门篇一致（`WithContext` / 400·404·201）。
+> **前置阅读**：完成[入门篇](./gorm-gin-crud-tutorial)、[多表关联篇](./gorm-gin-relations)、[文件与查询增强篇](./gorm-gin-media-query)——`books` + `comments` + 封面图 + 分页搜索的项目。代码约定与入门篇一致（`WithContext` / `errors.Is` 判 404 / 400·404·201）。
 
 这是系列第 4 篇。前三篇把"接口功能"补齐了：CRUD、关联、上传、分页；本篇转向**工程方法**：数据从哪来（批量导入）、接口边界收在哪（请求 DTO）、校验失败怎么让客户端看懂（错误翻译）。
 
@@ -67,7 +67,7 @@ func SeedBooksFromFile(c *gin.Context) {
         return
     }
 
-    // 2. JSON 解析到切片（字段由 json 标签对齐，金额在文件里直接写分）
+    // 2. JSON 解析到切片（字段由 json 标签对齐；金额单位：分，换算见下方注记）
     var books []models.Book
     if err := json.Unmarshal(data, &books); err != nil {
         _ = c.Error(err)
@@ -142,7 +142,7 @@ book := models.Book{Title: input.Title, Author: input.Author, Price: *input.Pric
 
 - `binding:"required,gte=0,lte=1000000"`：价格必填、`0 <= price <= 1000000`（即 0–10000 元，单位：分），越界直接 400。**为什么 `Price` 用 `*int`？** `required` 对 int 的零值 `0` 也会判"字段缺失"，`{"price":0}` 会被 400 拦下；改成 `*int` 后"没传"是 `nil`（400）、"传了 0" 是 `&0`（通过）——这正是入门篇讲过的指针语义：**`nil` 表示"这个字段没出现"**；
 - DTO 的第二个好处：`price` 传负数、传 `"abc"` 都进不了模型——**接口边界在 DTO 层收口，而不是模型层**；
-- 为什么入门篇不这么做？因为单表入门时"收什么=存什么"，先学 GORM 本体；现在进入多表 + 校验阶段，才需要显式分离（教学坡度，不是矛盾）。
+- 为什么入门篇不这么做？因为单表入门时"收什么=存什么"，先学 GORM 本体；现在进入多表 + 校验阶段，才需要显式分离（这就是本系列反复出现的"教学坡度"：难点按篇摊开、每篇只上一个台阶——不是前文错了，是刻意留白）。
 - **行为变更提示：** 入门篇进阶版的 `Price int` + `binding:"gte=0"` 让缺省 price 也能通过（按 0 创建）；本篇收紧为 `*int` + `required`——缺 `price` 的旧请求（只传 `title`/`author`）在入门篇是 201，到这里变成 400。同一接口、不同阶段语义不同，这是教程有意把"缺省即成功"改成"显式必填"，并非笔误。
 
 **测试：**

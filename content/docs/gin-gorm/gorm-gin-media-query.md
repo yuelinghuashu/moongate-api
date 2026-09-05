@@ -123,8 +123,7 @@ func UploadCover(c *gin.Context) {
     }
 
     // 4. 路径写回数据库（只更新这一个字段）
-    // coverPath 是 URL 路径，必须用正斜杠拼接（存库、给前端用），与操作系统无关；
-    // 别用 filepath.Join——它在 Windows 下会拼出反斜杠，前端 URL 永远匹配不上
+    // coverPath 存的是 URL 路径，用正斜杠拼接（为什么别用 filepath.Join 见下方要点）
     coverPath := "/uploads/" + filename
     if err := db.DB.WithContext(c.Request.Context()).
         Model(&book).Update("cover_path", coverPath).Error; err != nil {
@@ -357,3 +356,17 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 
 - 你现在的项目：`books` + `comments` 双表、封面图上传与静态服务、分页搜索列表、每本书带评论数；
 - 下一篇[《数据工程实战》](./gorm-gin-dto-batch)：批量导入真实数据、请求 DTO 与参数化校验、校验错误的友好翻译，末尾附系列一览与工程化条目清单（系列第 6/7 篇预告的集中对账）。
+
+---
+
+## 附：PostgreSQL 特性速查（MySQL / SQLite 对照）
+
+全系列真正依赖 PostgreSQL 的写法只有下面几处，其余都是标准 SQL，三库通用：
+
+| PG 特性 | 出现在哪 | 本系列写法 | 换 MySQL | 换 SQLite |
+| --- | --- | --- | --- | --- |
+| 大小写不敏感的模糊搜索 | 本篇 §2.2 | `ILIKE ?` | `LIKE ?`（大小写由 collation 决定；必要时 `LOWER(col) LIKE LOWER(?)`） | `LIKE ?`（ASCII 内不区分大小写；非 ASCII 需 `COLLATE NOCASE`） |
+| 按主键分组后可直接选其它列（函数依赖） | 本篇 §2.3 | `SELECT books.*, COUNT(comments.id) ... GROUP BY books.id` | 默认 `only_full_group_by` 下报错：需把 `books.*` 展开成完整列清单并全部 `GROUP BY` | 同 MySQL（无函数依赖，需全列分组） |
+| 软删除 + 唯一字段的部分唯一索引 | 入门篇第八章 | `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` | 无直接等价：用生成列（`(deleted_at IS NULL)` 的布尔列）做部分唯一，或应用层保证 | 同 MySQL |
+
+另外 `%` / `_` 在 `ILIKE` 与 `LIKE` 里都是通配符（参数化只防 SQL 注入、不防通配符语义），三库一致。教程主线按 PostgreSQL 跑通；想换 MySQL / SQLite，把上面几行替换掉即可，其余代码不用动。

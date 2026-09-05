@@ -1,6 +1,6 @@
 ---
 title: GORM 工程化实战（一）：分层、注入与可测性
-description: 系列第 6 篇：把直连 db.DB 的五篇代码重构为 Repository / Service / Handler 三层（internal/ + 构造注入），fake repository + httptest 表驱动测试，并用泛型 GetPaginated[T] 收拢分页样板。
+description: 系列第 6 篇：把直连 db.DB 的五篇代码重构为 Repository / Service / Handler 三层（internal/ + 构造注入），fake repository + httptest 表驱动测试，并用泛型 GetPaginated[T]（选读）收拢分页样板。
 date: 2026-09-06 00:00:00
 series: gin-gorm
 level: P4
@@ -170,7 +170,6 @@ package service
 
 import (
     "context"
-    "errors"
 
     "go-learning/models"
     "gorm.io/gorm"
@@ -213,6 +212,22 @@ func (s *BookService) CreateBookWithTags(ctx context.Context, book *models.Book,
 ```
 
 > **事务与分层的诚实取舍：** 事务天然"跨仓库"——一个事务里要操作书、标签、连接表三处。把事务塞进 repository 接口会立刻让接口爆炸（`WithTx(func(repo) error)` 的 Unit of Work 风格）。本篇采取务实写法：`*gorm.DB` 直接注入 Service 用于事务，其余数据访问走 `repo` 接口。规模大了再演进——这跟前面每篇"教学坡度"的取舍同构。
+>
+> **那 Service 直接拿 `db`，Repository 接口还挡什么？**
+>
+> 接口挡的是**单条数据操作**——`Create` / `FindByID` / `SoftDelete` 这类"一次数据访问"可以被替换、可以被 fake，handler / service 的分支逻辑因此可测。
+>
+> 事务是另一回事：它是**跨多条操作的编排**，天然不属于任何单个 repo 方法。常见的摆法有三种：
+>
+> 1. **Service 持 `*gorm.DB` 做事务**（本篇路线）：最直白，代价是事务路径没法用 fake 单测，要靠真库集成验证。
+> 2. **Unit of Work**：`repo.Transaction(ctx, func(tx BookRepository) error)`，把事务边界收进接口——可测性最好，但接口体积、嵌套与实现成本都涨，适合事务密集的中大型项目。
+> 3. **注入"事务执行器"**：Service 依赖 `TxRunner` 接口而非裸 `*gorm.DB`，测试时替换 runner——是 ① 的可测升级版，接口只多一个方法。
+>
+> 本篇选 ① 是**教学优先**：把"事务怎么写"摊开看清，工程取舍留给真实项目；② ③ 是它的演进方向，不是"更正确"。
+>
+> 这也是系列没有"工程化（三）"的原因——七篇闭环，剩下的交给读者在真实规模里补课。
+>
+> **怎么选（三个判据走一遍就有答案）：** ① 事务是不是真的"跨表/跨聚合"（只操作单行就根本不需要事务）；② 事务路径要不要进自动化测试（要 → 就别停在 ①）；③ 规模信号——repo 接口方法超过 ~10 个，或事务点超过 ~3 处（触及 → 从 ① 升 ③）。小项目与教学停在 ① 完全合理；一旦 ② 或 ③ 命中，尽早切 ③（② 适合事务密集、团队已习惯 Unit of Work 的场景）。
 
 ### 1.5 Handler 只剩三件事
 
@@ -220,6 +235,18 @@ Handler 现在只做：从 Gin 拿参数、调 Service、写响应。数据从�
 
 ```go
 package handler
+
+import (
+    "errors"
+    "net/http"
+    "strconv"
+
+    "go-learning/internal/service"
+    "go-learning/models"
+
+    "github.com/gin-gonic/gin"
+    "github.com/go-playground/validator/v10"
+)
 
 // createBookInput：在数据工程篇的 DTO 基础上新增 Tags（见 1.4 注记：POST /books 顺带打标签是新增行为）
 type createBookInput struct {
@@ -294,7 +321,7 @@ func (h *BookHandler) GetByID(c *gin.Context) {
 }
 ```
 
-> **为什么 DTO 变了？** 前文若写"DTO 与校验规则不动"是错的：`POST /books` 要顺带收 `tags`，`createBookInput` 必须新增 `Tags []string`（1.4 注记已说明这是新增行为）；数据工程篇的校验翻译也收成了 `bindBookInput`，不会退回通用文案（import 需增补 `github.com/go-playground/validator/v10`；`errors` 已在用）。绑定/参数类 400 由 handler 就地返回——绑定错误不属于"数据错误"，不进错误中间件。
+> **为什么 DTO 变了？** 前文若写"DTO 与校验规则不动"是错的：`POST /books` 要顺带收 `tags`，`createBookInput` 必须新增 `Tags []string`（1.4 注记已说明这是新增行为）；数据工程篇的校验翻译也收成了 `bindBookInput`，不会退回通用文案（import 见本片段头部：`errors` / `net/http` / `strconv` 与新增的 `validator/v10` 一次列全）。绑定/参数类 400 由 handler 就地返回——绑定错误不属于"数据错误"，不进错误中间件。
 
 **错误怎么变成响应？（最小版错误中间件）** handler 只 `c.Error(err)` 不写响应——翻译由 handler 包提供的错误中间件完成；`gin.Engine` 上挂一个它，所有 handler 的错误路径就统一了。这里给最小版（404/500），篇 7 会升级为 ok/fail + `slog` + 504：
 
@@ -353,6 +380,21 @@ func main() {
 >
 > **跑通点（第一刀完成）：** 到这里你只迁了书维度的两条链路（Create / GetByID）——立刻验证：`go build ./...` 通过，`curl http://localhost:8080/books/1` 正常返回，说明注入链路通了。其余端点（Update / Delete / 评论 / 标签 / 按标签查书）与这个骨架**完全同构**：接口加方法 → service 透传 → handler 挂错 → main 注册，逐个补齐即可；**上传与 cover 存储先保持直连 `db.DB`**（篇 7 的 Uploader 会一起收）。
 
+### 1.7 其余端点的迁移清单（同构模板）
+
+第一刀示范的是骨架，其余端点逐行补齐即可——每一行都走同一套「接口补方法 → gorm 实现 → service 透传 → handler 挂错 → main 注册」，与上面 Create / GetByID 的差异只在参数与校验：
+
+| 端点（旧直连 handler）                  | repository 要补的方法                                                      | service 方法                 | handler 改造点        | 事务？                                                            |
+| --------------------------------------- | -------------------------------------------------------------------------- | ---------------------------- | --------------------- | ----------------------------------------------------------------- |
+| `PUT /books/:id`（部分更新）            | `FirstBook`（存在性→404）+ `UpdateStruct`（零值不更新，篇 1 语义）         | `UpdateBook`                 | parseID + bind        | 否                                                                |
+| `DELETE /books/:id`（软删）             | `SoftDelete`（0 行 → `gorm.ErrRecordNotFound`）                            | `SoftDelete`                 | parseID + 挂错        | 否                                                                |
+| `DELETE /books/:id/permanent`（物理删） | `HardDelete`                                                               | `HardDelete`                 | parseID + 挂错        | 建议：先 `Select(clause.Associations)` 清关联再删（tags 篇 §3.4） |
+| 评论：增 / 分页查 / 删                  | `CreateComment` / `ListComments` / `DeleteComment`                         | 同名透传                     | parseID（`cid` 同理） | 否                                                                |
+| 标签：加 / 删 / 按标签查书              | `FirstOrCreateTag` + `CountBookTag` + `AddTag` / `RemoveTag` / `ListByTag` | 按名解析 + 幂等（§1.3 口径） | parseID / `:name`     | 否                                                                |
+| 上传封面                                | 篇 7 收口（`storage.Uploader` + `SetCover`）                               | `SetCover`                   | 见篇 7 完整代码       | 否                                                                |
+
+> 提示：每个新 handler 的测试照 2.2 的模板补自己的分支表即可（查/删路径可用 fake，事务路径靠真库集成验证）。想对照最终实现，可直接看配套代码库中 `internal/{repository,service,handler}` 的完整形态（模块路径 `go-learning`）。
+
 ---
 
 ## 二、可测试性：fake repository + httptest 表驱动
@@ -365,6 +407,21 @@ func main() {
 
 ```go
 package handler
+
+import (
+    "context"
+    "errors"
+    "net/http"
+    "net/http/httptest"
+    "strings"
+    "testing"
+
+    "go-learning/internal/service"
+    "go-learning/models"
+
+    "github.com/gin-gonic/gin"
+    "gorm.io/gorm"
+)
 
 // fakeBookRepo 内存实现：不碰数据库，就能演完所有分支
 type fakeBookRepo struct {
@@ -468,7 +525,7 @@ book, err := repo.FindByID(context.Background(), 1)
 
 ---
 
-## 三、提效封装：泛型 GetPaginated[T]
+## 三、[选读] 提效封装：泛型 GetPaginated[T]
 
 **目标：** 用泛型把「Count + Order + Offset + Limit + 错误处理」收拢成一个函数，各列表接口只留"装参数"。
 
@@ -501,6 +558,38 @@ var books []models.Book
 total, err := GetPaginated(query, order, page, pageSize, &books)
 ```
 
+**Scan 版：聚合列表同样能收拢。** 媒体篇的"每本书带评论数"走 `Scan` 进 `BookListItem`（自定义载体）而不是 `Find` 进模型——同一套骨架只需把最后一步从 `Find` 换成 `Scan`，聚合列表也能分页：
+
+```go
+// 同一骨架的 Scan 变体：dest 换成自定义查询载体（BookListItem 等）
+func GetPaginatedScan[T any](query *gorm.DB, order string, page, pageSize int, dest *[]T) (int64, error) {
+    var total int64
+    if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+        return 0, err
+    }
+    if err := query.Order(order).
+        Offset((page - 1) * pageSize).
+        Limit(pageSize).
+        Scan(dest).Error; err != nil {
+        return 0, err
+    }
+    return total, nil
+}
+```
+
+用法（媒体篇 §2.3 的聚合查询——查询链已带 `Select/Joins/Group`，这里只补分页）：
+
+```go
+query := db.DB.WithContext(ctx).Model(&models.Book{}).
+    Select("books.*, COUNT(comments.id) AS comment_count").
+    Joins("LEFT JOIN comments ON comments.book_id = books.id AND comments.deleted_at IS NULL").
+    Group("books.id")
+var items []BookListItem
+total, err := GetPaginatedScan(query, "books.created_at DESC", page, pageSize, &items)
+```
+
+一句话：泛型收的是**分页骨架**（Count / 排序 / Offset / Limit），不是取数方式——纯模型列表用 `Find` 版（`GetPaginated`），聚合载体用 `Scan` 版（`GetPaginatedScan`），两者只差最后一行。两条都属选读。
+
 响应形状归 **handler** 侧，用 `PageResult` 统一（列表接口的返回结构）：
 
 ```go
@@ -513,13 +602,13 @@ type PageResult[T any] struct {
 }
 ```
 
-> **为什么现在才收拢？（呼应声明）** 泛型把"分页骨架"变成了黑盒调用的函数——所以它先在正文被显式写了两遍（[《多表关联实战》](./gorm-gin-relations) §2.2 的 `ListComments`、[《文件与查询增强实战》](./gorm-gin-media-query) §2.2 的 `GetBooks`），到工程篇才允许封装。同一个思路在前面出现过：超时中间件"正文手写、工程篇可换一行库"。
+> **为什么现在才收拢？** 呼应本节开头那句"工程篇兑现承诺"：泛型把"分页骨架"收成黑盒函数——它先在正文被显式写了两遍（[《多表关联实战》](./gorm-gin-relations) §2.2、[《文件与查询增强实战》](./gorm-gin-media-query) §2.2），到工程篇才允许封装；超时中间件也是同一思路（"正文手写、工程篇可换一行库"）。
 
 ---
 
 ## 本篇小结
 
 - **新包结构**：`main.go` + `db/` + `models/` + `internal/{repository,service,handler}`；依赖方向 `db → repository → service → handler`，`main.go` 一次性构造注入；
-- **本篇示范的迁移范围（诚实版）**：书维度的 Create / GetByID 两条链路端到端走完（接口 → gorm 实现 → Service → handler → 注入 → 测试）；Update / Delete / 评论 / 标签 / 按标签查书与该骨架**同构**，按同一模板补齐即可；**上传 handler 仍直连 `db.DB`**，等篇 7 的 Uploader 抽象一起收；
+- **本篇示范的迁移范围**：书维度的 Create / GetByID 两条链路端到端走完（接口 → gorm 实现 → Service → handler → 注入 → 测试）；Update / Delete / 评论 / 标签 / 按标签查书与该骨架**同构**，按同一模板补齐即可；**上传 handler 仍直连 `db.DB`**，等篇 7 的 Uploader 抽象一起收；
 - **你现在的项目**：三层架构 + fake/httptest 表驱动测试（示例覆盖 GetByID 的 404/500 分支，模板可复用到每个被迁移接口）、`go test ./internal/handler/ -v` 通过、分页样板已收拢进泛型 `GetPaginated[T]`（选读）；
 - 下一篇[《GORM 工程化实战（二）：可靠性与生产化》](./gorm-gin-engineering-reliability)：统一错误中间件与 ok/fail 响应（`slog` 接管日志、超时映射 504）、GetBooks 排序白名单、上传文件头嗅探与对象存储抽象、连接池配置——把前五篇预告的可靠性条目一次结清。

@@ -39,7 +39,7 @@ tags:
 - **本地 PostgreSQL**（无安装可用 Docker：`docker run --name pg -e POSTGRES_PASSWORD=123456 -p 5432:5432 -d postgres:16`）；
 - **手动创建数据库**：`CREATE DATABASE library;`——GORM 的 `AutoMigrate` 只能建表，不能建库（见第二章注意事项）。
 
-想用 MySQL / SQLite 替代也完全没问题，第一章末尾有驱动对照表。
+想换 MySQL / SQLite 也可以——本篇的代码本身跨库通用，差别只在驱动安装与 DSN（见第一章末尾对照表）。但要提前知道：**入门篇之后的篇目会用 PostgreSQL 专属特性**（`ILIKE` 模糊搜索、聚合查询按主键分组的"函数依赖"、软删除的部分唯一索引），正文会在用到处就地标注差异，并把它们集中收在媒体篇末尾的「PostgreSQL 特性速查」表里。
 
 ## 完整项目结构
 
@@ -59,7 +59,7 @@ gin-demo/
 
 ## 先建立心智模型：GORM 的核心理念
 
-在动手写代码之前，先用三十秒建立正确的「心智模型」——比起照抄代码，理解下面这套思维方式更重要，因为它正是 Gin + GORM 与其他语言/框架（Java/Spring、Python/Django、Node/Express，尤其是手写 SQL 的 JDBC/MyBatis 风格）最不一样的地方。
+在动手写代码之前，先用三十秒建立正确的「心智模型」——它回答的是"GORM 和别的路子哪里不一样"。GORM 最不一样的对手不是 Spring/Django 这类框架，而是 JDBC/MyBatis 这种手写 SQL 的路子：后者要你自己拼 SQL、再把结果集一行行映射成对象，GORM 恰好反过来。先理解下面这套思维方式，再动手，比照抄代码重要得多。
 
 ### 一句话总纲
 
@@ -81,7 +81,7 @@ Java 的 JDBC / MyBatis、PHP 手写 PDO 这类技术里，你需要自己拼 SQ
 
 1. **结构体一物三用**：同一个 struct 同时扮演三个角色——数据库表结构定义（`gorm` 标签）、请求/响应的数据载体（`json` 标签）、数据库操作的参数（`&book`）。类型即契约，改一处全联动。这与 Java 中 Entity / DTO 分离、再配一套 XML 映射的写法完全不同。
 2. **查数据是「填空」，不是「返回值」**：Go 是值传递，所以 `Find(&books)`、`First(&book, id)` 必须传目标变量的**指针**，GORM 靠反射把结果填进去。漏写 `&` 等于填了一个副本，函数外拿不到数据——这是新手最容易犯、也最反直觉的一处，因为 Java/Python 的对象引用天然是共享的。
-3. **零值即「未提供」**：Go 规定每个变量都有零值（数字 `0`、字符串 `""`、布尔 `false`）。GORM 的 `Updates(结构体)` 正是根据零值判断「这个字段要不要更新」——所以把字段更新成 `0` 或 `""` 会被**静默跳过**（不报错，也不更新）。第七章的「零值陷阱」根就在这里。Java 的 `null`、Python 的 `None` 没有这种「零值参与业务判断」的语义，这是 GORM 行为对新手最意外的地方。
+3. **零值即「未提供」**：Go 规定每个变量都有零值（数字 `0`、字符串 `""`、布尔 `false`）。GORM 的 `Updates(结构体)` 正是根据零值判断「这个字段要不要更新」——所以把字段更新成 `0` 或 `""` 会被**静默跳过**（不报错，也不更新）。第七章的「零值陷阱」根就在这里。对比 Java 的 `null`、Python 的 `None`——它们表示"没有值"；Go 的零值却是一个真实的值，`0` 明明是"想把字段更新成 0"的意图，却被 GORM 当成"未提供"。这种差异正是零值陷阱对新手最反直觉的地方。
 4. **错误是结果的一部分**：Go 没有异常机制。GORM 把每次操作的结果封装成 `result`，你要自己检查 `result.Error` 有没有错、`result.RowsAffected` 影响了几行。整篇文章你会反复看到这个模式——它取代了其他语言里的 `try/catch`。
 
 ### 小注：为什么到处是 `&` 和 `*`？
@@ -410,7 +410,7 @@ curl -X POST http://localhost:8080/books \
 }
 ```
 
-> `ID` / `CreatedAt` / `DeletedAt` 是大写键——`gorm.Model` 没有 json 标签，直接输出 Go 字段原名（详见第三章「三个新手最容易忽略的点」）；`title` / `author` / `price` 是我们自己用小写 tag 定义的。想统一成全小写（`id`、`createdAt`），用自定义字段声明或 DTO（见第十章进阶方向「响应精简」）。
+> 注意键名大小写：`ID` / `CreatedAt` / `DeletedAt` 是大写，因为 `gorm.Model` 没有 json 标签，直接输出 Go 字段原名（见第三章「三个新手最容易忽略的点」）；`title` / `author` / `price` 是我们自己用小写 tag 定义的。想统一成全小写（`id`、`createdAt`），有两条路：改用自定义字段声明，或定义 DTO 作为统一响应结构（见第十章进阶方向「响应精简」）。
 
 ### 进阶：为什么必须带 Context
 
@@ -526,7 +526,7 @@ curl http://localhost:8080/books
 curl http://localhost:8080/books/1
 ```
 
-> **提示：** 为什么 `First` 的检查分两层？GORM 查不到记录时返回的是 `gorm.ErrRecordNotFound`，用 `errors.Is` 精确命中它才返回 404（"图书不存在"）；其它错误——比如数据库连接断开——会落到 500，不会误报成"图书不存在"。这就是心智模型里「错误是结果的一部分」的体现：错误也是一条数据，值得用 `errors.Is` 认真对待。
+> **提示：** 为什么 `First` 的检查分两层？GORM 查不到记录时返回的是 `gorm.ErrRecordNotFound`，用 `errors.Is` 精确命中它才返回 404（"图书不存在"）；其它错误——比如数据库连接断开——会落到 500，不会误报成"图书不存在"。这就是心智模型里「错误是结果的一部分」在 API 层的落点——查无记录与连接断开是两种不同的 `error`，值得用 `errors.Is` 区分。
 >
 > （`GetBooks` 为什么用 `[]models.Book{}` 初始化而不是 `var books []models.Book`？`Find` 查不到行时不会给 `var` 声明的切片分配内存，它保持为 nil，JSON 会输出 `null` 而不是 `[]`——空表场景下前端解析就会踩坑，初始化成空切片是列表接口的标准姿势，后续文章的分页列表会沿用。）
 
@@ -776,7 +776,7 @@ curl -X DELETE http://localhost:8080/books/1/permanent
 - 分页与筛选：`Where` / `Order` / `Offset` / `Limit` 的实战已在[《文件与查询增强实战》](./gorm-gin-media-query)覆盖
 - 钩子函数：`BeforeCreate`、`AfterUpdate`
 - 请求 DTO 与指针字段：`*string` / `*int` 替代 `map[string]interface{}` 的实战已在[《数据工程实战》](./gorm-gin-dto-batch)落地（`Price *int` 就是它）
-- 响应精简：`gorm.Model` 字段无 json 标签、响应里是大写的 Go 字段名（`ID` / `CreatedAt` / `DeletedAt`）；想统一输出风格，改用自定义字段声明（加 `json:"-"` 或小写 tag），或定义 DTO 作为统一响应结构
+- 响应精简：响应键名为什么是大写（`ID` / `CreatedAt`），以及想统一风格怎么办——见第三章「三个新手最容易忽略的点」与第五章响应示例的提示（自定义字段声明 `json:"-"`/小写 tag，或 DTO 做统一响应结构）
 - 连接池：`sqlDB, _ := db.DB.DB()` 获取底层连接后，用 `SetMaxOpenConns()` / `SetConnMaxLifetime()` 配置连接池
 - 工程化沉淀（选读）：Repository / Service 分层与测试（`BookRepository` + sqlmock）、泛型 `GetPaginated[T]` 封装——落地见[《工程化（一）》](./gorm-gin-engineering-layering)与[《工程化（二）》](./gorm-gin-engineering-reliability)
 - 超时映射：`errors.Is(err, context.DeadlineExceeded)` 时返回 504，而不是笼统的 500

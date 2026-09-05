@@ -15,12 +15,12 @@ tags:
 This series has seven parts:
 
 1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) — comments table, comment CRUD, on-demand Preload (in Chinese)
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation (in Chinese)
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation (in Chinese)
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove (in Chinese)
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (in Chinese)
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (in Chinese)
+2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
+3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
+4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
+5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
+6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
+7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
 
 ---
 
@@ -773,15 +773,15 @@ curl -X DELETE http://localhost:8080/books/1/permanent
 ### Next Steps
 
 - Transactions: `db.Transaction()`
-- Pagination & filtering: `Where` / `Order` / `Offset` / `Limit` are covered hands-on in [《GORM 文件与查询增强实战》](./gorm-gin-media-query) (Chinese)
+- Pagination & filtering: `Where` / `Order` / `Offset` / `Limit` are covered hands-on in [GORM Media & Query Enhancement](./gorm-gin-media-query)
 - Hooks: `BeforeCreate`, `AfterUpdate`
-- Request DTOs & pointer fields: replacing `map[string]interface{}` with `*string` / `*int` is implemented in [《GORM 数据工程实战》](./gorm-gin-dto-batch) (Chinese) — `Price *int` is exactly this
+- Request DTOs & pointer fields: replacing `map[string]interface{}` with `*string` / `*int` is implemented in [GORM Data Engineering](./gorm-gin-dto-batch) — `Price *int` is exactly this
 - Slim responses: `gorm.Model` fields carry no `json` tags, so responses show the capitalised Go names (`ID` / `CreatedAt` / `DeletedAt`); to unify the output style, declare your own fields (`json:"-"` / lowercase tags) or use a DTO as the unified response shape
 - Connection pool: `sqlDB, _ := db.DB.DB()` then configure with `SetMaxOpenConns()` / `SetConnMaxLifetime()`
-- Engineering pay-off (P4 optional): Repository/Service layering & tests (`BookRepository` + sqlmock) and a generic `GetPaginated[T]` wrapper — landed in [《GORM 工程化实战（一）》](./gorm-gin-engineering-layering) and [《GORM 工程化实战（二）》](./gorm-gin-engineering-reliability) (Chinese)
+- Engineering pay-off (P4 optional): Repository/Service layering & tests (`BookRepository` + sqlmock) and a generic `GetPaginated[T]` wrapper — landed in [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) and [GORM Engineering in Practice (Part 2)](./gorm-gin-engineering-reliability)
 - Timeout mapping: return 504 on `errors.Is(err, context.DeadlineExceeded)` instead of a blanket 500
 - One-line timeout: to write less code you can plug in gin-contrib/timeout via `timeout.New(...)`, but it turns the ctx derivation / write-back mechanics into a black box — this post keeps the hand-written version so you can see the mechanism
 - SQL debugging: enable GORM logging with `&gorm.Config{Logger: logger.Default.LogMode(logger.Info)}` to inspect SQL
 - Unified error handling: use an error middleware / a unified response wrapper (ok/fail shape) to remove the repeated 500 boilerplate — the main code keeps the explicit checks so you can see how `errors.Is` distinguishes error types
 
-> **Advanced content lives in the series follow-ups:** relationships (`Preload`) and aggregate queries get their full treatment in the following series posts: [《GORM 多表关联实战》](./gorm-gin-relations) and [《GORM 文件与查询增强实战》](./gorm-gin-media-query) (Chinese); Repository / Service layering and testability land in [《GORM 工程化实战（一）》](./gorm-gin-engineering-layering) and [《GORM 工程化实战（二）》](./gorm-gin-engineering-reliability) — this post stays flat and direct, focused on GORM itself.
+> **Advanced content lives in the series follow-ups:** relationships (`Preload`) and aggregate queries get their full treatment in the following series posts: [GORM Relations in Practice](./gorm-gin-relations) and [GORM Media & Query Enhancement](./gorm-gin-media-query); Repository / Service layering and testability land in [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) and [GORM Engineering in Practice (Part 2)](./gorm-gin-engineering-reliability) — this post stays flat and direct, focused on GORM itself.

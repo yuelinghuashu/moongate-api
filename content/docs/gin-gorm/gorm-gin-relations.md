@@ -239,7 +239,9 @@ func ListComments(c *gin.Context) {
 }
 ```
 
-这是系列里第一个分页接口，先看完整形态——记住 `Count + Order + Offset + Limit` 的组合；下一篇[《文件与查询增强实战》](./gorm-gin-media-query)会把同样的骨架用在图书列表上，并把这段解析收拢成 `parsePagination` 帮助函数。注意 `strconv.Atoi` 出错时用 `_` 丢弃，非法参数回落到默认值（防御式解析）。
+这是系列里第一个分页接口，先看完整形态——记住 `Count + Order + Offset + Limit` 的组合。（下一篇[《文件与查询增强实战》](./gorm-gin-media-query)会把同一骨架用在图书列表上，并把这段解析收拢成 `parsePagination` 帮助函数。）
+
+另外留意一个编码细节：`strconv.Atoi` 出错时用 `_` 丢弃，非法参数直接回落到默认值——防御式解析。
 
 > **错误消息为什么统一？** `Count` 与 `Find` 失败都返回「查询评论失败」是刻意的——客户端看到的是 500，不需要知道是哪一步挂了（向外暴露内部细节也不安全）；真正要区分的是**服务端日志**：`_ = c.Error(err)` 把具体错误交给 Gin 的日志中间件记录。生产环境会升级为 `slog` + 统一错误中间件（落地见[《GORM 工程化实战（二）：可靠性与生产化》](./gorm-gin-engineering-reliability)）。
 

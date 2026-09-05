@@ -43,10 +43,27 @@ tags:
 
 ### 1.1 统一响应形状 ok/fail
 
-前五篇的响应有两种：成功裸数据、失败 `{"error": ...}`。前端每次都要猜。统一成显式形状：
+前五篇的响应有两种：成功裸数据、失败 `{"error": ...}`。前端每次都要猜。统一成显式形状。先把系列的**响应形状演进**收在一张表里讲清——按顺序读的读者会看到它是"摊开 → 收拢"的教学过程；跳读的读者请以最新一篇的契约为准：
+
+| 阶段 | 篇目 | 成功形状 | 错误形状 | 为什么变 |
+| --- | --- | --- | --- | --- |
+| 单表入门 | 入门篇 | 裸对象 / 裸数组 | `{"error": string}` | 教学：先看清"返回什么就是什么" |
+| 分页化 | 媒体篇（第 3 篇） | `{items, total, page, pageSize}` | 仍是 `{"error": string}` | 列表需要分页元数据——**破坏性变更**，契约以本篇为准 |
+| 多条校验错误 | 数据工程篇（第 4 篇） | 不变 | 可选新增 `{"errors": []}` | 想一次告诉客户端所有字段问题（新形态，接口自选） |
+| 统一收拢 | 本篇（第 7 篇） | `{"ok": true, "data": …}` | `{"ok": false, "error": …}` | 成败显式化 + 收拢样板——**最终契约** |
+
+于是从本篇起，成功走 `ok(...)`、失败走 `fail(...)`：
 
 ```go
 // internal/handler/respond.go
+package handler
+
+import (
+    "net/http"
+
+    "github.com/gin-gonic/gin"
+)
+
 func ok(c *gin.Context, status int, data any) {
     c.JSON(status, gin.H{"ok": true, "data": data})
 }
@@ -75,6 +92,18 @@ ok(c, http.StatusOK, gin.H{"message": "删除成功"})
 
 ```go
 // internal/handler/middleware.go
+package handler
+
+import (
+    "context"
+    "errors"
+    "log/slog"
+    "net/http"
+
+    "github.com/gin-gonic/gin"
+    "gorm.io/gorm"
+)
+
 func errorMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         c.Next()
@@ -213,7 +242,17 @@ curl -X POST http://localhost:8080/books/1/cover -F "cover=@/etc/hosts;filename=
 媒体篇的 `UploadCover` 里 `c.SaveUploadedFile(file, filepath.Join("uploads", ...))` 把存储钉死在本地磁盘。换成 S3 要改 handler——而 handler 不该知道存储细节。抽接口：
 
 ```go
-// internal/storage/uploader.go
+// internal/storage/uploader.go —— 文件头一次给全（interface + Disk + S3 三段拼成同一个文件）
+package storage
+
+import (
+    "context"
+    "fmt"
+    "io"
+    "os"
+    "path/filepath"
+)
+
 type Uploader interface {
     // Save 保存 r 的内容到 key，返回可展示的 URL/路径（Disk：/uploads/key；S3：完整 https URL）
     Save(ctx context.Context, key string, r io.Reader) (string, error)
@@ -392,6 +431,7 @@ sqlDB.SetMaxIdleConns(10)           // 空闲上限：池中最多保留 10 条�
 | `BookRepository` 接口 + Service + 注入 + `internal/` | [入门篇](./gorm-gin-crud-tutorial)「学习级结构」注记 / ch10「工程化沉淀」/ [dto 篇](./gorm-gin-dto-batch)§四 | 工程化（一）一                     |
 | `httptest` 表驱动测试（+ sqlmock）                   | [dto 篇](./gorm-gin-dto-batch)§四 / 入门篇注记                                                               | 工程化（一）二                     |
 | 泛型 `GetPaginated[T]`                               | 入门篇 ch10 / [dto 篇](./gorm-gin-dto-batch)§四                                                              | 工程化（一）三                     |
+| 聚合分页收拢（`GetPaginatedScan`，选读）             | [媒体篇](./gorm-gin-media-query)§2.3                                                                         | 工程化（一）三（选读注记）         |
 | 事务 `db.Transaction()`                              | 入门篇 ch10                                                                                                  | 工程化（一）一（Service 原子操作） |
 | 超时映射 504                                         | 入门篇 ch10                                                                                                  | 本篇一（错误中间件）               |
 | 统一错误处理 / ok-fail / slog                        | [多表关联篇](./gorm-gin-relations)「错误消息为什么统一」注记 / 入门篇 ch10                                   | 本篇一                             |
@@ -402,4 +442,4 @@ sqlDB.SetMaxIdleConns(10)           // 空闲上限：池中最多保留 10 条�
 
 **你现在的项目**：三层架构（book 维度链路端到端迁移，其余按同构模板补齐）+ handler 层表驱动测试 + 统一错误中间件（404/500/504 语义集中 + slog 日志）+ 排序白名单 + 文件头嗅探（含流倒回与 2MB 上限）+ 可切换的存储抽象 + 连接池配置——可以放心上线的骨架齐了。
 
-到这里，你会感谢系列里每一处 `WithContext` 与 `errors.Is`：它们不是前几篇的"教学道具"，而是本篇所有收拢动作的砖石。
+回头看，前几篇里每一处 `WithContext`、每一次 `errors.Is` 的铺垫，最后都汇进了本篇的一张错误中间件和一张兑现映射表——它们的意义，在收拢的那一刻才完全显现。
