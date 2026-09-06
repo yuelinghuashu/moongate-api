@@ -3,7 +3,6 @@ title: 手写一个更适合 Nuxt 的 useRouteQuery：简化 URL 状态同步
 description: 封装一套开箱即用的 useRouteQueryString / Number / Array，将 70 行重复的 URL 状态同步代码压缩到 7 行，并彻底解决官方版本的 SSR 隐患。包含完整源码、防抖处理与反向同步示例。
 date: 2026-03-22
 series: url-state
-level: P3
 tags:
   - Nuxt
   - Vue
@@ -12,15 +11,6 @@ tags:
 ---
 
 > 在生产项目中，我经历过手写 70 行重复的 `watch` 与 `pushQuery`，也踩过官方 `@vueuse/router` 的 SSR 坑。最终我封装了一套开箱即用的 `useRouteQueryString`、`useRouteQueryNumber`、`useRouteQueryArray`，将代码量从 70 行压缩到 7 行，且完全可控、SSR 安全。本文将分享这套封装的设计思路与完整代码。
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**Nuxt 中 URL 与状态双向绑定（原理篇）**](./nuxt-url-state-guide) —— URL 状态同步原理与手写方案
-2. [**手写 useRouteQuery（封装篇）**](./nuxt-use-route-query-composables) —— 封装成开箱即用的 composable
-3. [**文档列表页完整指南（实战篇）**](./nuxt-docs-list-page-complete-guide) —— 实现完整的文档列表页
-4. [**Nuxt + Go 全栈实践**](./nuxt-go-fullstack-closed-loop) —— 前端 URL 状态与 Go API 打通
 
 ## 一、背景：手写方案的痛点
 

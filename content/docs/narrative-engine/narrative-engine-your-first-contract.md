@@ -3,31 +3,11 @@ title: 构建大模型叙事引擎：快速上手——从零写出你的第一�
 description: 从零开始写一份 .meph 契约文件，编译、运行，让 LLM 遵守你写下的规则生成叙事。无需前置知识，快速完整体验。
 date: 2026-07-20 15:00:00
 series: narrative-engine
-level: P1
 tags:
   - Go
   - LLM
   - DSL
 ---
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**从自由叙事到契约约束**](./narrative-engine-from-freeform-to-constrained) —— .meph 格式的设计动机与取舍
-2. [**快速上手：从零写出你的第一个契约**](./narrative-engine-your-first-contract) —— 无需前置知识，20 分钟完整体验
-3. [**区块扫描与行号绑定**](./narrative-engine-block-scanner-and-line-numbers) —— 行号绑定与精确报错
-4. [**规则表达式与插值语法的解析**](./narrative-engine-parsing-rules-and-interpolation) —— 条件-动作拆解与插值解析
-5. [**集成测试与行为冻结**](./narrative-engine-integration-testing-and-behavior-freezing) —— Golden File 测试与行为稳定
-6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
-
----
-
-> **前置阅读**：建议先读完第一篇[《自由叙事到契约约束》](./narrative-engine-from-freeform-to-constrained)，了解 `.meph` 格式的设计动机。这篇不需要任何前置技术知识——只要你有终端和 Go 1.26+。
-
-前一篇我们讨论了为什么 `.meph` 比 JSON 和 YAML 更适合做叙事契约。但光说不练没有用。
-
-这篇我们放下理论，从零开始写一份真实的契约文件，编译它，运行它。**整个过程不超过 20 分钟**——你可以亲自看到自己写的规则如何驱动 LLM 生成叙事。
 
 ## 一、准备工作
 

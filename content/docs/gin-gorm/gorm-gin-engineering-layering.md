@@ -3,38 +3,11 @@ title: GORM 工程化实战（一）：分层、注入与可测性
 description: 系列第 6 篇：把直连 db.DB 的五篇代码重构为 Repository / Service / Handler 三层（internal/ + 构造注入），fake repository + httptest 表驱动测试，并用泛型 GetPaginated[T]（选读）收拢分页样板。
 date: 2026-09-06 00:00:00
 series: gin-gorm
-level: P4
 tags:
   - Go
   - PostgreSQL
   - ORM
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共七篇：
-
-1. [**GORM 入门实战：用 Gin + GORM 写一个图书管理 API**](./gorm-gin-crud-tutorial) —— 单表 CRUD、软删除、零值陷阱，从零跑通完整项目
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) —— 第二张表 comments、评论增删查、详情按需加载
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) —— 上传与静态服务、分页/搜索/排序、评论数聚合
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) —— CreateInBatches、DTO 与模型分离、校验错误翻译
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) —— many2many 连接表、按标签筛选与关联增删
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) —— Repository/Service 分层、构造注入、表驱动测试
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) —— 统一错误处理、安全补强、对象存储、连接池
-
----
-
-> 🎓 **工程化选读**：本篇难度与前五篇（P2/P3 主线）不在同一跑道——需要 GORM 之外的分层、依赖注入与测试能力时再来读，跳过不影响前五篇的闭环。
-
-> **前置阅读**：完成系列前五篇——`books` + `comments` + `tags` 三表、封面图、分页搜索、批量导入全套接口的项目。代码约定与前五篇一致（`WithContext` / `errors.Is` 判 404 / 400·404·201）。比前五篇高一档：本篇的重心从"GORM 怎么用"转向"程序怎么组织"。
-
-前五篇一直把 `db.DB` 直连在 handler 里——跑通了，但没法测、也难维护。本篇兑现系列一路预告的工程化：分层成 `Repository / Service / Handler`，用构造注入把数据库从 handler 里摘出去，再用 fake repository + `httptest` 把 handler 变成可以 `go test` 的东西。
-
-> **本篇地图（先看再走）：** 这一篇会一次性出现几个前五篇没用过的新概念：**接口**（`BookRepository`——先声明"数据访问需要什么"，实现藏在后面）、**构造注入**（`main.go` 把具体实现"喂"给上层）、**`internal/` 包约束**、**测试替身**（fake repository）与 **httptest 表驱动测试**、以及最后的**泛型封装**（选读）。别被词量吓到——正文按「先撞痛点 → 只迁一条链路并跑通 → 再谈规模与收拢」的顺序走，每一步都先讲"为什么"。泛型那节可跳过。
->
-> 另注意**模块路径**：本文代码块的导入前缀是 `go-learning/`（配套示例工程的模块名）。你按入门篇建的项目模块名是 `gin-demo`——动手前先把本文所有 `go-learning/` 前缀替换成你自己的模块名（或执行 `go mod edit -module go-learning`），其余代码不变，下文不再重复提醒。
-
 ---
 
 ## 一、分层重构：从 handler 直连 db.DB 到三层

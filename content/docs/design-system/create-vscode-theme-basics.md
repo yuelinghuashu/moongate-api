@@ -2,25 +2,11 @@
 title: VS Code 主题：从手写 JSON 到可发布
 description: 不依赖脚手架，从零手写最小主题 JSON，理解 colors 与 tokenColors 的核心机制，掌握调试、打包与发布的完整流程，构建属于你的第一个 VS Code 主题。
 date: 2026-08-06 00:00:00
-level: P1
 series: design-system
 tags:
   - VSCode
   - Theme
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
-6. [**Nuxt + Shiki 主题集成（实战篇）**](./nuxt-shiki-vscode-theme-ssr-dual-themes) —— SSR 双主题高亮与闪动解决
-
 ---
 
 如果你有编程基础（熟悉 JavaScript、JSON、命令行），想把一套配色方案变成 VS Code 主题，但完全不知道从何下手——这篇文章正是为你准备的。

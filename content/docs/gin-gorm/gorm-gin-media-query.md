@@ -3,31 +3,10 @@ title: GORM 文件与查询增强实战：封面上传、分页搜索与评论�
 description: 给图书加封面：字段命名决策、上传接口与静态服务；再把列表升级为分页 + 搜索 + 排序，并用 JOIN + GROUP BY 给每本书带上评论数。每节附完整代码与验证命令。
 date: 2026-09-03
 series: gin-gorm
-level: P3
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 系列导航
-
-本系列共七篇：
-
-1. [**GORM 入门实战：用 Gin + GORM 写一个图书管理 API**](./gorm-gin-crud-tutorial) —— 单表 CRUD、软删除、零值陷阱，从零跑通完整项目
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) —— 第二张表 comments、评论增删查、详情按需加载
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) —— 上传与静态服务、分页/搜索/排序、评论数聚合
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) —— CreateInBatches、DTO 与模型分离、校验错误翻译
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) —— many2many 连接表、按标签筛选与关联增删
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) —— Repository/Service 分层、构造注入、表驱动测试
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) —— 统一错误处理、安全补强、对象存储、连接池
-
----
-
-> **前置阅读**：完成入门篇（[《GORM 入门实战》](./gorm-gin-crud-tutorial)）与[《多表关联实战》](./gorm-gin-relations)——`books` + `comments` 双表项目。代码约定与入门篇一致（`WithContext` / `errors.Is` 判 404 / 400·404·201）。
-
-真实接口绕不开的两件事，本篇补齐：给书加**封面图**（第一节），把列表查询升级为**分页 + 搜索 + 排序 + 评论数**（第二节）。
-
 ---
 
 ## 一、图片字段：封面上传与静态服务

@@ -3,26 +3,11 @@ title: "GORM Engineering in Practice (Part 2): Reliability & Production Readines
 description: "Part 7 (series finale): a unified error middleware with ok/fail responses (slog, timeout 504), sort whitelists, file-header sniffing behind an Uploader abstraction, and connection-pool tuning. Ends with a mapping table of every promise the series made and where it landed."
 date: 2026-09-06 02:00:00
 series: gin-gorm
-level: P4
 tags:
   - Go
   - PostgreSQL
   - ORM
   - Engineering
----
-
-## 📚 Series Navigation
-
-This series has seven parts:
-
-1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
-3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
-4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
-5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
-6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
-7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
-
 ---
 
 > 🎓 **Optional engineering reading:** continues the advanced track of [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) — production-focused topics for architecture and delivery roles; skipping it doesn't affect the main storyline of the first five parts.

@@ -3,25 +3,10 @@ title: "GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Tra
 description: "Part 4: batch-import from a data file (CreateInBatches), separates request DTOs from models with parameterized validation rules, and translates validator errors into clear client messages. Ends with the series overview, the full route table, and what comes next."
 date: 2026-09-04
 series: gin-gorm
-level: P3
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 Series Navigation
-
-This series has seven parts:
-
-1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
-3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
-4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
-5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
-6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
-7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
-
 ---
 
 > **Prerequisites:** finish the [crash course](./gorm-gin-crud-tutorial), the [relations part](./gorm-gin-relations), and the [media & query part](./gorm-gin-media-query) — the project with `books` + `comments` + cover images + pagination/search. Code conventions are the same as the crash course (`WithContext` / `errors.Is` for 404 / the 400 · 404 · 201 semantics).

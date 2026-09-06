@@ -3,7 +3,6 @@ title: Flutter 流式 UI：AI 回复的打字机体验是怎么实现的
 description: 为什么「跳过动画」不等于「中止生成」？从 SSE 到屏幕，拆解流式 UI 的节流、取消语义与可测试性设计。
 date: 2026-08-13 22:00:00
 series: flutter-practice
-level: P3
 tags:
   - Flutter
   - Dart
@@ -11,20 +10,6 @@ tags:
   - Performance
   - State Management
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**Flutter 桌面端：输入框设计的细节与边界**](./flutter-desktop-input-design) —— Focus 链、键码区分与输入历史持久化
-2. [**Flutter 流式 UI：AI 回复的打字机体验是怎么实现的**](./flutter-streaming-typewriter) —— SSE 流式渲染、跳过语义与可测试性设计
-3. [**拆超大 Flutter State 类的三种尝试与最终方案**](./refactoring-flutter-state-class) —— Mixin/part/Widget 组合的取舍与决策树
-
----
-
-> 打字机效果看起来简单：文字一个字一个字蹦出来。但「跳过动画」「不截断」「性能不退化」这些细节，藏着一整套工程决策。
->
-> 文中实现基于 Flutter/Dart，但「跳过 ≠ 中止」「缓冲合并」等核心语义决策**跨框架通用**——Web 的 EventSource、原生/RN 的 SSE 客户端都会遇到同样的选择。
 
 ## 引子：一个「跳过打字机」按钮的翻车过程
 

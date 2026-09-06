@@ -3,7 +3,6 @@ title: "MCP stdio Protocol's 3 Hidden Traps: When All Unit Tests Pass but the MC
 description: "A deep dive into three hidden traps of the MCP stdio protocol, recording a real debugging journey — from 401 green tests to a completely unresponsive server — tracing the root cause to three fatal bugs: process.exit(), stdout pollution, and an async race, plus an end-to-end testing solution."
 date: 2026-08-16
 series: ""
-level: P5
 tags:
   - TypeScript
   - LLM

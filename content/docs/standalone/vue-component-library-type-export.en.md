@@ -3,7 +3,6 @@ title: "Vue 3 Component Library TypeScript Props Export: A Deceptively Simple Tr
 description: "A deep dive into the contract gap between the Vue SFC compiler and TypeScript module resolution, revealing why `export type { ButtonProps } from './Button.vue'` fails in consumer projects — and the complete fix."
 date: 2026-08-18
 series: ''
-level: P5
 tags:
   - Vue
   - TypeScript

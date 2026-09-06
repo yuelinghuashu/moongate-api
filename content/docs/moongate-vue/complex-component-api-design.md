@@ -3,7 +3,6 @@ title: Vue 3 复杂组件开发实战：Select 与 Pagination 的 API 设计与�
 description: 以 Select 和 Pagination 为例，深入探讨 Vue 3 复杂组件的 API 设计、数据格式适配、类型回溯、可搜索/多选、ARIA 键盘导航、组合式函数抽离及 SSR 适配，揭示工业级组件背后的设计权衡与实现细节。
 date: 2026-05-19
 series: moongate-vue
-level: P3
 tags:
   - Vue
   - Design System
@@ -11,15 +10,6 @@ tags:
 ---
 
 > 简单组件是单向的数据消费者，复杂组件是数据适配器与状态协调器。以 Select 和 Pagination 为例，看"工业级细节"落在哪里。
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
-2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
-3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
-4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
 
 ## 一、引言
 

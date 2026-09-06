@@ -2,7 +2,6 @@
 title: 'Design Tokens vs Atomic CSS: A Failed Integration and the Path to Harmony'
 description: A personal developer's attempt to map existing design tokens to UnoCSS failed. Quantified comparison, pragmatic boundaries, and the conclusion that design tokens come first, atomic CSS optional.
 date: 2026-04-18
-level: P3
 series: moongate-vue
 tags:
   - CSS

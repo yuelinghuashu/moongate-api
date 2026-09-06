@@ -2,7 +2,6 @@
 title: 构建体系：可测试、可验证的工程实践
 description: 从单体脚本到模块化工程体系——ESM 模块拆分、WCAG 对比度自动校验、scope 自动验证、自动化测试与多格式产物生成，让构建脚本自身成为一套可信赖的工程基础设施。
 date: 2026-08-06 06:00:00
-level: P4
 series: design-system
 tags:
   - VSCode
@@ -10,19 +9,6 @@ tags:
   - Design System
   - Engineering
   - CI/CD
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
-6. [**Nuxt + Shiki 主题集成（实战篇）**](./nuxt-shiki-vscode-theme-ssr-dual-themes) —— SSR 双主题高亮与闪动解决
-
 ---
 
 在[设计系统](./create-vscode-theme-design-system)中，我们已经拥有了一套基于 DTCG 三层架构的主题生产系统，构建脚本能自动生成深色/浅色双主题，并能导出 CSS 变量。

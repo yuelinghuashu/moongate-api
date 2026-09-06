@@ -2,7 +2,6 @@
 title: "Build System: Testable, Verifiable Engineering Practices"
 description: Turn your build script into an industrial-grade, testable, verifiable engineering system.
 date: 2026-08-06 06:00:00
-level: P4
 series: design-system
 tags:
   - VSCode

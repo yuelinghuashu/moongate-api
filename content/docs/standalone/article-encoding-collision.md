@@ -3,7 +3,6 @@ title: 当 GB18030 解码 UTF-8 时，你看到的可能不是乱码
 description: 深入剖析 UTF-8 与 GB18030 编码空间的字节碰撞，揭示编码检测中“合法乱码”的迷局，并提出确定性门控 + 启发式确认的工程化方案。
 date: 2026-08-15
 series:
-level: P3
 tags:
   - TypeScript
   - Engineering

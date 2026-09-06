@@ -2,7 +2,6 @@
 title: "Theme Engineering: From a Monolithic JSON to Modular YAML"
 description: Refactor your monolithic theme JSON into modular YAML with a build script, and automate theme generation.
 date: 2026-08-06 02:00:00
-level: P3
 series: design-system
 tags:
   - VSCode

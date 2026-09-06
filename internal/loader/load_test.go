@@ -40,7 +40,6 @@ func TestLoadAll_ValidContent(t *testing.T) {
 title: "Article One"
 description: "First article"
 date: 2025-01-01 00:00:00
-level: P1
 tags:
   - Go
 ---
@@ -52,7 +51,6 @@ Content one.
 title: "Article Two"
 description: "Second article with series"
 date: 2025-01-02 00:00:00
-level: P2
 series: "go-tutorial"
 tags:
   - Go
@@ -106,7 +104,6 @@ func TestLoadAll_EmptySeriesConvertedToNil(t *testing.T) {
 title: "Empty Series"
 description: "desc"
 date: 2025-01-01 00:00:00
-level: P3
 series: ""
 ---
 
@@ -137,7 +134,6 @@ func TestLoadAll_SkipsInvalidFiles(t *testing.T) {
 title: "Valid"
 description: "desc"
 date: 2025-01-01 00:00:00
-level: P1
 ---
 
 Content.
@@ -173,7 +169,6 @@ func TestLoadAll_RecursiveSubdirectories(t *testing.T) {
 title: "Standalone"
 description: "No series"
 date: 2025-01-01 00:00:00
-level: P1
 ---
 
 Standalone content.
@@ -184,7 +179,6 @@ Standalone content.
 title: "Narrative Part 1"
 description: "First part"
 date: 2025-01-02 00:00:00
-level: P2
 series: narrative-engine
 ---
 
@@ -195,7 +189,6 @@ Part 1 content.
 title: "Narrative Part 2"
 description: "Second part"
 date: 2025-01-03 00:00:00
-level: P2
 series: narrative-engine
 ---
 
@@ -256,7 +249,6 @@ func TestLoadAll_EnglishTranslationFiles(t *testing.T) {
 title: "Article"
 description: "中文摘要"
 date: 2025-01-01 00:00:00
-level: P2
 series: go-tutorial
 tags:
   - Go
@@ -270,7 +262,6 @@ tags:
 title: "Article (EN)"
 description: "English description"
 date: 2025-01-01 00:00:00
-level: P2
 series: go-tutorial
 tags:
   - Go
@@ -313,7 +304,6 @@ func TestLoadAll_EnglishTranslationMissingCounterpart(t *testing.T) {
 title: "EN Only"
 description: "desc"
 date: 2025-01-01 00:00:00
-level: P1
 tags:
   - English
 ---

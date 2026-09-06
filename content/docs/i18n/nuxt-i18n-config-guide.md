@@ -3,40 +3,11 @@ title: Nuxt 4 国际化(i18n)完整配置：从基础设置到高级优化
 description: 本文介绍了 @nuxt/i18n 模块的配置方法，并提供了一些常见问题的解决方案。
 date: 2025-12-11
 series: i18n
-level: P1
 tags:
   - Nuxt
   - i18n
   - Engineering
   - Performance
----
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**Nuxt 4 国际化完整配置**](./nuxt-i18n-config-guide) —— 基础配置与中文痛点（locales、路由策略、占位符插值）
-2. [**Nuxt Content + i18n 终极集成**](./nuxt-content-i18n-ultimate-integration) —— 单语言内容多语言界面（路径转换中间层）
-3. [**Nuxt i18n 的 $tm 函数**](./nuxt-i18n-tm-function-guide) —— 环境差异问题与解决方案（useI18nSafe 封装）
-
----
-
-本文档基于 `@nuxtjs/i18n` 模块，版本为10.2.1，详细讲解在 Nuxt 4 项目中实现国际化的完整流程，并特别指出中文配置中的常见“痛点”及解决方案。
-
-> ⚠️ 重要提示：@nuxtjs/i18n v10 版本相对于 v8 有重大重构，配置方式、API 和路由策略均发生了较大变化。如果你之前使用过旧版本，请务必抛弃固有认知，以本文档和官方文档为准，避免因版本差异导致的配置错误。
-
----
-
-<details>
-<summary>适用版本</summary>
-
-- Nuxt: **v4**
-- Nuxt i18n: **V10**
-
-> 如果你用的是其他版本，核心思路可参考，但具体 API 可能需要调整。
-
-</details>
-
 ---
 
 ## 一、快速开始

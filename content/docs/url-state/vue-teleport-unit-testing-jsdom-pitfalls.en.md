@@ -3,7 +3,6 @@ title: "Vue 3 Teleport Component Unit Testing Guide: 5 jsdom Traps and 2 Bugs Ca
 description: "While writing 204 unit tests for our component library Moongate Vue, Teleport components kept tripping us up in the jsdom environment — 5 traps, plus 2 hidden bugs uncovered along the way. A full post-mortem with reproducible minimal examples."
 date: 2026-08-05
 series: ""
-level: P4
 tags:
   - Vue
   - Engineering

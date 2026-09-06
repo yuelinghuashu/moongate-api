@@ -3,23 +3,10 @@ title: 从零实现词法分析器（二）：用一张表统一管理所有符�
 description: 避免 Lexer 中出现大量 switch-case，引入符号映射表（symbolMap）统一管理所有符号，实现中英双语支持和数据驱动设计。
 date: 2026-07-13 21:00:00
 series: lexer-from-scratch
-level: P1
 tags:
   - Go
   - Compiler
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**从零实现词法分析器（一）：Token**](./from-text-to-token-go-lexer-part-1) —— Token 的概念与第一个结构体
-2. [**从零实现词法分析器（二）：符号表**](./from-text-to-token-go-lexer-part-2) —— 用统一符号表管理所有符号
-3. [**从零实现词法分析器（三）：Lexer 引擎**](./from-text-to-token-go-lexer-part-3) —— 指针驱动的词法分析引擎
-
----
-
-> 上一篇我们定义了 Token，但 Token 只是"零件"。在实现 Lexer 之前，还有一个问题要先解决——如何让 Lexer 能认识所有符号，而不需要每次新增符号都修改它的代码。
 
 ## 一、回顾：上一篇我们停在了哪里
 

@@ -3,23 +3,10 @@ title: 从零实现词法分析器（一）：Token——计算机的最小理�
 description: 从计算机不认识文本的痛点出发，理解 Token 的概念，并用 Go 定义第一个 Token 结构体，完成词法分析器的第一步。
 date: 2026-07-13 20:00:00
 series: lexer-from-scratch
-level: P1
 tags:
   - Go
   - Engineering
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**从零实现词法分析器（一）：Token**](./from-text-to-token-go-lexer-part-1) —— Token 的概念与第一个结构体
-2. [**从零实现词法分析器（二）：符号表**](./from-text-to-token-go-lexer-part-2) —— 用统一符号表管理所有符号
-3. [**从零实现词法分析器（三）：Lexer 引擎**](./from-text-to-token-go-lexer-part-3) —— 指针驱动的词法分析引擎
-
----
-
-> 一个文本文件对计算机来说只是一串字符，毫无结构可言。我们要做的第一件事，就是让计算机能“认出”这些字符里藏着什么。
 
 ## 一、问题：计算机看不懂文本的结构
 

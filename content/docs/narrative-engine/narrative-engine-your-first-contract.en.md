@@ -2,7 +2,6 @@
 title: "LLM Narrative Engines, Part 2: Quick Start — Write Your First Contract"
 description: Write your first .meph contract from scratch, compile it, run it, and watch the LLM generate narrative that follows rules you just wrote. No prior knowledge required.
 date: 2026-07-20 15:00:00
-level: P1
 series: narrative-engine
 tags:
   - Go

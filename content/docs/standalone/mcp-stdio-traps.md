@@ -3,7 +3,6 @@ title: MCP stdio 协议的 3 个隐秘陷阱：当单元测试全绿，但 MCP S
 description: 深入剖析 MCP stdio 协议的三个隐秘陷阱，记录一次真实的调试经历——从 401 个测试全绿到线上完全无响应，最终排查出 process.exit、stdout 污染和异步竞态三个致命 Bug，并给出端到端测试的解决方案。
 date: 2026-08-16
 series:
-level: P5
 tags:
   - TypeScript
   - LLM

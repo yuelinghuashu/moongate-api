@@ -3,25 +3,12 @@ title: Flutter 桌面端：输入框设计的细节与边界
 description: 从「第一次回车换行，第二次才提交」这个 bug 说起，深入 Flutter 的 Focus 链、键码区分、Shift+Enter 语义与输入历史持久化。
 date: 2026-08-13 23:00:00
 series: flutter-practice
-level: P3
 tags:
   - Flutter
   - Dart
   - State Management
   - Design System
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**Flutter 桌面端：输入框设计的细节与边界**](./flutter-desktop-input-design) —— Focus 链、键码区分与输入历史持久化
-2. [**Flutter 流式 UI：AI 回复的打字机体验是怎么实现的**](./flutter-streaming-typewriter) —— SSE 流式渲染、跳过语义与可测试性设计
-3. [**拆超大 Flutter State 类的三种尝试与最终方案**](./refactoring-flutter-state-class) —— Mixin/part/Widget 组合的取舍与决策树
-
----
-
-> 从「按回车没反应」到「方向键区回车又能换行」，这些桌面端输入框的坑，背后的根源其实是一个焦点模型的问题。
 
 ## 引子：一个用户报来的 bug
 

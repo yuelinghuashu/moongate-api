@@ -3,27 +3,11 @@ title: 自托管 Umami 分析服务与 Nuxt 4 项目集成指南（扩展篇）
 description: 在现有 Docker 生产环境中集成自托管的 Umami 分析服务，通过 Caddy 自动 HTTPS 和 GitHub Actions 实现 Nuxt 4 项目的自动化数据跟踪。
 date: 2026-03-18
 series: deployment
-level: P4
 tags:
   - Nuxt
   - Docker
   - Caddy
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
-5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
-6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
-
-本篇将在进阶篇的基础上，详细讲解如何将 Umami 分析服务集成到现有 Docker 化部署的 Nuxt 项目中。
-
 ---
 
 ## 📌 版本声明

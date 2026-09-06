@@ -2,7 +2,6 @@
 title: "Vue 3 Complex Component Development: API Design for Select and Pagination"
 description: Using Select and Pagination as examples, explore Vue 3 complex component API design, data format adaptation, type backtracking, searchable/multi-select, ARIA keyboard navigation, composable extraction, and SSR adaptation, revealing the design trade-offs and implementation details behind industrial-grade components.
 date: 2026-05-19
-level: P3
 series: moongate-vue
 tags:
   - Vue

@@ -2,7 +2,6 @@
 title: CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践
 description: 设计令牌驱动的 Vue 3 组件库架构实录。四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算自动化验证，展示如何保持组件库在 25KB (gzip) 内的工程实践。
 date: 2026-04-19
-level: P3
 series: moongate-vue
 tags:
   - CSS
@@ -12,15 +11,6 @@ tags:
 ---
 
 > 四层 CSS 架构把"样式"从"组件"中彻底解耦：设计令牌是 API，组件只做组合。这篇讲架构怎么落地，以及 25KB 体积是怎么守住的。
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
-2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
-3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
-4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
 
 ## 回顾：第一篇文章的结论
 

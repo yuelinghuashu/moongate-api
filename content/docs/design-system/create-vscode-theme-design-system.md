@@ -3,24 +3,10 @@ title: 设计系统：DTCG 三层架构与昼夜双变体
 description: 用量业界标准的 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体，让「同一语义角色在不同背景下视觉重量对等」从理念变为可执行的工程架构。
 date: 2026-08-06 04:00:00
 series: design-system
-level: P3
 tags:
   - Design System
   - Theme
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
-6. [**Nuxt + Shiki 主题集成（实战篇）**](./nuxt-shiki-vscode-theme-ssr-dual-themes) —— SSR 双主题高亮与闪动解决
-
 ---
 
 在[主题工程化](./create-vscode-theme-engineering)的结尾，我们指出了工程化方案的三个痛点：

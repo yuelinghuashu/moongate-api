@@ -3,25 +3,10 @@ title: "GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Commen
 description: "Adds book covers: the field-naming decision, an upload endpoint and static serving; then upgrades the list endpoint into pagination + search + sort, and attaches a comment count to every book with JOIN + GROUP BY. Full code and verification commands in every section."
 date: 2026-09-03
 series: gin-gorm
-level: P3
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 Series Navigation
-
-This series has seven parts:
-
-1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
-3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
-4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
-5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
-6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
-7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
-
 ---
 
 > **Prerequisites:** finish the crash course ([GORM Crash Course: Building a Book Management API with Gin + GORM](./gorm-gin-crud-tutorial)) and the relations part ([GORM Relations in Practice: Comment Model, CRUD & Preload](./gorm-gin-relations)) — the two-table `books` + `comments` project. Code conventions are the same as in the crash course (`WithContext` on every DB call, `errors.Is` for 404, and the 400 · 404 · 201 semantics).

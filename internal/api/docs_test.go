@@ -22,7 +22,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Description: "Learn Go programming",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
 		Slug:        "go-tutorial",
-		Level:       domain.LevelP1,
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Tutorial"},
 		Content:     "<p>Go tutorial content</p>",
@@ -33,7 +32,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Description: "Vue.js framework guide",
 		Date:        time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
 		Slug:        "vue-guide",
-		Level:       domain.LevelP2,
 		Series:      stringPtr("vue-series"),
 		Tags:        []string{"Vue", "Frontend"},
 		Content:     "<p>Vue guide content</p>",
@@ -44,7 +42,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Description: "Deep dive into Go concurrency",
 		Date:        time.Date(2025, 3, 20, 0, 0, 0, 0, time.UTC),
 		Slug:        "advanced-go",
-		Level:       domain.LevelP3,
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Advanced"},
 		Content:     "<p>Advanced Go content</p>",
@@ -56,7 +53,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Description: "Learn Go programming (EN)",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
 		Slug:        "go-tutorial",
-		Level:       domain.LevelP1,
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Tutorial"},
 		Content:     "<p>Go tutorial content (EN)</p>",
@@ -68,7 +64,6 @@ func setupDocsTestRouter() *gin.Engine {
 		Description: "No Chinese version",
 		Date:        time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
 		Slug:        "en-only",
-		Level:       domain.LevelP4,
 		Tags:        []string{"English"},
 		Content:     "<p>English only content</p>",
 	}
@@ -92,6 +87,10 @@ func setupDocsTestRouter() *gin.Engine {
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+func intPtr(i int) *int {
+	return &i
 }
 
 func performRequest(r http.Handler, method, path string) *httptest.ResponseRecorder {
@@ -268,30 +267,6 @@ func TestGetDocs_InvalidSearchMode(t *testing.T) {
 	}
 }
 
-func TestGetDocs_FilterByLevel(t *testing.T) {
-	r := setupDocsTestRouter()
-
-	w := performRequest(r, "GET", "/api/docs?level=P3")
-	if w.Code != http.StatusOK {
-		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp struct {
-		Data  []domain.DocSummary `json:"data"`
-		Total int                 `json:"total"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-
-	if resp.Total != 1 {
-		t.Errorf("Total = %d, want 1", resp.Total)
-	}
-	if len(resp.Data) != 1 || resp.Data[0].Title != "Advanced Go" {
-		t.Errorf("Data = %+v, want [Advanced Go]", resp.Data)
-	}
-}
-
 func TestGetDocs_FilterByTags(t *testing.T) {
 	r := setupDocsTestRouter()
 
@@ -365,6 +340,77 @@ func TestGetDocs_SeriesGroup(t *testing.T) {
 	}
 	if len(groups[1].Docs) != 1 {
 		t.Errorf("Groups[1].Docs length = %d, want 1", len(groups[1].Docs))
+	}
+}
+
+// TestGetDocs_SeriesGroup_Order 验证系列内排序：
+// 1) 显式 order 升序优先于日期
+// 2) order 未设置时按日期升序（阅读顺序）
+func TestGetDocs_SeriesGroup_Order(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	// 系列：order-series。
+	// a：order=2 但日期更早 —— 应排第 2（order 优先）
+	// b：order=1 —— 应排第 1
+	// c：无 order、日期早于 d —— 应排第 3
+	// d：无 order、日期晚于 c —— 应排第 4
+	a := &domain.Doc{
+		Slug:   "a",
+		Title:  "A",
+		Date:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		Series: stringPtr("order-series"),
+		Order:  intPtr(2),
+	}
+	b := &domain.Doc{
+		Slug:   "b",
+		Title:  "B",
+		Date:   time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+		Series: stringPtr("order-series"),
+		Order:  intPtr(1),
+	}
+	c := &domain.Doc{
+		Slug:   "c",
+		Title:  "C",
+		Date:   time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC),
+		Series: stringPtr("order-series"),
+	}
+	d := &domain.Doc{
+		Slug:   "d",
+		Title:  "D",
+		Date:   time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+		Series: stringPtr("order-series"),
+	}
+
+	store := map[string]*domain.Doc{
+		"a": a, "b": b, "c": c, "d": d,
+	}
+	h := NewDocsHandler(store, nil)
+	r.GET("/api/docs", h.GetDocs)
+
+	w := performRequest(r, "GET", "/api/docs?group=series")
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var groups []domain.SeriesGroup
+	if err := json.Unmarshal(w.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	got := make([]string, 0, len(groups[0].Docs))
+	for _, doc := range groups[0].Docs {
+		got = append(got, doc.Slug)
+	}
+	want := []string{"b", "a", "c", "d"} // order 优先，其次日期升序
+	if len(got) != len(want) {
+		t.Fatalf("Series docs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Series docs[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+			break
+		}
 	}
 }
 

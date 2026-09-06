@@ -3,7 +3,6 @@ title: Vue 3 简单组件开发实战：从 Button 组件看 API 设计
 description: 以 Button 这一简单组件为例，深入探讨 Vue 3 组件库的 API 设计哲学，涵盖 Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库的对比，揭示极简 API 背后的设计权衡。
 date: 2026-05-07
 series: moongate-vue
-level: P3
 tags:
   - Vue
   - Design System
@@ -11,15 +10,6 @@ tags:
 ---
 
 > 极简不是简陋，克制不是缺失——以 Button 为例，看一个 11 个 props 的组件如何覆盖日常 90% 的按钮场景。
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**设计令牌 vs 原子化 CSS（理念篇）**](./design-tokens-vs-atomic-css) —— 设计令牌优先的架构结论
-2. [**CSS 优先 + 组件薄封装（架构篇）**](./css-first-component-library) —— 四层 CSS 架构与体积验证
-3. [**Vue 3 简单组件开发实战（简单组件篇）**](./vue-component-api-design) —— Button 组件的 API 设计
-4. [**Vue 3 复杂组件开发实战（复杂组件篇）**](./complex-component-api-design) —— Select/Pagination 的工业级细节
 
 ## 一、背景与参考
 

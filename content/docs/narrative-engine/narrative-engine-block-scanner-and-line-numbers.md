@@ -3,29 +3,11 @@ title: 构建大模型叙事引擎：区块扫描与行号绑定
 description: 从格式设计到解析器实现，手写区块扫描器让错误报出"第 12 行"而非"position 246"——精确的行号绑定是手写解析器的核心价值。
 date: 2026-07-20 17:00:00
 series: narrative-engine
-level: P3
 tags:
   - Go
   - DSL
   - Engineering
 ---
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**从自由叙事到契约约束**](./narrative-engine-from-freeform-to-constrained) —— .meph 格式的设计动机与取舍
-2. [**快速上手：从零写出你的第一个契约**](./narrative-engine-your-first-contract) —— 无需前置知识，20 分钟完整体验
-3. [**区块扫描与行号绑定**](./narrative-engine-block-scanner-and-line-numbers) —— 行号绑定与精确报错
-4. [**规则表达式与插值语法的解析**](./narrative-engine-parsing-rules-and-interpolation) —— 条件-动作拆解与插值解析
-5. [**集成测试与行为冻结**](./narrative-engine-integration-testing-and-behavior-freezing) —— Golden File 测试与行为稳定
-6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
-
----
-
-> **前置阅读**：如果你是从搜索引擎直接跳到这一篇，建议先读第一篇的“一、先看目标”和“六、.meph 的设计原则”，了解 `.meph` 的长相和设计初衷。本篇假设你已经知道 `【角色名】` 和 `【规则】` 是什么。
-
-`.json` 解析器报 `position 246`，创作者需要的是**"第 12 行缺冒号"**。这一篇实现的就是这种精确报错。
 
 ## 一、叙事引擎的第二个问题：规则怎么变成结构？
 

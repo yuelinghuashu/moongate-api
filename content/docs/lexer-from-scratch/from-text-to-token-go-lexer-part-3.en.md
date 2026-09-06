@@ -3,20 +3,9 @@ title: "Building a Lexer from Scratch (Part 3): Moving the Pointer and Starting 
 description: "Implement the core lexer engine: move the cursor pointer, query the symbol table, and slice a text string into a structured stream of tokens."
 date: 2026-07-13 22:00:00
 series: lexer-from-scratch
-level: P1
 tags:
   - Go
   - Compiler
----
-
-## 📚 Series Navigation
-
-This series has three parts:
-
-1. [**Building a Lexer from Scratch (Part 1): Token**](./from-text-to-token-go-lexer-part-1) — The concept of Token and the first struct
-2. [**Building a Lexer from Scratch (Part 2): Symbol Table**](./from-text-to-token-go-lexer-part-2) — Managing every symbol with one unified table
-3. [**Building a Lexer from Scratch (Part 3): Lexer Engine**](./from-text-to-token-go-lexer-part-3) — A pointer-driven lexing engine
-
 ---
 
 > In the first two parts we prepared the Token component and the unified symbol map. In this part, we officially implement the core engine of the whole lexical analysis — the **Lexer** — so the program can truly "read" text and slice it into a continuous stream of tokens.

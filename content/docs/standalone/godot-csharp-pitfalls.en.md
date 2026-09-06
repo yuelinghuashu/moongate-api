@@ -2,7 +2,6 @@
 title: "Godot 4 + C# Pitfall Notes: Five Deep Traps, with a Cheat Sheet and Minimal Reproductions"
 description: Five of the most subtle Godot 4 + C# traps (script loading, config overwrites, build pollution, test runs, naming conflicts), with source-level root-cause analysis, a cheat sheet, and engineering scaffolding — for developers who can already compile and run.
 date: 2026-08-23
-level: P5
 series: ""
 tags:
   - Godot

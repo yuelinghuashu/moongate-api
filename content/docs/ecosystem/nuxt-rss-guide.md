@@ -3,19 +3,9 @@ title: Nuxt 集成 RSS 服务完全指南：从模块到手写的优雅之路
 description: 手把手教你绕过第三方模块的坑，亲手构建完全可控的 RSS/Atom/JSON Feed 服务。
 date: 2026-02-23
 series: ecosystem
-level: P1
 tags:
   - Nuxt
   - SEO
----
-
-## 📚 系列导航
-
-本系列共两篇：
-
-1. [**Nuxt 集成 RSS 服务完全指南**](./nuxt-rss-guide) —— 从模块到手写，构建完全可控的 RSS/Atom/JSON Feed
-2. [**Nuxt 4 博客 Sitemap 配置完整指南**](./nuxt-sitemap-guide) —— 静态与动态 Sitemap 的完整配置
-
 ---
 
 ## 为什么需要 RSS？

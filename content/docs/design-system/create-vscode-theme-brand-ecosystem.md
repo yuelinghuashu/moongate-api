@@ -2,25 +2,11 @@
 title: 品牌生态：设计哲学与视觉契约
 description: 将主题升华为设计系统——定义设计哲学、建立视觉契约、提供显示器校准指南，让主题从代码工具进化为可复用的品牌资产，连接社区与产品生态。
 date: 2026-08-06 08:00:00
-level: P3
 series: design-system
 tags:
   - Design System
   - Theme
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**VS Code 主题：从手写 JSON 到可发布**](./create-vscode-theme-basics) —— 手写最小主题 JSON 与发布流程
-2. [**主题工程化：从单体 JSON 到模块化 YAML**](./create-vscode-theme-engineering) —— 单体 JSON 重构为模块化 YAML
-3. [**设计系统：DTCG 三层架构与昼夜双变体**](./create-vscode-theme-design-system) —— DTCG 令牌管理与昼夜双变体
-4. [**构建体系：可测试、可验证的工程实践**](./create-vscode-theme-build-system) —— 模块化构建与自动化验证
-5. [**品牌生态：设计哲学与视觉契约**](./create-vscode-theme-brand-ecosystem) —— 设计哲学与品牌生态
-6. [**Nuxt + Shiki 主题集成（实战篇）**](./nuxt-shiki-vscode-theme-ssr-dual-themes) —— SSR 双主题高亮与闪动解决
-
 ---
 
 ## 🌕 引言：从工程化到设计系统的跃迁

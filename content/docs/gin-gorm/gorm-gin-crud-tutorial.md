@@ -3,25 +3,10 @@ title: GORM 入门实战：用 Gin + GORM 写一个图书管理 API
 description: 从零搭建一个完整的图书管理 API，涵盖 GORM 的 CRUD、软删除、零值陷阱等核心知识点，附带完整代码和测试命令
 date: 2026-09-01
 series: gin-gorm
-level: P2
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 系列导航
-
-本系列共七篇：
-
-1. [**GORM 入门实战：用 Gin + GORM 写一个图书管理 API**](./gorm-gin-crud-tutorial) —— 单表 CRUD、软删除、零值陷阱，从零跑通完整项目
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) —— 第二张表 comments、评论增删查、详情按需加载
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) —— 上传与静态服务、分页/搜索/排序、评论数聚合
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) —— CreateInBatches、DTO 与模型分离、校验错误翻译
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) —— many2many 连接表、按标签筛选与关联增删
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) —— Repository/Service 分层、构造注入、表驱动测试
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) —— 统一错误处理、安全补强、对象存储、连接池
-
 ---
 
 ## 适合读者

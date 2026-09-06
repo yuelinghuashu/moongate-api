@@ -3,24 +3,10 @@ title: Nuxt Content + i18n终极集成方案：一套内容支持多语言的完
 description: 本文介绍一种创新方案：只维护一套核心文档（如英文或中文），利用 @nuxtjs/i18n 的路由前缀功能，为用户提供完整的多语言界面体验。访问 /en/article 与 /zh_cn/article 将显示相同的文档内容，但界面语言、导航菜单等将根据URL前缀自动切换。
 date: 2025-12-29
 series: i18n
-level: P1
 tags:
   - Nuxt
   - i18n
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**Nuxt 4 国际化完整配置**](./nuxt-i18n-config-guide) —— 基础配置与中文痛点（locales、路由策略、占位符插值）
-2. [**Nuxt Content + i18n 终极集成**](./nuxt-content-i18n-ultimate-integration) —— 单语言内容多语言界面（路径转换中间层）
-3. [**Nuxt i18n 的 $tm 函数**](./nuxt-i18n-tm-function-guide) —— 环境差异问题与解决方案（useI18nSafe 封装）
-
----
-
-> 适用版本：Nuxt 4、Nuxt Content v3、 Nuxt I18n v10  
-> 如果你使用其他版本，核心思路仍可参考，但具体 API 可能需要调整。
 
 ## 概述
 

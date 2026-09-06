@@ -3,31 +3,10 @@ title: GORM 多对多实战：书籍与标签
 description: 系列第 5 篇：兑现伏笔给图书加 tags（多对多）——many2many 声明与连接表、Preload、按标签筛选、关联增删，以及删父记录与带字段连接表两个进阶。
 date: 2026-09-05
 series: gin-gorm
-level: P3
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 系列导航
-
-本系列共七篇：
-
-1. [**GORM 入门实战：用 Gin + GORM 写一个图书管理 API**](./gorm-gin-crud-tutorial) —— 单表 CRUD、软删除、零值陷阱，从零跑通完整项目
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) —— 第二张表 comments、评论增删查、详情按需加载
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) —— 上传与静态服务、分页/搜索/排序、评论数聚合
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) —— CreateInBatches、DTO 与模型分离、校验错误翻译
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) —— many2many 连接表、按标签筛选与关联增删
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) —— Repository/Service 分层、构造注入、表驱动测试
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) —— 统一错误处理、安全补强、对象存储、连接池
-
----
-
-> **前置阅读**：完成[入门篇](./gorm-gin-crud-tutorial)、[多表关联篇](./gorm-gin-relations)、[文件与查询增强篇](./gorm-gin-media-query)、[数据工程篇](./gorm-gin-dto-batch)——`books` + `comments` + 封面图 + 分页搜索的项目。代码约定与入门篇一致（`WithContext` / `errors.Is` 判 404 / 400·404·201）。
-
-多表关联篇把"书 → 评论"（一对多）讲完时留了句伏笔——"第三张表 `tags`（多对多）留到以后"。本篇兑现它：给图书加标签，把 GORM 的 many2many（连接表声明、加载、筛选、关联增删）一次讲清。
-
 ---
 
 ## 一、模型与迁移：many2many 声明

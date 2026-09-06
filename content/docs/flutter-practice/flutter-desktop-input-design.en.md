@@ -2,7 +2,6 @@
 title: Flutter Desktop Input Design — Where Does the Enter Key Actually Go?
 description: 'From "pressing Enter does nothing" to "the numpad Enter still inserts a newline" — all these desktop input field pitfalls trace back to the same root cause: the Focus Chain. A deep dive into LogicalKeyboardKey, Shift+Enter semantics, and input history lifecycle.'
 date: 2026-08-13 23:00:00
-level: P3
 series: flutter-practice
 tags:
   - Flutter

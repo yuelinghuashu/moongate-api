@@ -3,20 +3,10 @@ title: Nuxt 4 博客 Sitemap 配置完整指南
 description: 介绍了 Nuxt 4 博客 Sitemap 配置的基础知识、静态 Sitemap 和动态 Sitemap 的实现方法，并提供了生产环境部署要点。
 date: 2026-02-04
 series: ecosystem
-level: P1
 tags:
   - Nuxt
   - SEO
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共两篇：
-
-1. [**Nuxt 集成 RSS 服务完全指南**](./nuxt-rss-guide) —— 从模块到手写，构建完全可控的 RSS/Atom/JSON Feed
-2. [**Nuxt 4 博客 Sitemap 配置完整指南**](./nuxt-sitemap-guide) —— 静态与动态 Sitemap 的完整配置
-
 ---
 
 ## 为什么需要 Sitemap？

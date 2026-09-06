@@ -3,7 +3,6 @@ title: Vue 3 组件库的 TypeScript Props 类型导出：一个看似简单的�
 description: 深度解析 Vue SFC 编译器与 TypeScript 模块解析之间的契约缺口，揭示 `export type { ButtonProps } from './Button.vue'` 在消费者项目中失败的完整原因及解决方案。
 date: 2026-08-18
 series:
-level: P5
 tags:
   - Vue
   - TypeScript

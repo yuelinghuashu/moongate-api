@@ -3,28 +3,12 @@ title: 构建大模型叙事引擎：规则表达式与插值语法的解析
 description: 规则的条件-动作表达式怎么拆解？{变量} 插值语法怎么处理？本文覆盖解析层最后两块拼图——让规则从文本变为可执行结构。
 date: 2026-07-20 19:00:00
 series: narrative-engine
-level: P3
 tags:
   - Go
   - DSL
   - LLM
   - Engineering
 ---
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**从自由叙事到契约约束**](./narrative-engine-from-freeform-to-constrained) —— .meph 格式的设计动机与取舍
-2. [**快速上手：从零写出你的第一个契约**](./narrative-engine-your-first-contract) —— 无需前置知识，20 分钟完整体验
-3. [**区块扫描与行号绑定**](./narrative-engine-block-scanner-and-line-numbers) —— 行号绑定与精确报错
-4. [**规则表达式与插值语法的解析**](./narrative-engine-parsing-rules-and-interpolation) —— 条件-动作拆解与插值解析
-5. [**集成测试与行为冻结**](./narrative-engine-integration-testing-and-behavior-freezing) —— Golden File 测试与行为稳定
-6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
-
----
-
-> **前置阅读**：建议先读第三篇的"二、两阶段设计"和"三、区块扫描器"，理解扫描器如何输出 `[]Block`。本篇假设你已经知道 Parser 如何根据 `Title` 路由到不同解析函数。
 
 ## 一、叙事引擎的第三个问题：条件-动作怎么拆解？
 

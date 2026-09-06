@@ -2,7 +2,6 @@
 title: "LLM Narrative Engines, Part 6: Runtime Loop and Branching"
 description: You have a contract — now how do you bring it to life? Five-layer sandwich prompt, streaming full-width indentation, Mother-Child branching, memory extraction — building a complete runtime loop.
 date: 2026-07-20 23:00:00
-level: P3
 series: narrative-engine
 tags:
   - Go

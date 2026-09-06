@@ -3,7 +3,6 @@ title: 从代码到 npm：Vue 3 组件库发布实战与避坑指南
 description: 记录 moongate-vue 组件库从构建到 npm v1.5.0 发布的完整流程，涵盖 nrm 源管理、2FA 配置、WebAuthn 网络代理、本地链接测试、构建验证、体积预算、自动化脚本及工业级发布检查清单。
 date: 2026-05-20
 series:
-level: P4
 tags:
   - CI/CD
   - Security

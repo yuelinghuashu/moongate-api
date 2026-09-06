@@ -3,23 +3,10 @@ title: 从零实现词法分析器（三）：让指针动起来，启动 Lexer 
 description: 正式实现词法分析器的核心引擎，通过光标指针的移动与符号表查询，将文本字符串切分成结构化的 Token 流。
 date: 2026-07-13 22:00:00
 series: lexer-from-scratch
-level: P1
 tags:
   - Go
   - Compiler
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**从零实现词法分析器（一）：Token**](./from-text-to-token-go-lexer-part-1) —— Token 的概念与第一个结构体
-2. [**从零实现词法分析器（二）：符号表**](./from-text-to-token-go-lexer-part-2) —— 用统一符号表管理所有符号
-3. [**从零实现词法分析器（三）：Lexer 引擎**](./from-text-to-token-go-lexer-part-3) —— 指针驱动的词法分析引擎
-
----
-
-> 前两篇我们准备好了 Token 组件和统一符号映射表。这一篇，我们将正式实现整个词法分析的核心引擎——**Lexer（词法分析器）**，让程序能够真正“阅读”文本，并将它切分成一条源源不断的 Token 流。
 
 ## 一、核心思想：Lexer 就像一条传送带
 

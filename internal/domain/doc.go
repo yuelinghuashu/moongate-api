@@ -5,24 +5,14 @@ import (
 	"time"
 )
 
-type Level string
-
-const (
-	LevelP1 Level = "P1"
-	LevelP2 Level = "P2"
-	LevelP3 Level = "P3"
-	LevelP4 Level = "P4"
-	LevelP5 Level = "P5"
-)
-
 // Doc 文档实体（包含所有字段）
 type Doc struct {
 	Title       string    `yaml:"title" json:"title"`             // 文章标题
 	Description string    `yaml:"description" json:"description"` // 简短摘要
 	Date        time.Time `yaml:"date" json:"date"`           // 发布日期 (YYYY-MM-DD HH:MM:SS)
 	Slug        string    `yaml:"slug,omitempty" json:"slug"` // URL 友好标识符
-	Level       Level     `yaml:"level" json:"level"`             // 难度等级：P1-P5
 	Series      *string   `yaml:"series" json:"series"`           // 所属系列，nil 表示无系列
+	Order       *int      `yaml:"order,omitempty" json:"order"`   // 系列内阅读顺序（可选），nil 表示未指定
 	Tags        []string  `yaml:"tags" json:"tags"`               // 标签列表，用于分类
 	Content     string    `json:"content"`                        // 正文 HTML（来自 Markdown 转换）
 
@@ -77,8 +67,8 @@ type DocSummary struct {
 	Description string    `json:"description"`
 	Date        time.Time `json:"date"`
 	Slug        string    `json:"slug"`
-	Level       Level     `json:"level"`
 	Series      *string   `json:"series"`
+	Order       *int      `json:"order"`   // 系列内阅读顺序（可选），nil 表示未指定
 	Tags        []string  `json:"tags"`
 	Lang        string    `json:"lang"`           // 实际返回内容的语言：zh | en
 	IsFallback  bool      `json:"isFallback"`     // 请求语言无译文时回退到中文

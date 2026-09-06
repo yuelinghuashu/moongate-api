@@ -3,27 +3,11 @@ title: 构建大模型叙事引擎：集成测试与行为冻结
 description: 解析器写完了，但怎么保证以后改代码不会改坏它？Golden File 测试、验证器、滑窗老化测试——用测试将解析行为彻底冻结。
 date: 2026-07-20 21:00:00
 series: narrative-engine
-level: P4
 tags:
   - Go
   - Engineering
   - CI/CD
 ---
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**从自由叙事到契约约束**](./narrative-engine-from-freeform-to-constrained) —— .meph 格式的设计动机与取舍
-2. [**快速上手：从零写出你的第一个契约**](./narrative-engine-your-first-contract) —— 无需前置知识，20 分钟完整体验
-3. [**区块扫描与行号绑定**](./narrative-engine-block-scanner-and-line-numbers) —— 行号绑定与精确报错
-4. [**规则表达式与插值语法的解析**](./narrative-engine-parsing-rules-and-interpolation) —— 条件-动作拆解与插值解析
-5. [**集成测试与行为冻结**](./narrative-engine-integration-testing-and-behavior-freezing) —— Golden File 测试与行为稳定
-6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
-
----
-
-> **前置阅读**：建议先读第三篇的“四、Parser”和第四篇的“四、小结”，理解解析器输出 `domain.Contract` 的完整流程。本篇假设你已经知道解析器能把 `.meph` 变成结构体。
 
 ## 一、叙事引擎的第四个问题：怎么保证行为稳定？
 

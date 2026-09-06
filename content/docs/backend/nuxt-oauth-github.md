@@ -3,33 +3,11 @@ title: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境�
 description: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境完整版）
 date: 2026-02-15
 series: backend
-level: P2
 tags:
   - Nuxt
   - OAuth
   - Security
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共两篇：
-
-1. [**Nuxt 4 集成 Drizzle ORM (PostgreSQL)**](./nuxt-drizzle-postgresql) —— 数据层：Schema 定义、迁移与查询
-2. [**Nuxt 4 集成 GitHub 登录**](./nuxt-oauth-github) —— 认证层：OAuth 原理与开发/生产配置
-
----
-
-本文详细讲解在 Nuxt 4 应用中集成 GitHub OAuth 登录的完整过程，涵盖 OAuth 2.0 核心原理、nuxt-auth-utils 模块的工作机制、**开发环境与生产环境的差异化配置**、从零到一的实现步骤，以及**生产环境部署时容易踩的坑和解决方案**。
-
-> 适用版本
-
-- Nuxt 4
-
-- nuxt-auth-utils v0.4
-
-- Node: v20+
-
 ---
 
 ## 一、OAuth 2.0 核心原理（为什么第三方登录能“认识”用户）

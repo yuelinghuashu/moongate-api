@@ -2,7 +2,6 @@
 title: "Design System: DTCG Three-Layer Architecture & Dark/Light Variants"
 description: Use the DTCG design token standard to manage colors and build dark/light variants with visual weight parity.
 date: 2026-08-06 04:00:00
-level: P3
 series: design-system
 tags:
   - Design System

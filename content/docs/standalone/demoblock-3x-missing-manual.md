@@ -2,7 +2,6 @@
 title: VitePress + vitepress-theme-demoblock 3.x 配置指南
 description: 详解 demoblock 3.x 的配置原理、踩坑记录和最佳实践，补充官方文档缺失的「连接逻辑」。
 date: 2026-06-03
-level: P1
 series: 
 tags:
   - Vue

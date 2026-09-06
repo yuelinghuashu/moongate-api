@@ -3,7 +3,6 @@ title: VS Code CompletionProvider 中的 filterText 陷阱
 description: VS Code 扩展开发中 CompletionProvider 返回数据但补全列表为空的完整解析，涵盖 filterText 过滤机制、中文输入法下 triggerCharacter 失效问题，以及系统的排查与解决方案。
 date: 2026-07-23
 series:
-level: P2
 tags:
   - VSCode
   - Engineering

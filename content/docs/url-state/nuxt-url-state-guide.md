@@ -3,7 +3,6 @@ title: Nuxt 中 URL 与状态双向绑定指南：从原理到实践
 description: 深入探讨 Nuxt 中 URL 与状态双向绑定的原理，解决后退按钮数据不刷新、输入框与 URL 不一致等常见问题。从错误尝试到正确实践，提供手写 watch 和 Pinia 两种稳定可靠的 SSR 安全方案，并对比与 localStorage 的适用场景。
 date: 2026-02-19
 series: url-state
-level: P3
 tags:
   - Nuxt
   - Vue
@@ -11,17 +10,6 @@ tags:
 ---
 
 > 本文完整记录了在 Nuxt 4 中实现 URL 与页面状态双向同步的全过程，涵盖分页、搜索、多选标签、等级筛选等复杂场景，并深入探讨 SSR 安全、组件拆分陷阱、键盘事件与移动端手势的协同。文末提供两种可直接复用的实现方案（手写 watch 与 Pinia 封装），并附上生产环境验证过的踩坑总结。
-
----
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**Nuxt 中 URL 与状态双向绑定（原理篇）**](./nuxt-url-state-guide) —— URL 状态同步原理与手写方案
-2. [**手写 useRouteQuery（封装篇）**](./nuxt-use-route-query-composables) —— 封装成开箱即用的 composable
-3. [**文档列表页完整指南（实战篇）**](./nuxt-docs-list-page-complete-guide) —— 实现完整的文档列表页
-4. [**Nuxt + Go 全栈实践**](./nuxt-go-fullstack-closed-loop) —— 前端 URL 状态与 Go API 打通
 
 ---
 

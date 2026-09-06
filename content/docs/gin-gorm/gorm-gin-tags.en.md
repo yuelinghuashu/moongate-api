@@ -3,25 +3,10 @@ title: "GORM Many-to-Many in Practice: Books & Tags"
 description: "Part 5: delivers on an earlier promise — adding tags to books (many-to-many): the many2many declaration & join table, Preload, filtering by tag, adding/removing associations, plus two advanced topics: deleting the parent record, and a join model with extra fields."
 date: 2026-09-05
 series: gin-gorm
-level: P3
 tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-## 📚 Series Navigation
-
-This series has seven parts:
-
-1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
-3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
-4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
-5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
-6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
-7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
-
 ---
 
 > **Prerequisites:** finish [the crash course](./gorm-gin-crud-tutorial), [the relations part](./gorm-gin-relations), [the media part](./gorm-gin-media-query), and [the data engineering part](./gorm-gin-dto-batch) — the project with `books` + `comments` + cover images + paginated search. Conventions are the same as the crash course (`WithContext` on every DB call, `errors.Is` for 404, and the 400 · 404 · 201 semantics).

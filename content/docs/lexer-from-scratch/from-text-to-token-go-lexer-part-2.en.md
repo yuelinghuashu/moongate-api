@@ -3,20 +3,9 @@ title: "Building a Lexer from Scratch (Part 2): Managing Every Symbol with a Sin
 description: "Avoid a wall of switch-cases in your lexer: introduce a symbol map (symbolMap) to manage every symbol in one table, with built-in bilingual (Chinese/English) support and a data-driven design."
 date: 2026-07-13 21:00:00
 series: lexer-from-scratch
-level: P1
 tags:
   - Go
   - Compiler
----
-
-## 📚 Series Navigation
-
-This series has three parts:
-
-1. [**Building a Lexer from Scratch (Part 1): Token**](./from-text-to-token-go-lexer-part-1) — The concept of Token and the first struct
-2. [**Building a Lexer from Scratch (Part 2): Symbol Table**](./from-text-to-token-go-lexer-part-2) — Managing every symbol with one unified table
-3. [**Building a Lexer from Scratch (Part 3): Lexer Engine**](./from-text-to-token-go-lexer-part-3) — A pointer-driven lexing engine
-
 ---
 
 > In the last part we defined the Token, but a Token is only a "part". Before implementing the Lexer, there's one more problem to solve: how can the Lexer recognize every symbol without having its code changed every time a new symbol is added?

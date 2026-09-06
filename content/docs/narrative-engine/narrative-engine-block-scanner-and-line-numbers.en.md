@@ -2,7 +2,6 @@
 title: "LLM Narrative Engines, Part 3: Block Scanner and Line Numbers"
 description: From format design to parser implementation — a handwritten block scanner that reports "line 12" instead of "position 246." Precise line number binding is the core value of a custom parser.
 date: 2026-07-20 17:00:00
-level: P3
 series: narrative-engine
 tags:
   - Go

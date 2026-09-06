@@ -3,26 +3,11 @@ title: "GORM Engineering in Practice (Part 1): Layering, Dependency Injection & 
 description: "Part 6: refactors the flat db.DB code of the first five parts into Repository / Service / Handler layers (internal/ + constructor injection), tests handlers with a fake repository + httptest table-driven tests, and (optional reading) wraps the pagination boilerplate into a generic GetPaginated[T]."
 date: 2026-09-06 00:00:00
 series: gin-gorm
-level: P4
 tags:
   - Go
   - PostgreSQL
   - ORM
   - Engineering
----
-
-## 📚 Series Navigation
-
-This series has seven parts:
-
-1. [**GORM Crash Course: Building a Book Management API with Gin + GORM**](./gorm-gin-crud-tutorial) — single-table CRUD, soft delete, the zero-value trap, a complete runnable project
-2. [**GORM Relations in Practice: Comment Model, CRUD & Preload**](./gorm-gin-relations) — second table `comments`, comment CRUD, on-demand detail loading
-3. [**GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Comment Count**](./gorm-gin-media-query) — uploads & static serving, pagination/search/sort, comment-count aggregation
-4. [**GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation**](./gorm-gin-dto-batch) — batch import, request DTOs, validation-error translation
-5. [**GORM Many-to-Many in Practice: Books & Tags**](./gorm-gin-tags) — many2many join table, tag filtering, association add/remove
-6. [**GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability**](./gorm-gin-engineering-layering) — Repository/Service layering, constructor injection, table-driven tests (P4, optional reading)
-7. [**GORM Engineering in Practice (Part 2): Reliability & Production Readiness**](./gorm-gin-engineering-reliability) — unified errors, security hardening, object storage, connection pool (P4, optional reading)
-
 ---
 
 > 🎓 **Engineering optional reading:** this part does not sit on the same track as the first five parts (the P2/P3 main line) — read it when you need layering, dependency injection, and testing skills beyond GORM itself; skipping it does not break the closed loop of the first five parts.

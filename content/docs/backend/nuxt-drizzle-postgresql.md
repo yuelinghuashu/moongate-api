@@ -3,20 +3,10 @@ title: "Nuxt 4 集成 Drizzle ORM (PostgreSQL) 完整教程"
 description: "本教程专注于 Drizzle ORM 在 PostgreSQL 数据库上的 Nuxt 4 集成。如果您使用的是 MySQL、SQLite 等其他数据库，部分配置（如连接驱动、数据类型）会有所不同，请参考 Drizzle 官方文档相应部分。"
 date: 2026-02-16
 series: backend
-level: P2
 tags:
   - Nuxt
   - PostgreSQL
   - ORM
----
-
-## 📚 系列导航
-
-本系列共两篇：
-
-1. [**Nuxt 4 集成 Drizzle ORM (PostgreSQL)**](./nuxt-drizzle-postgresql) —— 数据层：Schema 定义、迁移与查询
-2. [**Nuxt 4 集成 GitHub 登录**](./nuxt-oauth-github) —— 认证层：OAuth 原理与开发/生产配置
-
 ---
 
 ## 适用版本

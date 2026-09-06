@@ -3,24 +3,10 @@ title: GitHub Actions + Docker 极简自动化部署教程（入门篇）
 description: 从零开始，用最简洁的方式将你的应用打包成 Docker 镜像，并通过 GitHub Actions 实现自动构建、推送和服务器部署。适合 Docker 新手快速上手 CI/CD 流水线。
 date: 2026-03-16 22:00:00
 series: deployment
-level: P4
 tags:
   - Caddy
   - Docker
   - CI/CD
----
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**静态网站自动化部署（静态篇）**](./static-site-auto-deploy) —— 纯前端静态资源自动化发布
-2. [**动态网站自动化部署（动态篇）**](dynamic-site-auto-deploy) —— 后端服务进程管理 + Caddy 反向代理
-3. [**Docker 极简入门（入门篇）**](docker-quickstart-auto-deploy) —— 从零搭建 Docker CI/CD 流水线
-4. [**Docker 生产级部署（进阶篇）**](docker-production-auto-deploy) —— 多容器编排与生产级可靠性
-5. [**自托管 Umami 分析服务（扩展篇）**](./umami-integration-auto-deploy) —— Docker 环境集成分析服务
-6. [**VitePress 文档站子域名部署（扩展篇）**](./vitepress-docker-existing-infrastructure-subdomain-deployment) —— 静态文档站接入现有 Docker 基础设施
-
 ---
 
 本教程将带你用最简洁的方式，将你的应用打包成 Docker 镜像，并通过 GitHub Actions 自动部署到服务器。你将学会：

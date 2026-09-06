@@ -70,8 +70,8 @@ func (h *DocsHandler) buildSummary(doc *domain.Doc, lang string) domain.DocSumma
 		Description:    resolved.Description,
 		Date:           resolved.Date,
 		Slug:           resolved.Slug,
-		Level:          resolved.Level,
 		Series:         resolved.Series,
+		Order:          resolved.Order,
 		Tags:           resolved.Tags,
 		Lang:           resolvedLang,
 		IsFallback:     isFallback,
@@ -89,14 +89,13 @@ func (h *DocsHandler) GetDocs(c *gin.Context) {
 }
 
 // GetDocs 返回分页后的文章列表，支持按日期排序和筛选
-// GET /api/docs?page=1&limit=20&search=vue&level=P3&tag=go&tag=vue&content=true
+// GET /api/docs?page=1&limit=20&search=vue&tag=go&tag=vue&content=true
 func (h *DocsHandler) getDocsList(c *gin.Context) {
 	// 1. 获取查询参数
 	page := c.DefaultQuery("page", "1")
 	limit := c.DefaultQuery("limit", "10")
 	search := c.Query("search")
 	searchMode := domain.SearchMode(c.DefaultQuery("searchMode", "all"))
-	level := c.Query("level")
 	tags := c.QueryArray("tag")
 	includeContent := c.Query("content") == "true" // 是否返回 content
 	lang := requestLang(c)                         // 请求语言：en | zh
@@ -138,12 +137,7 @@ func (h *DocsHandler) getDocsList(c *gin.Context) {
 			resolved = doc
 		}
 
-		// 7.1. 按 level 筛选
-		if level != "" && resolved.Level != domain.Level(strings.ToUpper(level)) {
-			continue
-		}
-
-		// 7.2. 按搜索关键词筛选（作用于请求语言的标题/摘要）
+		// 7.1. 按搜索关键词筛选（作用于请求语言的标题/摘要）
 		if search != "" {
 			keyword := strings.ToLower(search)
 			matchTitle := strings.Contains(strings.ToLower(resolved.Title), keyword)
@@ -165,7 +159,7 @@ func (h *DocsHandler) getDocsList(c *gin.Context) {
 			}
 		}
 
-		// 7.3. 按标签筛选
+		// 7.2. 按标签筛选
 		if len(tags) > 0 && !resolved.ContainsAllTags(tags) {
 			continue
 		}
@@ -229,6 +223,61 @@ func (h *DocsHandler) getDocsList(c *gin.Context) {
 	})
 }
 
+// orderSeriesDocs 将同系列文档按阅读顺序排序。
+//
+// 规则：
+//   - 显式声明 order 的文章占据其 1-based 序号位置（order 越大越靠后）；
+//   - 未声明 order 的文章按日期升序（阅读顺序）填充剩余的空位。
+//
+// 这样既能让"混入的关联文"通过 order 被移到正确位置，又能让绝大多数
+// 按日期升序即自然阅读顺序的系列无需任何改动。
+func orderSeriesDocs(docs []domain.DocSummary) []domain.DocSummary {
+	n := len(docs)
+	if n <= 1 {
+		return docs
+	}
+
+	// 找出显式声明的 order 取值集合，超出 1..n 范围的视为非法，忽略（用日期兜底）。
+	validOrder := make(map[int]bool)
+	for _, d := range docs {
+		if d.Order != nil && *d.Order >= 1 && *d.Order <= n {
+			validOrder[*d.Order] = true
+		}
+	}
+
+	// 按日期升序排序未声明 order 的文章（作为默认阅读顺序）。
+	unordered := make([]domain.DocSummary, 0, n)
+	ordered := make([]domain.DocSummary, 0, n)
+	for _, d := range docs {
+		if d.Order != nil && validOrder[*d.Order] {
+			ordered = append(ordered, d)
+		} else {
+			unordered = append(unordered, d)
+		}
+	}
+	sort.Slice(unordered, func(i, j int) bool {
+		return unordered[i].Date.Before(unordered[j].Date)
+	})
+
+	result := make([]domain.DocSummary, n)
+	filled := make([]bool, n)
+	// 1. 放置显式 order 的文章
+	for _, d := range ordered {
+		idx := *d.Order - 1
+		result[idx] = d
+		filled[idx] = true
+	}
+	// 2. 用未声明 order（按日期升序）填充空位
+	ui := 0
+	for i := 0; i < n; i++ {
+		if !filled[i] {
+			result[i] = unordered[ui]
+			ui++
+		}
+	}
+	return result
+}
+
 // GetSeriesGroup 返回按系列分组的文章列表
 // GET /api/docs?group=series&lang=en
 func (h *DocsHandler) getSeriesGroup(c *gin.Context) {
@@ -244,9 +293,7 @@ func (h *DocsHandler) getSeriesGroup(c *gin.Context) {
 		groups[slug] = append(groups[slug], h.buildSummary(doc, lang))
 	}
 	for slug := range groups {
-		sort.Slice(groups[slug], func(i, j int) bool {
-			return groups[slug][i].Date.After(groups[slug][j].Date)
-		})
+		groups[slug] = orderSeriesDocs(groups[slug])
 	}
 
 	result := make([]domain.SeriesGroup, 0, len(groups))

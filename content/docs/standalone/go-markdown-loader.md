@@ -2,7 +2,6 @@
 title: 用 Go 重构 Markdown 加载：一个前端开发者的实战学习笔记
 description: 从 Nuxt Content 全家桶到 Go 重构代码——一个前端开发者如何用真实项目驱动 Go 语言学习，实现轻量、透明、可控的 Markdown 数据加载方案。
 date: 2026-07-11 20:00:00
-level: P3
 tags:
   - Go
   - Engineering
@@ -279,7 +278,6 @@ title: Go 后端开发实践
 description: 从 Markdown 到内存的完整方案
 date: 2026-07-10
 permalink: 760e47b3-05bc-4ad6-9d43-ad95426b8127
-level: P3
 tags:
   - Go
   - Markdown

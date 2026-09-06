@@ -2,7 +2,6 @@
 title: "LLM Narrative Engines, Part 5: Integration Testing and Behavior Freezing"
 description: The parser is written — but how do you ensure future changes don't break it? Golden file tests, validators, and sliding-window aging tests — freezing parsing behavior with tests.
 date: 2026-07-20 21:00:00
-level: P4
 series: narrative-engine
 tags:
   - Go

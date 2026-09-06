@@ -3,27 +3,11 @@ title: 构建大模型叙事引擎：运行时闭环与多分支存档
 description: 契约在手，怎么让它活起来？五层三明治 Prompt 结构、流式全角缩进、Mother-Child 分支存档、记忆提取——构建完整的运行时闭环。
 date: 2026-07-20 23:00:00
 series: narrative-engine
-level: P3
 tags:
   - Go
   - LLM
   - Engineering
 ---
-
-## 📚 系列导航
-
-本系列共六篇：
-
-1. [**从自由叙事到契约约束**](./narrative-engine-from-freeform-to-constrained) —— .meph 格式的设计动机与取舍
-2. [**快速上手：从零写出你的第一个契约**](./narrative-engine-your-first-contract) —— 无需前置知识，20 分钟完整体验
-3. [**区块扫描与行号绑定**](./narrative-engine-block-scanner-and-line-numbers) —— 行号绑定与精确报错
-4. [**规则表达式与插值语法的解析**](./narrative-engine-parsing-rules-and-interpolation) —— 条件-动作拆解与插值解析
-5. [**集成测试与行为冻结**](./narrative-engine-integration-testing-and-behavior-freezing) —— Golden File 测试与行为稳定
-6. [**运行时闭环与多分支存档**](./narrative-engine-runtime-loop-and-branching) —— 五层 Prompt 与多分支存档
-
----
-
-> **前置阅读**：这是本系列的最后一篇，建议先读前五篇——第一篇了解 `.meph` 格式，第二篇上手实操，第三、四篇理解解析器如何输出 `domain.Contract`，第五篇理解测试如何保障行为稳定。本篇假设你已经知道引擎拿到了 `contract` 结构体，要解决的核心问题是：**怎么驱动它运转起来？**
 
 ## 一、叙事引擎的第五个问题：怎么让规则活起来？
 

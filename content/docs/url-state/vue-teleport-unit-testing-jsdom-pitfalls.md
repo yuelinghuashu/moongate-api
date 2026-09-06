@@ -3,7 +3,6 @@ title: Vue 3 Teleport 组件单元测试指南：5 个 jsdom 陷阱与顺手抓�
 description: 为我们的组件库 Moongate Vue 编写 204 个单元测试时，Teleport 组件在 jsdom 环境中踩了 5 个坑，还顺手揪出了 2 个隐藏 bug。本文复盘完整过程，附可复现的最小示例。
 date: 2026-08-05
 series:
-level: P4
 tags:
   - Vue
   - Engineering

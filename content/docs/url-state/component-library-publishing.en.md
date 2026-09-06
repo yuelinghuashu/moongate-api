@@ -2,7 +2,6 @@
 title: 'From Code to npm: Publishing a Vue 3 Component Library and Avoiding Pitfalls'
 description: 'Complete workflow of publishing the moongate-vue component library to npm: build verification pipeline, distribution contract, nrm registry management, 2FA and WebAuthn network pitfalls, local link testing, bundle budget, automation scripts, and a production release checklist.'
 date: 2026-05-20
-level: P4
 series: 
 tags:
   - CI/CD

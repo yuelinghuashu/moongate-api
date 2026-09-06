@@ -3,7 +3,6 @@ title: Nuxt + Go 全栈实践：从 URL 状态到后端 API 的完整闭环
 description: 将前三篇的 URL 状态管理延伸至 Go 后端，实现分页、筛选、排序的端到端数据流。涵盖前后端参数约定、Go Gin 框架实践、useAsyncData 自动联动，以及 39 篇文档从 4 分钟到 10 秒的部署优化。
 date: 2026-07-11 21:00:00
 series: url-state
-level: P3
 tags:
   - Nuxt
   - Go
@@ -22,15 +21,6 @@ tags:
 - Go Gin 框架中处理分页、筛选、排序的实践
 - 前端 `useAsyncData` 与后端 API 的自动联动
 - 从 URL 状态到后端响应的完整数据流闭环
-
-## 📚 系列导航
-
-本系列共四篇：
-
-1. [**Nuxt 中 URL 与状态双向绑定（原理篇）**](./nuxt-url-state-guide) —— URL 状态同步原理与手写方案
-2. [**手写 useRouteQuery（封装篇）**](./nuxt-use-route-query-composables) —— 封装成开箱即用的 composable
-3. [**文档列表页完整指南（实战篇）**](./nuxt-docs-list-page-complete-guide) —— 实现完整的文档列表页
-4. [**Nuxt + Go 全栈实践**](./nuxt-go-fullstack-closed-loop) —— 前端 URL 状态与 Go API 打通
 
 ## 一、前置阅读
 

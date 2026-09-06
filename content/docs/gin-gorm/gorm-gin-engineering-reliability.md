@@ -3,38 +3,11 @@ title: GORM 工程化实战（二）：可靠性与生产化
 description: 系列第 7 篇（收尾）：统一错误中间件与 ok/fail（slog、超时 504）、排序白名单、文件头嗅探与 Uploader 抽象、连接池；末尾附系列承诺兑现映射表。
 date: 2026-09-06 02:00:00
 series: gin-gorm
-level: P4
 tags:
   - Go
   - PostgreSQL
   - ORM
   - Engineering
----
-
-## 📚 系列导航
-
-本系列共七篇：
-
-1. [**GORM 入门实战：用 Gin + GORM 写一个图书管理 API**](./gorm-gin-crud-tutorial) —— 单表 CRUD、软删除、零值陷阱，从零跑通完整项目
-2. [**GORM 多表关联实战：评论模型、增删查与 Preload**](./gorm-gin-relations) —— 第二张表 comments、评论增删查、详情按需加载
-3. [**GORM 文件与查询增强实战：封面上传、分页搜索与评论数聚合**](./gorm-gin-media-query) —— 上传与静态服务、分页/搜索/排序、评论数聚合
-4. [**GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译**](./gorm-gin-dto-batch) —— CreateInBatches、DTO 与模型分离、校验错误翻译
-5. [**GORM 多对多实战：书籍与标签**](./gorm-gin-tags) —— many2many 连接表、按标签筛选与关联增删
-6. [**GORM 工程化实战（一）：分层、注入与可测性（选读）**](./gorm-gin-engineering-layering) —— Repository/Service 分层、构造注入、表驱动测试
-7. [**GORM 工程化实战（二）：可靠性与生产化（选读）**](./gorm-gin-engineering-reliability) —— 统一错误处理、安全补强、对象存储、连接池
-
----
-
-> 🎓 **工程化选读**：接《工程化（一）》的进阶部分，面向架构与交付角色的生产化话题，跳过不影响前五篇主线。
-
-> **前置阅读**：完成[《工程化（一）》](./gorm-gin-engineering-layering)——已分层（`internal/` 三层 + 构造注入）、handler 依赖接口、`go test ./internal/handler/` 通过（覆盖已迁移接口）的项目。代码约定不变（`WithContext` / `errors.Is` 判 404 / 400·404·201）。
-
-分层解决"可测"，本篇解决"可靠"。前五篇处处留了预告——错误统一、超时 504、排序白名单、文件头嗅探、对象存储、连接池——这里一次性结清。
-
-> **两阶段教学法（先消除一个疑虑）：** 前五篇让 handler 手写 `c.JSON(错误)`、错误消息五花八门，本篇要把它收拢成"handler 只挂错误、中间件统一翻译"。这不是"之前教错了"——正文阶段必须把样板摊开，你才看得清每个状态码从哪来；工程阶段再收拢，你才理解收拢在解决什么问题。两阶段缺一不可，本篇是第二阶段。
->
-> **本篇地图：** 四个话题，每个都按「动机 → 旧写法 → 新写法 → 为什么」展开：① 错误统一（ok/fail + 错误中间件 + slog + 504）；② 安全补强（排序白名单、文件头嗅探）；③ 存储抽象（Uploader）；④ 连接池。③ ④ 是"生产化选读"，跳过不影响 ① ② 的闭环。
-
 ---
 
 ## 一、统一错误处理：中间件 + ok/fail + slog

@@ -25,7 +25,6 @@ func TestParseMarkdown_ValidDoc(t *testing.T) {
 title: "Go 测试"
 description: "测试解析功能的文章"
 date: 2025-01-15 10:00:00
-level: P2
 tags:
   - Go
   - Testing
@@ -47,9 +46,6 @@ This is a **test** body.
 	}
 	if doc.Description != "测试解析功能的文章" {
 		t.Errorf("Description = %q, want %q", doc.Description, "测试解析功能的文章")
-	}
-	if doc.Level != domain.LevelP2 {
-		t.Errorf("Level = %q, want %q", doc.Level, domain.LevelP2)
 	}
 	if len(doc.Tags) != 2 || doc.Tags[0] != "Go" || doc.Tags[1] != "Testing" {
 		t.Errorf("Tags = %v, want [Go Testing]", doc.Tags)

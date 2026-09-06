@@ -2,7 +2,6 @@
 title: "Brand Ecosystem: Design Philosophy & Visual Contract"
 description: Elevate your theme into a design system with design philosophy, a visual contract, and a brand ecosystem.
 date: 2026-08-06 08:00:00
-level: P3
 series: design-system
 tags:
   - Design System

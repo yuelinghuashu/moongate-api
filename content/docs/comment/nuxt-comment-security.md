@@ -3,24 +3,11 @@ title: 为评论区添加内容过滤与安全防护
 description: 为 Nuxt 评论区增加敏感词过滤、文档归属验证、防重复提交与限流，构建多层安全防护体系。包含前端实时验证、后端严格校验、递归 CTE 归属验证及生产环境建议。
 date: 2026-03-23
 series: comment
-level: P3
 tags:
   - Nuxt
   - Vue
   - Security
 ---
-
-## 📚 系列导航
-
-本系列共三篇：
-
-1. [**从零到一：多级引用评论区**](./nuxt-multi-level-replies) —— 评论区基础实现（多级引用、时间线、组件）
-2. [**评论区完美支持 Markdown**](./nuxt-comment-markdown-guide) —— Markdown 安全渲染（marked + Shiki + DOMPurify）
-3. [**评论区内容过滤与安全防护**](./nuxt-comment-security) —— 敏感词过滤与归属验证
-
----
-
-> 在前文[《从零到一：为 Moongate 博客打造一个支持多级引用的评论区》](./nuxt-multi-level-replies.md)中，我们构建了一个功能完备的评论系统。本文将在此基础上，为评论区增加内容过滤、安全校验和防滥用机制，确保评论区的健康与安全。
 
 ## 1. 背景与需求
 
