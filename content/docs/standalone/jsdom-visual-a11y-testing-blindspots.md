@@ -8,7 +8,7 @@ tags:
   - Engineering
 ---
 
-> 单测全绿 ≠ 组件正确。jsdom 看不到两件事：**视觉正确性**（`opacity`）和**无障碍规范**（`aria-*`）。本篇是《[Vue 3 Teleport 组件单元测试指南](../url-state/vue-teleport-unit-testing-jsdom-pitfalls)》的续篇。
+> 单测全绿 ≠ 组件正确。jsdom 看不到两件事：**视觉正确性**（`opacity`）和**无障碍规范**（`aria-*`）。本篇是《[Vue 3 Teleport 组件单元测试指南](./vue-teleport-unit-testing-jsdom-pitfalls)》的续篇。
 
 ## 背景
 

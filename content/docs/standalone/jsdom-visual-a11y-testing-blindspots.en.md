@@ -8,7 +8,7 @@ tags:
   - Engineering
 ---
 
-> Green unit tests ≠ a correct component. jsdom can't see two things: **visual correctness** (`opacity`) and **accessibility spec compliance** (`aria-*`). This is a follow-up to the [Vue 3 Teleport Component Unit Testing Guide](../url-state/vue-teleport-unit-testing-jsdom-pitfalls.en).
+> Green unit tests ≠ a correct component. jsdom can't see two things: **visual correctness** (`opacity`) and **accessibility spec compliance** (`aria-*`). This is a follow-up to the [Vue 3 Teleport Component Unit Testing Guide](./vue-teleport-unit-testing-jsdom-pitfalls.en).
 
 ## Background
 

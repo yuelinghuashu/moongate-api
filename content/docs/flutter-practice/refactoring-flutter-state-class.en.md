@@ -8,7 +8,6 @@ tags:
   - Dart
   - State Management
   - Engineering
-  - Engineering
 ---
 
 > A step-by-step record of refactoring an 800-line `State` class.  
