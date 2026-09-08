@@ -3,6 +3,7 @@ title: GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译
 description: 系列第 4 篇：从数据文件批量导入（CreateInBatches）、请求 DTO 与模型分离、参数化校验规则、validator 校验错误翻译；末尾附系列一览、路由总表与后续篇目预告。
 date: 2026-09-04
 series: gin-gorm
+order: 4
 tags:
   - Go
   - PostgreSQL

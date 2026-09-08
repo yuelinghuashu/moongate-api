@@ -3,6 +3,7 @@ title: Nuxt 集成 RSS 服务完全指南：从模块到手写的优雅之路
 description: 手把手教你绕过第三方模块的坑，亲手构建完全可控的 RSS/Atom/JSON Feed 服务。
 date: 2026-02-23
 series: ecosystem
+order: 2
 tags:
   - Nuxt
   - SEO

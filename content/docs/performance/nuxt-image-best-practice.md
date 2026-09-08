@@ -3,6 +3,7 @@ title: Nuxt 图片引用：<NuxtImg> 替代原生 <img> 的一次实践
 description: 介绍了为什么在 Nuxt 项目中，永远优先使用 <NuxtImg> 而不是原生 <img>。
 date: 2026-02-17
 series: performance
+order: 3
 tags:
   - Nuxt
   - Performance

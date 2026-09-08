@@ -3,6 +3,7 @@ title: 'Vue 3 Simple Component Development: API Design from the Button Component
 description: 'Using the Button component as an example, explore Vue 3 component library API design philosophy: Props definition, variant system, size trade-offs, slot design, state handling, accessibility, and the design trade-offs behind a minimal API.'
 date: 2026-05-07
 series: moongate-vue
+order: 3
 tags:
   - Vue
   - Design System

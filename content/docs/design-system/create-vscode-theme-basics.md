@@ -3,6 +3,7 @@ title: VS Code 主题：从手写 JSON 到可发布
 description: 不依赖脚手架，从零手写最小主题 JSON，理解 colors 与 tokenColors 的核心机制，掌握调试、打包与发布的完整流程，构建属于你的第一个 VS Code 主题。
 date: 2026-08-06 00:00:00
 series: design-system
+order: 1
 tags:
   - VSCode
   - Theme

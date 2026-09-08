@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：规则表达式与插值语法的解析
 description: 规则的条件-动作表达式怎么拆解？{变量} 插值语法怎么处理？本文覆盖解析层最后两块拼图——让规则从文本变为可执行结构。
 date: 2026-07-20 19:00:00
 series: narrative-engine
+order: 4
 tags:
   - Go
   - DSL

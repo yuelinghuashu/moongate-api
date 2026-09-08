@@ -3,6 +3,7 @@ title: GORM 工程化实战（二）：可靠性与生产化
 description: 系列第 7 篇（收尾）：统一错误中间件与 ok/fail（slog、超时 504）、排序白名单、文件头嗅探与 Uploader 抽象、连接池；末尾附系列承诺兑现映射表。
 date: 2026-09-06 02:00:00
 series: gin-gorm
+order: 7
 tags:
   - Go
   - PostgreSQL

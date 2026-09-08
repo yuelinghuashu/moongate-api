@@ -3,6 +3,7 @@ title: 从零实现词法分析器（二）：用一张表统一管理所有符�
 description: 避免 Lexer 中出现大量 switch-case，引入符号映射表（symbolMap）统一管理所有符号，实现中英双语支持和数据驱动设计。
 date: 2026-07-13 21:00:00
 series: lexer-from-scratch
+order: 2
 tags:
   - Go
   - Compiler

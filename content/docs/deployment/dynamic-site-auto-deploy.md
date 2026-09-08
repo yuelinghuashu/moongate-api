@@ -3,6 +3,7 @@ title: GitHub Actions + Caddy 全自动部署动态网站（动态篇）
 description: 深入后端服务的进程管理、环境变量注入、数据库迁移，结合 Caddy 反向代理，打造完整的动态应用部署流水线。
 date: 2026-01-23
 series: deployment
+order: 2
 tags:
   - Caddy
   - CI/CD

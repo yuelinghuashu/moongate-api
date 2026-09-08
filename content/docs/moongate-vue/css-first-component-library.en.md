@@ -3,6 +3,7 @@ title: "CSS-First + Thin Component Wrappers: A 25KB Component Library in Practic
 description: Design-token-driven Vue 3 component library architecture. Four-layer CSS architecture, minimal Vue components, Vite multi-entry build, automated bundle budget verification, keeping the library under 25KB gzipped.
 date: 2026-04-19
 series: moongate-vue
+order: 2
 tags:
   - CSS
   - Vue

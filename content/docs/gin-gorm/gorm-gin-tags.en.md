@@ -3,6 +3,7 @@ title: "GORM Many-to-Many in Practice: Books & Tags"
 description: "Part 5: delivers on an earlier promise — adding tags to books (many-to-many): the many2many declaration & join table, Preload, filtering by tag, adding/removing associations, plus two advanced topics: deleting the parent record, and a join model with extra fields."
 date: 2026-09-05
 series: gin-gorm
+order: 5
 tags:
   - Go
   - PostgreSQL

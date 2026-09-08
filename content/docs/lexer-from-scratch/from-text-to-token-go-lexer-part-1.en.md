@@ -3,6 +3,7 @@ title: "Building a Lexer from Scratch (Part 1): Token — the Smallest Unit a Co
 description: "Starting from the pain point that computers cannot understand text, learn what a Token is, define your first Token struct in Go, and take the first step toward a lexer."
 date: 2026-07-13 20:00:00
 series: lexer-from-scratch
+order: 1
 tags:
   - Go
   - Engineering

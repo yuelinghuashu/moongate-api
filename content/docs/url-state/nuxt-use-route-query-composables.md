@@ -3,6 +3,7 @@ title: 手写一个更适合 Nuxt 的 useRouteQuery：简化 URL 状态同步
 description: 封装一套开箱即用的 useRouteQueryString / Number / Array，将 70 行重复的 URL 状态同步代码压缩到 7 行，并彻底解决官方版本的 SSR 隐患。包含完整源码、防抖处理与反向同步示例。
 date: 2026-03-22
 series: url-state
+order: 3
 tags:
   - Nuxt
   - Vue

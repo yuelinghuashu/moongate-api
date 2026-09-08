@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：区块扫描与行号绑定
 description: 从格式设计到解析器实现，手写区块扫描器让错误报出"第 12 行"而非"position 246"——精确的行号绑定是手写解析器的核心价值。
 date: 2026-07-20 17:00:00
 series: narrative-engine
+order: 3
 tags:
   - Go
   - DSL

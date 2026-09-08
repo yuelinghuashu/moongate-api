@@ -3,6 +3,7 @@ title: "Building a Lexer from Scratch (Part 3): Moving the Pointer and Starting 
 description: "Implement the core lexer engine: move the cursor pointer, query the symbol table, and slice a text string into a structured stream of tokens."
 date: 2026-07-13 22:00:00
 series: lexer-from-scratch
+order: 3
 tags:
   - Go
   - Compiler

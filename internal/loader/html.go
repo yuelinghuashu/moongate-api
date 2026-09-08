@@ -9,6 +9,9 @@ import (
 // mdToHTML 将 Markdown 正文转换为 HTML 字符串。
 //
 // 转换流程：
+//  0. 预处理：把 <details>…</details> 内的围栏代码块改写为 <pre><code>
+//     （CommonMark/gomarkdown 会把 details 区域整体按原始 HTML 透传，
+//     不解析其中的 Markdown 围栏，详见 details.go）
 //  1. 使用 parser 将 Markdown 解析为 AST（抽象语法树）
 //  2. 使用 renderer 将 AST 渲染为 HTML
 //
@@ -18,6 +21,8 @@ import (
 //   - CommonFlags：默认 HTML 标式化选项
 //   - HrefTargetBlank：链接在新窗口打开
 func mdToHTML(body string) string {
+	body = expandDetailsCodeFences(body)
+
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs
 	p := parser.NewWithExtensions(extensions)
 

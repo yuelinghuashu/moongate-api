@@ -3,6 +3,7 @@ title: "Building a Lexer from Scratch (Part 2): Managing Every Symbol with a Sin
 description: "Avoid a wall of switch-cases in your lexer: introduce a symbol map (symbolMap) to manage every symbol in one table, with built-in bilingual (Chinese/English) support and a data-driven design."
 date: 2026-07-13 21:00:00
 series: lexer-from-scratch
+order: 2
 tags:
   - Go
   - Compiler

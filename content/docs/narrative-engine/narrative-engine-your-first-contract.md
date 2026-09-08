@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：快速上手——从零写出你的第一�
 description: 从零开始写一份 .meph 契约文件，编译、运行，让 LLM 遵守你写下的规则生成叙事。无需前置知识，快速完整体验。
 date: 2026-07-20 15:00:00
 series: narrative-engine
+order: 2
 tags:
   - Go
   - LLM

@@ -3,6 +3,7 @@ title: "GORM Relations in Practice: Comment Model, CRUD & Preload"
 description: "On top of the crash course's single-table CRUD, this part introduces a second table `comments` (one-to-many): the model & migration, comment create/list/delete, and using Preload to load a book's comments on demand in the detail endpoint. Full code and verification commands in every section."
 date: 2026-09-02
 series: gin-gorm
+order: 2
 tags:
   - Go
   - PostgreSQL

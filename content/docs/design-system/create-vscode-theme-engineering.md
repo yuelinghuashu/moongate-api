@@ -3,6 +3,7 @@ title: 主题工程化：从单体 JSON 到模块化 YAML
 description: 将单体 JSON 重构为模块化 YAML 项目，用构建脚本实现变量替换与自动生成。让颜色变量可复用、语言规则可维护，为设计系统升级打下坚实基础。
 date: 2026-08-06 02:00:00
 series: design-system
+order: 2
 tags:
   - VSCode
   - Theme

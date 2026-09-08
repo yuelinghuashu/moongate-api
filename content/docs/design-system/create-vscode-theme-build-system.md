@@ -3,6 +3,7 @@ title: 构建体系：可测试、可验证的工程实践
 description: 从单体脚本到模块化工程体系——ESM 模块拆分、WCAG 对比度自动校验、scope 自动验证、自动化测试与多格式产物生成，让构建脚本自身成为一套可信赖的工程基础设施。
 date: 2026-08-06 06:00:00
 series: design-system
+order: 4
 tags:
   - VSCode
   - Theme

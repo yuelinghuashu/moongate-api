@@ -3,6 +3,7 @@ title: "LLM Narrative Engines, Part 4: Parsing Rules and Interpolation"
 description: How do you parse condition-action expressions? How does the {variable} interpolation syntax work? This post covers the last two pieces of the parsing layer — turning rules from text into executable structures.
 date: 2026-07-20 19:00:00
 series: narrative-engine
+order: 4
 tags:
   - Go
   - DSL

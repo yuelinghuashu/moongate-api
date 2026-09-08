@@ -3,6 +3,7 @@ title: Vue 3 简单组件开发实战：从 Button 组件看 API 设计
 description: 以 Button 这一简单组件为例，深入探讨 Vue 3 组件库的 API 设计哲学，涵盖 Props 定义、变体系统、尺寸取舍、插槽设计、状态管理、无障碍支持及与主流 UI 库的对比，揭示极简 API 背后的设计权衡。
 date: 2026-05-07
 series: moongate-vue
+order: 3
 tags:
   - Vue
   - Design System

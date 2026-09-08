@@ -124,9 +124,29 @@ func (h *DocsHandler) getDocsList(c *gin.Context) {
 		docs = append(docs, doc)
 	}
 
-	// 6. 按日期排序（最新的在前）
+	// 6. 按日期排序（最新的在前）。日期并列时使用确定性次级规则，
+	//    否则受 map 迭代随机序影响，每次请求顺序不同，会引发 SSR 与客户端水合不一致。
+	//    次级规则（保证确定性且语义友好）：
+	//      - 同系列：列表页遵循"最新在前"惯例 → order 降序（大的在上；无 order 视为 0，排在最后）；
+	//      - 不同系列 / 无系列：按 slug 升序。
 	sort.Slice(docs, func(i, j int) bool {
-		return docs[i].Date.After(docs[j].Date)
+		if !docs[i].Date.Equal(docs[j].Date) {
+			return docs[i].Date.After(docs[j].Date)
+		}
+		si, sj := docs[i].Series, docs[j].Series
+		if si != nil && sj != nil && *si == *sj {
+			oi, oj := 0, 0
+			if docs[i].Order != nil {
+				oi = *docs[i].Order
+			}
+			if docs[j].Order != nil {
+				oj = *docs[j].Order
+			}
+			if oi != oj {
+				return oi > oj
+			}
+		}
+		return docs[i].Slug < docs[j].Slug
 	})
 
 	// 7. 筛选逻辑（title/description/tags 均按请求语言解析）

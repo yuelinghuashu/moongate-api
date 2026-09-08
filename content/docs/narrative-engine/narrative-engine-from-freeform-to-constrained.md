@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：从自由叙事到契约约束
 description: 为什么 JSON 和 YAML 都不适合做叙事引擎的配置文件？本文从大模型叙事的一致性问题出发，解释了 .meph 格式的设计取舍——用解析器的复杂度换创作者体验。
 date: 2026-07-20 13:00:00
 series: narrative-engine
+order: 1
 tags:
   - DSL
   - JSON

@@ -3,6 +3,7 @@ title: "GORM Crash Course: Building a Book Management API with Gin + GORM"
 description: "Build a complete book-management API from scratch — GORM CRUD, soft delete, the zero-value trap, request contexts, and error handling — with the full project code and test commands."
 date: 2026-09-01
 series: gin-gorm
+order: 1
 tags:
   - Go
   - PostgreSQL

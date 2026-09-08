@@ -3,6 +3,7 @@ title: 设计系统：DTCG 三层架构与昼夜双变体
 description: 用量业界标准的 DTCG 设计令牌标准管理颜色，通过语义层与重力补偿构建深色/浅色双变体，让「同一语义角色在不同背景下视觉重量对等」从理念变为可执行的工程架构。
 date: 2026-08-06 04:00:00
 series: design-system
+order: 3
 tags:
   - Design System
   - Theme

@@ -3,6 +3,7 @@ title: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境�
 description: Nuxt 4 集成 GitHub 登录：从原理到实践（开发 + 生产环境完整版）
 date: 2026-02-15
 series: backend
+order: 1
 tags:
   - Nuxt
   - OAuth

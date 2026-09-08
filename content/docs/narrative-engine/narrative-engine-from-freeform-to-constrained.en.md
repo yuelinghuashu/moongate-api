@@ -3,6 +3,7 @@ title: "LLM Narrative Engines, Part 1: From Freeform to Constrained"
 description: Why JSON and YAML fail for narrative engines, and how a custom DSL (.meph) solves the consistency problem — trading parser complexity for creator experience.
 date: 2026-07-20 13:00:00
 series: narrative-engine
+order: 1
 tags:
   - DSL
   - JSON

@@ -3,6 +3,7 @@ title: GitHub Actions + Docker 生产级自动化部署（进阶篇）
 description: 通过容器化技术实现环境一致性，自动构建镜像并分发至私有仓库，用 Docker Compose 编排服务，彻底告别环境依赖。
 date: 2026-03-16 23:00:00
 series: deployment
+order: 4
 tags:
   - Caddy
   - Docker

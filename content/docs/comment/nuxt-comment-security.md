@@ -3,6 +3,7 @@ title: 为评论区添加内容过滤与安全防护
 description: 为 Nuxt 评论区增加敏感词过滤、文档归属验证、防重复提交与限流，构建多层安全防护体系。包含前端实时验证、后端严格校验、递归 CTE 归属验证及生产环境建议。
 date: 2026-03-23
 series: comment
+order: 3
 tags:
   - Nuxt
   - Vue

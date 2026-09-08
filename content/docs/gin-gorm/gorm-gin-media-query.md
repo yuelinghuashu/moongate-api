@@ -3,6 +3,7 @@ title: GORM 文件与查询增强实战：封面上传、分页搜索与评论�
 description: 给图书加封面：字段命名决策、上传接口与静态服务；再把列表升级为分页 + 搜索 + 排序，并用 JOIN + GROUP BY 给每本书带上评论数。每节附完整代码与验证命令。
 date: 2026-09-03
 series: gin-gorm
+order: 3
 tags:
   - Go
   - PostgreSQL

@@ -3,6 +3,7 @@ title: "GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Tra
 description: "Part 4: batch-import from a data file (CreateInBatches), separates request DTOs from models with parameterized validation rules, and translates validator errors into clear client messages. Ends with the series overview, the full route table, and what comes next."
 date: 2026-09-04
 series: gin-gorm
+order: 4
 tags:
   - Go
   - PostgreSQL

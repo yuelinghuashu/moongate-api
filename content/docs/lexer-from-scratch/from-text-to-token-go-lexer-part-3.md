@@ -3,6 +3,7 @@ title: 从零实现词法分析器（三）：让指针动起来，启动 Lexer 
 description: 正式实现词法分析器的核心引擎，通过光标指针的移动与符号表查询，将文本字符串切分成结构化的 Token 流。
 date: 2026-07-13 22:00:00
 series: lexer-from-scratch
+order: 3
 tags:
   - Go
   - Compiler

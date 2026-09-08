@@ -3,6 +3,7 @@ title: GORM 多表关联实战：评论模型、增删查与 Preload
 description: 在入门篇单表 CRUD 的基础上引入第二张表 comments（一对多）：模型与迁移、评论的增删查、以及用 Preload 在详情接口按需加载关联评论。每节附完整代码与验证命令。
 date: 2026-09-02
 series: gin-gorm
+order: 2
 tags:
   - Go
   - PostgreSQL

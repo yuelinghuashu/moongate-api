@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：运行时闭环与多分支存档
 description: 契约在手，怎么让它活起来？五层三明治 Prompt 结构、流式全角缩进、Mother-Child 分支存档、记忆提取——构建完整的运行时闭环。
 date: 2026-07-20 23:00:00
 series: narrative-engine
+order: 6
 tags:
   - Go
   - LLM

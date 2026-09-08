@@ -3,6 +3,7 @@ title: "GORM Engineering in Practice (Part 2): Reliability & Production Readines
 description: "Part 7 (series finale): a unified error middleware with ok/fail responses (slog, timeout 504), sort whitelists, file-header sniffing behind an Uploader abstraction, and connection-pool tuning. Ends with a mapping table of every promise the series made and where it landed."
 date: 2026-09-06 02:00:00
 series: gin-gorm
+order: 7
 tags:
   - Go
   - PostgreSQL

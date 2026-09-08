@@ -12,7 +12,7 @@ tags:
 
 ## Background
 
-In the [Vue 3 Teleport Component Unit Testing Guide](../url-state/vue-teleport-unit-testing-jsdom-pitfalls.en), we covered how to write jsdom tests _correctly_ — mounting, unmounting, cleanup, timing. That article carried an implicit assumption: "if the tests are written right and everything is green, the component is correct."
+In the [Vue 3 Teleport Component Unit Testing Guide](./vue-teleport-unit-testing-jsdom-pitfalls.en), we covered how to write jsdom tests _correctly_ — mounting, unmounting, cleanup, timing. That article carried an implicit assumption: "if the tests are written right and everything is green, the component is correct."
 
 Reality slapped us in the face — twice.
 

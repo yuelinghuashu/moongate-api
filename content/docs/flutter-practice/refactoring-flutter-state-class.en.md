@@ -3,6 +3,7 @@ title: Three Attempts to Refactor a Large Flutter State Class — and the Final 
 description: When an 800-line State class mixes contract trees, stage operations, and navigation — how do you safely split it? A complete refactoring journey from Mixin and part to Widget Composition.
 date: 2026-08-11
 series: flutter-practice
+order: 1
 tags:
   - Flutter
   - Dart

@@ -3,6 +3,7 @@ title: GORM 多对多实战：书籍与标签
 description: 系列第 5 篇：兑现伏笔给图书加 tags（多对多）——many2many 声明与连接表、Preload、按标签筛选、关联增删，以及删父记录与带字段连接表两个进阶。
 date: 2026-09-05
 series: gin-gorm
+order: 5
 tags:
   - Go
   - PostgreSQL

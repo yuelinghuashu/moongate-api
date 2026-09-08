@@ -3,6 +3,7 @@ title: 从零实现词法分析器（一）：Token——计算机的最小理�
 description: 从计算机不认识文本的痛点出发，理解 Token 的概念，并用 Go 定义第一个 Token 结构体，完成词法分析器的第一步。
 date: 2026-07-13 20:00:00
 series: lexer-from-scratch
+order: 1
 tags:
   - Go
   - Engineering

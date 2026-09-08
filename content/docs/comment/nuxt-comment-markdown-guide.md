@@ -3,6 +3,7 @@ title: Nuxt 评论区完美支持 Markdown：从解析、高亮到安全渲染
 description: 手把手教你为 Nuxt 博客评论区添加安全、美观、功能完整的 Markdown 渲染支持，代码块配色与文档（Nuxt Content）自动统一，深浅色模式无缝切换。
 date: 2026-02-21
 series: comment
+order: 1
 tags:
   - Nuxt
   - Security
@@ -670,7 +671,3 @@ A：如果选择预加载方案，确保 Shiki 实例全局单例（插件方式
 ### Q：如何确认文档实际使用的主题？
 
 A：打开浏览器开发者工具，选中文档中的一个代码块，查看 `<pre>` 或 `<code>` 标签的类名，通常包含主题名称（如 `material-theme-palenight`）。也可在 `nuxt.config.ts` 中查看 `content.highlight.theme` 配置。
-
----
-
-本文以“评论区 Markdown 渲染”为核心，详细介绍了从选型到落地的全过程，并融入了与 Nuxt Content 配色统一的技巧。希望能帮到你，也欢迎在评论区留言交流！

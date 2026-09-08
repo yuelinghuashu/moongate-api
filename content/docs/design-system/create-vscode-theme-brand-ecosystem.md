@@ -3,6 +3,7 @@ title: 品牌生态：设计哲学与视觉契约
 description: 将主题升华为设计系统——定义设计哲学、建立视觉契约、提供显示器校准指南，让主题从代码工具进化为可复用的品牌资产，连接社区与产品生态。
 date: 2026-08-06 08:00:00
 series: design-system
+order: 5
 tags:
   - Design System
   - Theme

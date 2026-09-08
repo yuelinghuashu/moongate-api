@@ -3,6 +3,7 @@ title: VitePress 文档站接入已有 Docker 基础设施：子域名部署（�
 description: 本文记录如何将 VitePress 文档站部署为子域名，并接入已有 docker-compose 管理的动态站点（如 Nuxt 博客），共用同一 Caddy 反向代理。
 date: 2026-06-07
 series: deployment
+order: 6
 tags:
   - Caddy
   - Docker

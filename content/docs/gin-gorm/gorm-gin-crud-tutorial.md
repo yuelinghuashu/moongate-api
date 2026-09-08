@@ -3,6 +3,7 @@ title: GORM 入门实战：用 Gin + GORM 写一个图书管理 API
 description: 从零搭建一个完整的图书管理 API，涵盖 GORM 的 CRUD、软删除、零值陷阱等核心知识点，附带完整代码和测试命令
 date: 2026-09-01
 series: gin-gorm
+order: 1
 tags:
   - Go
   - PostgreSQL

@@ -5,6 +5,7 @@ import (
 	"moongate-api/internal/domain"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +75,7 @@ func setupDocsTestRouter() *gin.Engine {
 		doc3.Slug: doc3,
 	}
 	storeEn := map[string]*domain.Doc{
-		doc1En.Slug:   doc1En,
+		doc1En.Slug:    doc1En,
 		docEnOnly.Slug: docEnOnly,
 	}
 
@@ -163,6 +164,117 @@ func TestGetDocs_SortedByDateDesc(t *testing.T) {
 	for i, title := range expectedOrder {
 		if resp.Data[i].Title != title {
 			t.Errorf("Data[%d].Title = %q, want %q", i, resp.Data[i].Title, title)
+		}
+	}
+}
+
+// TestGetDocs_SameDateDeterministicOrder 回归测试：同一天发布的多篇文章（date 并列）在
+// 列表中的顺序必须是确定性的（同日按 slug 升序）。否则 map 迭代随机序会让每次请求的
+// 相对顺序不同，进而引发 Nuxt SSR 与客户端水合不一致（列表卡片整组"旋转"）。
+func TestGetDocs_SameDateDeterministicOrder(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	sameDate := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	slugs := []string{"streaming-and-migration", "memory-rag", "agent-loop", "env-and-ops", "minimal-agent"}
+	storeBySlug := make(map[string]*domain.Doc, len(slugs))
+	for _, slug := range slugs {
+		storeBySlug[slug] = &domain.Doc{
+			Title: "Doc " + slug,
+			Date:  sameDate,
+			Slug:  slug,
+			Tags:  []string{"Go", "Agent", "LLM"},
+		}
+	}
+	handler := NewDocsHandler(storeBySlug, nil)
+	r.GET("/api/docs", handler.GetDocs)
+
+	expectedOrder := append([]string(nil), slugs...)
+	sort.Strings(expectedOrder)
+
+	for attempt := 0; attempt < 50; attempt++ {
+		w := performRequest(r, "GET", "/api/docs")
+		if w.Code != http.StatusOK {
+			t.Fatalf("attempt %d: status code = %d, want 200", attempt, w.Code)
+		}
+
+		var resp struct {
+			Data []domain.DocSummary `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("attempt %d: failed to decode response: %v", attempt, err)
+		}
+		if len(resp.Data) != len(expectedOrder) {
+			t.Fatalf("attempt %d: data length = %d, want %d", attempt, len(resp.Data), len(expectedOrder))
+		}
+		for i, want := range expectedOrder {
+			if resp.Data[i].Slug != want {
+				t.Fatalf("attempt %d: data[%d].slug = %q, want %q（同日期文档顺序不确定）",
+					attempt, i, resp.Data[i].Slug, want)
+			}
+		}
+	}
+}
+
+// TestGetDocs_SameDateSameSeries_SortedByOrderDesc 回归测试：同一天发布的同系列文章，
+// 在全局列表页遵循"最新在前"惯例 → order 降序排列（大的在上），而不是按 slug 字典序。
+// 例如 go-agent 五篇同日发布，列表应呈现 记忆→服务与迁移→循环→最小代码→环境。
+func TestGetDocs_SameDateSameSeries_SortedByOrderDesc(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	sameDate := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	series := "go-agent"
+	// 故意让 slug 字典序与 order 相反：字典序下 agent-loop 会排第一，
+	// 正确行为是 order 最大的 memory-rag 排第一。
+	type item struct {
+		slug  string
+		order int
+	}
+	items := []item{
+		{"streaming-and-migration", 4},
+		{"memory-rag", 5},
+		{"agent-loop", 3},
+		{"env-and-ops", 1},
+		{"minimal-agent", 2},
+	}
+	storeBySlug := make(map[string]*domain.Doc, len(items))
+	for _, it := range items {
+		order := it.order
+		storeBySlug[it.slug] = &domain.Doc{
+			Title:  "Doc " + it.slug,
+			Date:   sameDate,
+			Slug:   it.slug,
+			Series: &series,
+			Order:  &order,
+			Tags:   []string{"Go", "Agent", "LLM"},
+		}
+	}
+	handler := NewDocsHandler(storeBySlug, nil)
+	r.GET("/api/docs", handler.GetDocs)
+
+	// 期望：order 降序 5..1（最大的在上），而不是 slug 字典序
+	expectedOrder := []string{"memory-rag", "streaming-and-migration", "agent-loop", "minimal-agent", "env-and-ops"}
+
+	for attempt := 0; attempt < 50; attempt++ {
+		w := performRequest(r, "GET", "/api/docs")
+		if w.Code != http.StatusOK {
+			t.Fatalf("attempt %d: status code = %d, want 200", attempt, w.Code)
+		}
+		var resp struct {
+			Data []domain.DocSummary `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("attempt %d: failed to decode response: %v", attempt, err)
+		}
+		if len(resp.Data) != len(expectedOrder) {
+			t.Fatalf("attempt %d: data length = %d, want %d", attempt, len(resp.Data), len(expectedOrder))
+		}
+		for i, want := range expectedOrder {
+			if resp.Data[i].Slug != want {
+				t.Fatalf("attempt %d: data[%d].slug = %q, want %q（同系列同日应 order 降序而非 slug）",
+					attempt, i, resp.Data[i].Slug, want)
+			}
 		}
 	}
 }

@@ -3,6 +3,7 @@ title: 'VS Code Theme: From Handwritten JSON to Publishing'
 description: Learn how to create, configure, and publish your own VS Code theme from scratch, without any scaffolding.
 date: 2026-08-06 00:00:00
 series: design-system
+order: 1
 tags:
   - VSCode
   - Theme

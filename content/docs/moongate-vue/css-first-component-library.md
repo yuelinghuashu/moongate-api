@@ -3,6 +3,7 @@ title: CSS 优先 + 组件薄封装：一个 25KB 组件库的极简实践
 description: 设计令牌驱动的 Vue 3 组件库架构实录。四层 CSS 架构、极简 Vue 组件、Vite 多入口构建、体积预算自动化验证，展示如何保持组件库在 25KB (gzip) 内的工程实践。
 date: 2026-04-19
 series: moongate-vue
+order: 2
 tags:
   - CSS
   - Vue

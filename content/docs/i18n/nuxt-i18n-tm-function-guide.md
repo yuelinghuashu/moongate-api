@@ -3,6 +3,7 @@ title: Nuxt i18n 的 `$tm` 函数：环境差异问题与解决方案
 description: 介绍了 Nuxt.js 项目中使用 @nuxtjs/i18n 模块的 $tm 函数（或组合式 API 中的 tm()）时，一个常见的问题是：在开发环境 (nuxt dev) 下运行正常的代码，在生产环境构建 (nuxt build) 后运行会报错或渲染异常。
 date: 2026-01-21
 series: i18n
+order: 3
 tags:
   - Nuxt
   - i18n

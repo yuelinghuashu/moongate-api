@@ -29,8 +29,13 @@ func (h *AboutHandler) GetAboutList(c *gin.Context) {
 		})
 	}
 
+	// 日期降序；日期相同按 slug 升序，保证并列日期的顺序确定
+	// （与 getDocsList 保持一致，避免 map 迭代随机序导致每次请求顺序不同）
 	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].Date.After(summaries[j].Date)
+		if !summaries[i].Date.Equal(summaries[j].Date) {
+			return summaries[i].Date.After(summaries[j].Date)
+		}
+		return summaries[i].Slug < summaries[j].Slug
 	})
 
 	c.JSON(http.StatusOK, summaries)

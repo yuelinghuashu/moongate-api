@@ -3,6 +3,7 @@ title: 从零到一：构建一个功能完备的文档列表页
 description: 手把手教你用 Nuxt 4 构建一个支持 URL 状态同步、多维度筛选、移动端无限滚动、键盘翻页的文档列表页。包含手写状态管理、SSR 水合问题排查、组件拆分陷阱、标签多选（桌面端 Ctrl/移动端开关）等完整实现，附可复用代码。
 date: 2026-03-21
 series: url-state
+order: 2
 tags: 
   - Nuxt
   - Vue

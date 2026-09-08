@@ -3,6 +3,7 @@ title: GORM 工程化实战（一）：分层、注入与可测性
 description: 系列第 6 篇：把直连 db.DB 的五篇代码重构为 Repository / Service / Handler 三层（internal/ + 构造注入），fake repository + httptest 表驱动测试，并用泛型 GetPaginated[T]（选读）收拢分页样板。
 date: 2026-09-06 00:00:00
 series: gin-gorm
+order: 6
 tags:
   - Go
   - PostgreSQL

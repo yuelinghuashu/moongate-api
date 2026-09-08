@@ -3,6 +3,7 @@ title: 构建大模型叙事引擎：集成测试与行为冻结
 description: 解析器写完了，但怎么保证以后改代码不会改坏它？Golden File 测试、验证器、滑窗老化测试——用测试将解析行为彻底冻结。
 date: 2026-07-20 21:00:00
 series: narrative-engine
+order: 5
 tags:
   - Go
   - Engineering

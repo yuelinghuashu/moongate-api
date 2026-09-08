@@ -3,6 +3,7 @@ title: "Flutter Streaming UI: How the Typewriter Experience of AI Replies Is Bui
 description: The typewriter effect looks simple — characters appear one by one. But behind "skip without truncation" and "no data loss" lies a full set of engineering decisions. From SSE buffering to skip semantics to testing strategies.
 date: 2026-08-13 22:00:00
 series: flutter-practice
+order: 2
 tags:
   - Flutter
   - Dart

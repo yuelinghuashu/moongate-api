@@ -3,6 +3,7 @@ title: "GORM Media & Query Enhancement: Cover Upload, Pagination/Search & Commen
 description: "Adds book covers: the field-naming decision, an upload endpoint and static serving; then upgrades the list endpoint into pagination + search + sort, and attaches a comment count to every book with JOIN + GROUP BY. Full code and verification commands in every section."
 date: 2026-09-03
 series: gin-gorm
+order: 3
 tags:
   - Go
   - PostgreSQL

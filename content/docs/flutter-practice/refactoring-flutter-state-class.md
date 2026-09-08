@@ -3,6 +3,7 @@ title: 拆超大 Flutter State 类的三种尝试与最终方案
 description: 当 800 行 State 类混杂契约树、舞台操作、导航等多种职责时，如何安全拆分？本文记录了从 Mixin、part 到 Widget 组合的完整重构历程，深入剖析 Dart 库级私有特性，并给出可复用的决策树与工程保障策略。
 date: 2026-08-11
 series: flutter-practice
+order: 1
 tags:
   - Flutter
   - Dart

@@ -3,6 +3,7 @@ title: "GORM Engineering in Practice (Part 1): Layering, Dependency Injection & 
 description: "Part 6: refactors the flat db.DB code of the first five parts into Repository / Service / Handler layers (internal/ + constructor injection), tests handlers with a fake repository + httptest table-driven tests, and (optional reading) wraps the pagination boilerplate into a generic GetPaginated[T]."
 date: 2026-09-06 00:00:00
 series: gin-gorm
+order: 6
 tags:
   - Go
   - PostgreSQL

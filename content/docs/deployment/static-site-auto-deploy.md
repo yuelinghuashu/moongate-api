@@ -3,6 +3,7 @@ title: GitHub Actions + Caddy 静态网站自动化部署（静态篇）
 description: 专注于纯前端资源的自动化发布，利用 Caddy 自动 HTTPS 和 SPA 路由支持，实现“推送即发布”。
 date: 2026-01-22
 series: deployment
+order: 1
 tags:
   - Caddy
   - CI/CD
