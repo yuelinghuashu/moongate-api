@@ -20,11 +20,10 @@ func main() {
 	// 2. 加载内容
 	contentStore, err := loader.LoadAll("./content")
 	if err != nil {
-		log.Printf("⚠️ 加载内容失败: %v", err)
-	} else {
-		log.Printf("✅ 加载了 %d 篇技术文章", len(contentStore.DocsBySlug))
-		log.Printf("✅ 加载了 %d 篇关于文章", len(contentStore.AboutBySlug))
+		log.Fatalf("❌ 加载内容失败: %v", err)
 	}
+	log.Printf("✅ 加载了 %d 篇技术文章", len(contentStore.DocsBySlug))
+	log.Printf("✅ 加载了 %d 篇关于文章", len(contentStore.AboutBySlug))
 
 	// 3. 创建路由
 	docsHandler := api.NewDocsHandler(contentStore.DocsBySlug, contentStore.DocsEn)

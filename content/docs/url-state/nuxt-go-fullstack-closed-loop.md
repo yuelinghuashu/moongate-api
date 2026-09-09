@@ -436,7 +436,7 @@ func (d *Doc) ContainsAllTags(targetTags []string) bool {
 
 ```typescript
 // composables/useRouteQuery.ts
-// 完整实现见系列第二篇
+// 完整实现见系列第三篇[《手写一个更适合 Nuxt 的 useRouteQuery》](./nuxt-use-route-query-composables)
 
 export function useRouteQueryString(
   name: string,
@@ -750,8 +750,8 @@ tags := c.QueryArray("tag")  // ["go", "vue"] ✅
 | 篇目  | 核心内容                               | 技术栈                 |
 | ----- | -------------------------------------- | ---------------------- |
 | 1     | URL ↔ 状态双向同步原理                 | Nuxt + Vue Router      |
-| 2     | useRouteQuery 可复用封装               | Nuxt + Composition API |
-| 3     | 完整文档列表页实现                     | Nuxt 前端              |
+| 2     | 完整文档列表页实现（手写方案）         | Nuxt 前端              |
+| 3     | useRouteQuery 可复用封装               | Nuxt + Composition API |
 | **4** | **URL 状态 → Go API → 完整数据流闭环** | **Nuxt + Go**          |
 
 你现在拥有的是一套完整可复用的全栈架构：

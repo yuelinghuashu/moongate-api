@@ -202,6 +202,8 @@ const { data } = useAsyncData(
 - `watch` 中直接使用 ref 本身，确保数组内部变化（如 `push`/`pop`）能被正确捕获。
 - 只将非默认值的参数写入 URL，保持 URL 简洁。
 
+> 💡 **系列定位**：本文的手写方案是整个系列的基线实现。第 2 篇[《从零到一：构建一个功能完备的文档列表页》](./nuxt-docs-list-page-complete-guide)将其应用到真实页面；第 3 篇[《手写一个更适合 Nuxt 的 useRouteQuery》](./nuxt-use-route-query-composables)将其封装为可复用函数；第 4 篇延伸至 Go 后端。后文遇到"与第 1 篇相同"的代码时，均以本篇为权威源，不再重复展开。
+
 ---
 
 ## 三、官方捷径？—— 一次尝试与回归

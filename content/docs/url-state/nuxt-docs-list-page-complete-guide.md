@@ -4,7 +4,7 @@ description: 手把手教你用 Nuxt 4 构建一个支持 URL 状态同步、多
 date: 2026-03-21
 series: url-state
 order: 2
-tags: 
+tags:
   - Nuxt
   - Vue
   - State Management
@@ -79,73 +79,49 @@ utils/
 
 ### 3.2 代码示例（主文件 `index.vue` 中的状态定义与同步）
 
-```ts
-const route = useRoute();
-const router = useRouter();
+双向同步的完整实现（`watch(route.query)` 同步到内部 ref、`pushQuery()` 写回 URL）与系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §2.2 完全一致，此处不再重复。本文只保留页面特有部分：状态定义、标签解析、搜索防抖与"视图模式不触发数据请求"的取舍。
 
-// 状态定义（全部从 URL 初始化）
-const searchInput = ref(route.query.search?.toString() || "");
-const searchOption = ref(Number(route.query.option) || 1);
-const page = ref(Number(route.query.page) || 1);
-const size = ref(Number(route.query.size) || 10);
-const viewMode = ref(Number(route.query.viewMode) || 1);
-const level = ref(route.query.level?.toString() || "");
-const tags = ref<string[]>([]);
+```ts
+const route = useRoute()
+const router = useRouter()
+
+// 状态定义（全部从 URL 初始化，与第 1 篇相同）
+const searchInput = ref(route.query.search?.toString() || "")
+const searchOption = ref(Number(route.query.option) || 1)
+const page = ref(Number(route.query.page) || 1)
+const size = ref(Number(route.query.size) || 10)
+const viewMode = ref(Number(route.query.viewMode) || 1)
+const level = ref(route.query.level?.toString() || "")
+const tags = ref<string[]>([])
 
 // 解析 URL 中的标签（支持逗号分隔）
 const parseTagsFromQuery = () => {
-  const tagParam = route.query.tag;
+  const tagParam = route.query.tag
   tags.value = tagParam
     ? Array.isArray(tagParam)
       ? tagParam
       : tagParam.split(",")
-    : [];
-};
-parseTagsFromQuery();
-
-// 监听路由变化（后退/前进）
-watch(
-  () => route.query,
-  (newValue) => {
-    searchInput.value = newValue.search?.toString() || "";
-    searchOption.value = Number(newValue.option) || 1;
-    page.value = Number(newValue.page) || 1;
-    size.value = Number(newValue.size) || 10;
-    viewMode.value = Number(newValue.viewMode) || 1;
-    level.value = newValue.level?.toString() || "";
-    parseTagsFromQuery();
-  },
-  { immediate: true },
-);
-
-// 推送路由
-function pushQuery() {
-  const query: Record<string, string> = {};
-  if (searchInput.value) query.search = searchInput.value;
-  if (searchOption.value !== 1) query.option = String(searchOption.value);
-  if (page.value !== 1) query.page = String(page.value);
-  if (size.value !== 10) query.size = String(size.value);
-  if (viewMode.value !== 1) query.viewMode = String(viewMode.value);
-  if (level.value) query.level = level.value;
-  if (tags.value.length) query.tag = tags.value.join(",");
-
-  if (JSON.stringify(route.query) !== JSON.stringify(query)) {
-    router.push({ query });
-  }
+    : []
 }
+parseTagsFromQuery()
 
-// 监听状态变化，自动更新 URL（关键：直接监听 ref 确保数组变化也能捕获）
-watch([page, size, viewMode, level, tags], () => pushQuery());
+// 本页特有：搜索输入防抖 500ms，其他状态立即同步
 watchDebounced(
   searchInput,
   () => {
-    page.value = 1;
-    pushQuery();
+    page.value = 1
+    pushQuery()
   },
   { debounce: 500 },
-);
-watch(searchOption, () => pushQuery());
+)
+
+// 本页特有：视图模式仅用于 UI 展示，不应触发数据重新请求，
+// 因此不放入下方 watch（详见 §4.1 与第 1 篇 §4 的差异说明）
+watch([page, size, viewMode, level, tags], () => pushQuery())
+watch(searchOption, () => pushQuery())
 ```
+
+> **说明**：上文中被引用的 `watch(route.query)` 双向同步与 `pushQuery()` 函数体见第 1 篇 §2.2，此处为保证页面代码可独立阅读仅保留调用骨架。
 
 ## 四、数据获取：useAsyncData + 响应式依赖
 
@@ -155,8 +131,8 @@ watch(searchOption, () => pushQuery());
 const { data: docsData, pending } = await useAsyncData(
   "docs-list",
   async () => {
-    let query = queryCollection("docs").order("date", "DESC");
-    const keyword = searchInput.value.trim();
+    let query = queryCollection("docs").order("date", "DESC")
+    const keyword = searchInput.value.trim()
 
     // 搜索条件
     if (keyword) {
@@ -165,25 +141,25 @@ const { data: docsData, pending } = await useAsyncData(
           q
             .where("title", "LIKE", `%${keyword}%`)
             .where("description", "LIKE", `%${keyword}%`),
-        );
+        )
       } else {
-        query = query.where("title", "LIKE", `%${keyword}%`);
+        query = query.where("title", "LIKE", `%${keyword}%`)
       }
     }
 
     // 等级过滤
     if (level.value) {
-      query = query.where("level", "=", level.value);
+      query = query.where("level", "=", level.value)
     }
 
     // 标签过滤（AND 关系）
     if (tags.value.length) {
       query = query.andWhere((q) => {
         tags.value.forEach((tag) => {
-          q = q.where("tags", "LIKE", `%${tag}%`);
-        });
-        return q;
-      });
+          q = q.where("tags", "LIKE", `%${tag}%`)
+        })
+        return q
+      })
     }
 
     // 分页
@@ -193,15 +169,15 @@ const { data: docsData, pending } = await useAsyncData(
         .skip((page.value - 1) * size.value)
         .limit(size.value)
         .all(),
-    ]);
+    ])
 
-    return { total, list };
+    return { total, list }
   },
   {
     // 注意：viewMode 仅用于 UI 展示，不应触发数据重新请求，因此未放入 watch
     watch: [searchInput, searchOption, page, size, level, tags],
   },
-);
+)
 ```
 
 > **关键点**：`watch` 数组中直接使用 ref 本身（如 `tags`），确保数组内部变化能被正确捕获。同时将 `viewMode` 移出 watch，避免因视图模式切换导致无意义的数据重载。
@@ -209,35 +185,32 @@ const { data: docsData, pending } = await useAsyncData(
 ### 4.2 移动端累积列表（无限滚动）
 
 ```ts
-const docsList = ref<any[]>([]);
+const docsList = ref<any[]>([])
 watch(
   () => docsData.value?.list,
   (newList) => {
-    if (!newList) return;
+    if (!newList) return
     // 仅当移动端且 page > 1 时才合并（水合阶段 page=1，不会进入）
     if (isMobile.value && page.value > 1) {
-      const merged = [...docsList.value, ...newList];
-      const uniqueMap = new Map(merged.map((item) => [item.id, item]));
-      docsList.value = Array.from(uniqueMap.values());
+      const merged = [...docsList.value, ...newList]
+      const uniqueMap = new Map(merged.map((item) => [item.id, item]))
+      docsList.value = Array.from(uniqueMap.values())
     } else {
-      docsList.value = newList;
+      docsList.value = newList
     }
   },
   { immediate: true },
-);
+)
 ```
 
 > **说明**：当用户执行搜索、切换等级或标签时，`page` 会被重置为 1，此时 `page.value > 1` 条件不满足，`docsList` 会被重新赋值为新数据，累积列表自动清空，符合预期。
 
 ## 五、SSR 安全：避免水合失败的黄金法则
 
-水合失败的根本原因是服务端与客户端渲染的 DOM 结构不一致。我们的解决方案：
+水合失败的根本原因是服务端与客户端渲染的 DOM 结构不一致。通用原则（初始状态从 URL 读、环境敏感值只在根组件计算、`useAsyncData` 的 `watch` 直接用 ref 等）在第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §四已有完整论述，此处只列出本文专属的两条增量：
 
-1. **所有影响初始 DOM 的状态从 URL 初始化**（`level`、`tags`、`page` 等），保证服务端和客户端初始值一致。
-2. **`isMobile` / `isDesktop` 只在根组件计算一次，通过 props 传递给子组件**，避免子组件重复调用 `useResponsive` 导致服务端/客户端判断不一致。下文示例中，`TagFilter.vue` 的 `isDesktop` 即由父组件传入。
-3. **`isFilterVisible` 使用 `useLocalStorage`**（不影响初始 DOM，服务端默认为 false，客户端从 localStorage 读取后更新，但不会改变水合结构）。
-4. **累积列表逻辑仅在水合完成后才启用**（通过 `page.value > 1` 条件限制，水合时 `page` 为 1）。
-5. **`useAsyncData` 的 `watch` 直接使用 ref**，确保数据变化能正确触发。
+1. **`isFilterVisible` 使用 `useLocalStorage`**：它不影响初始 DOM（服务端默认为 false，客户端从 localStorage 读取后更新，但不改变水合结构）。
+2. **累积列表逻辑仅在水合完成后才启用**：通过 `page.value > 1` 条件限制——水合时 `page` 为 1，不会合并数据，服务端与客户端列表长度一致。
 
 ## 六、组件拆分与职责划分
 
@@ -287,29 +260,29 @@ watch(
 </template>
 
 <script setup>
-import { ALLOWED_TAGS } from "~/utils/tags";
+import { ALLOWED_TAGS } from "~/utils/tags"
 
-const { isMobile } = useResponsive(); // 仅在子组件内部使用 isMobile 判断移动端分支，不会影响初始 DOM
+const { isMobile } = useResponsive() // 仅在子组件内部使用 isMobile 判断移动端分支，不会影响初始 DOM
 const props = defineProps({
   isDesktop: { type: Boolean, required: true }, // 从父组件传入
   getTagLink: { type: Function, required: true },
   isTagSelected: { type: Function, required: true },
-});
+})
 
-const multiSelectMode = ref(false);
-const emit = defineEmits(["tag-click"]);
+const multiSelectMode = ref(false)
+const emit = defineEmits(["tag-click"])
 
 const onTagClick = (tag, event) => {
-  let isMulti = false;
+  let isMulti = false
   if (isMobile.value) {
     // 移动端：使用多选模式开关
-    isMulti = multiSelectMode.value;
+    isMulti = multiSelectMode.value
   } else {
     // 桌面端：按 Ctrl/Cmd 多选
-    isMulti = event.ctrlKey || event.metaKey;
+    isMulti = event.ctrlKey || event.metaKey
   }
-  emit("tag-click", tag, { ctrlKey: isMulti, metaKey: isMulti });
-};
+  emit("tag-click", tag, { ctrlKey: isMulti, metaKey: isMulti })
+}
 </script>
 ```
 
@@ -317,21 +290,21 @@ const onTagClick = (tag, event) => {
 
 ```ts
 const handleTagClick = (tag: string, event: MouseEvent) => {
-  const isMulti = event.ctrlKey || event.metaKey; // 子组件传递的 event 已包含 ctrlKey
-  let newTags: string[];
+  const isMulti = event.ctrlKey || event.metaKey // 子组件传递的 event 已包含 ctrlKey
+  let newTags: string[]
   if (isMulti) {
     newTags = tags.value.includes(tag)
       ? tags.value.filter((t) => t !== tag)
-      : [...tags.value, tag];
+      : [...tags.value, tag]
   } else {
-    newTags = tags.value.includes(tag) ? [] : [tag];
+    newTags = tags.value.includes(tag) ? [] : [tag]
   }
-  const query = { ...route.query };
-  if (newTags.length) query.tag = newTags.join(",");
-  else delete query.tag;
-  query.page = "1";
-  router.push({ query });
-};
+  const query = { ...route.query }
+  if (newTags.length) query.tag = newTags.join(",")
+  else delete query.tag
+  query.page = "1"
+  router.push({ query })
+}
 ```
 
 > **注意**：子组件 `onTagClick` 和父组件 `handleTagClick` 命名不同，职责清晰，避免混淆。
@@ -346,26 +319,26 @@ const handleTagClick = (tag: string, event: MouseEvent) => {
 
 ```ts
 // composables/useSwipe.ts
-import { useEventListener } from "@vueuse/core";
+import { useEventListener } from "@vueuse/core"
 
 export function useSwipe(
   handlers: {
-    onUp?: () => void;
-    onDown?: () => void;
+    onUp?: () => void
+    onDown?: () => void
   },
   { threshold = 60 } = {},
 ) {
-  const touchStartY = ref(0);
+  const touchStartY = ref(0)
 
   useEventListener("touchstart", (e: TouchEvent) => {
-    touchStartY.value = e.touches[0].clientY;
-  });
+    touchStartY.value = e.touches[0].clientY
+  })
 
   useEventListener("touchend", (e: TouchEvent) => {
-    const distance = touchStartY.value - e.changedTouches[0].clientY;
-    if (distance > threshold) handlers.onUp?.();
-    else if (-distance > threshold) handlers.onDown?.();
-  });
+    const distance = touchStartY.value - e.changedTouches[0].clientY
+    if (distance > threshold) handlers.onUp?.()
+    else if (-distance > threshold) handlers.onDown?.()
+  })
 }
 ```
 
@@ -405,25 +378,25 @@ export const ALLOWED_TAGS = [
 
 ```ts
 const isInputFocused = computed(() => {
-  const active = document.activeElement;
-  return active?.tagName === "INPUT" || active?.tagName === "TEXTAREA";
-});
+  const active = document.activeElement
+  return active?.tagName === "INPUT" || active?.tagName === "TEXTAREA"
+})
 
 useEventListener("keydown", (e) => {
   if (e.key === "Escape" && isInputFocused.value) {
-    (document.activeElement as HTMLElement)?.blur();
-    return;
+    ;(document.activeElement as HTMLElement)?.blur()
+    return
   }
-  if (isInputFocused.value) return; // 输入框聚焦时不响应翻页
+  if (isInputFocused.value) return // 输入框聚焦时不响应翻页
 
   if (e.key === "ArrowLeft" && hasPrevPage.value) {
-    e.preventDefault();
-    page.value -= 1;
+    e.preventDefault()
+    page.value -= 1
   } else if (e.key === "ArrowRight" && hasNextPage.value) {
-    e.preventDefault();
-    page.value += 1;
+    e.preventDefault()
+    page.value += 1
   }
-});
+})
 ```
 
 - 移动端手势：上滑加载更多，下滑刷新。
@@ -431,24 +404,24 @@ useEventListener("keydown", (e) => {
 ```ts
 // 空状态提示
 const emptyStateMessage = computed(() => {
-  const hasSearch = searchInput.value;
-  const hasLevel = level.value;
-  const hasTags = tags.value.length;
+  const hasSearch = searchInput.value
+  const hasLevel = level.value
+  const hasTags = tags.value.length
   if (hasSearch || hasLevel || hasTags) {
-    return "没有找到符合条件的文档，试试调整筛选条件吧";
+    return "没有找到符合条件的文档，试试调整筛选条件吧"
   }
-  return "还没有文档，请稍后再来";
-});
+  return "还没有文档，请稍后再来"
+})
 
 // 清除所有筛选
 const clearAllFilters = () => {
-  searchInput.value = "";
-  level.value = "";
-  tags.value = [];
-  page.value = 1;
-  size.value = 10;
-  viewMode.value = 1;
-};
+  searchInput.value = ""
+  level.value = ""
+  tags.value = []
+  page.value = 1
+  size.value = 10
+  viewMode.value = 1
+}
 ```
 
 ## 十、踩坑与总结

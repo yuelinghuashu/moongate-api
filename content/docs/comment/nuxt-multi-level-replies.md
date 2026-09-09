@@ -320,9 +320,39 @@ export default defineEventHandler(async (event) => {
 
 ### 3.3 提交评论接口
 
-简单地将用户输入插入 `comments` 表，返回新评论数据。
+简单地将用户输入插入 `comments` 表，返回新评论数据：
 
 #### `server/api/comment/post.ts`
+
+```ts
+import { useDB } from "~~/server/db"
+import { comments } from "~~/server/db/schema"
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event)
+  const session = await getUserSession(event)
+
+  if (!session.user?.id)
+    throw createError({ status: 401, statusText: "请先登录" })
+  if (!body.content?.trim() || !body.permalink)
+    throw createError({ status: 400, statusText: "参数错误" })
+
+  const db = useDB()
+  const [newComment] = await db
+    .insert(comments)
+    .values({
+      user_id: session.user.id,
+      content: body.content.trim(),
+      permalink: body.permalink,
+    })
+    .returning()
+
+  event.node.res.statusCode = 201
+  return { success: true, data: newComment }
+})
+```
+
+> 💡 更完整的安全加固（用户校验、敏感词过滤、文档归属验证、限流）见本系列第 3 篇 [《为评论区添加内容过滤与安全防护》](./nuxt-comment-security)。
 
 ### 3.4 提交回复接口
 
@@ -617,7 +647,7 @@ watch(
       <div
         class="text-ui-text/90 text-sm leading-relaxed break-words max-w-3xl"
       >
-        <docsMarkdownRenderer :content="item.content" />
+        <DocsMarkdownRenderer :content="item.content" />
       </div>
 
       <!-- 回复按钮 -->

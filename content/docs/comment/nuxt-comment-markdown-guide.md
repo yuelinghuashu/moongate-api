@@ -94,7 +94,7 @@ tags:
 - ✅ **代码块高亮与文档配色统一**（深浅色自动切换）
 - ✅ **XSS 防护的正确姿势**（不只是过滤标签）
 - ✅ **两种性能方案对比**（预加载 vs 懒加载）
-- ✅ **7 个实战踩坑记录**（`$` 陷阱、`watch` 监听、主题不匹配等）
+- ✅ **3 个实战踩坑记录**（主题名称不匹配、`$` 替换陷阱、数据流断连）
 
 </details>
 
@@ -182,7 +182,7 @@ export default defineNuxtPlugin(async () => {
 
 ### 3.3 封装 Markdown 渲染组件
 
-创建 `components/MarkdownRenderer.vue`，核心逻辑如下：
+创建 `components/docs/MarkdownRenderer.vue`（Nuxt 自动导入名 `DocsMarkdownRenderer`），核心逻辑如下：
 
 - 使用 `marked.Renderer` 自定义代码块处理，交给 Shiki 高亮。
 - 监听 `colorMode` 动态切换主题。
@@ -350,7 +350,7 @@ watch([() => props.content, () => colorMode.value], renderContent, {
   <div class="comments">
     <div v-for="comment in commentList" :key="comment.id">
       <!-- 头像、用户名等 -->
-      <MarkdownRenderer :content="comment.content" />
+      <DocsMarkdownRenderer :content="comment.content" />
     </div>
   </div>
 </template>
@@ -360,7 +360,7 @@ watch([() => props.content, () => colorMode.value], renderContent, {
 
 Nuxt Content 默认代码块样式带有背景、边框和圆角。我们通过 CSS 变量（由 Nuxt UI 提供）覆盖评论区的 `<pre>` 和 `<code>` 样式，实现视觉统一。如果你未使用 Nuxt UI，可替换为具体的颜色值。
 
-在 `MarkdownRenderer.vue` 的 `<style scoped>` 中添加：
+在 `components/docs/MarkdownRenderer.vue` 的 `<style scoped>` 中添加：
 
 ```css
 <style scoped>
@@ -463,158 +463,37 @@ Nuxt Content 默认代码块样式带有背景、边框和圆角。我们通过 
 - 优点：代码块渲染速度最快，无额外异步延迟。
 - 缺点：初始加载时会包含所有预置语言，体积稍大。
 
-#### 方案二：懒加载版本（基于手动正则提取 + `codeToHtml`）
+#### 方案二：懒加载版本（基于 `codeToHtml`）
 
-以下代码是经过实际验证的稳定方案，它不依赖任何 Nuxt 插件，直接在组件中使用 Shiki 的 `codeToHtml` 函数实现**按需加载**。该方案与方案一的核心区别在于：
+方案二同样采用“手动提取代码块 → `codeToHtml` 高亮 → `marked` 解析 → DOMPurify 过滤”的完整流程，与方案一的核心区别只有两点：**不依赖全局 Shiki 插件**、**主题与语言按需加载**（首次用到某语言时才加载，之后自动缓存），以优化首屏体积。
 
-- **无需创建全局插件**，代码更轻量。
-- Shiki 的主题和语言在第一次使用时才加载，后续自动缓存，优化首屏体积。
-- 保留了手动正则提取代码块的逻辑，确保参数类型安全，避免 marked 内部传递不确定对象的问题。
+由于组件的模板、`currentTheme` 计算属性、`marked.parse` 配置、DOMPurify 白名单以及 `watch` 监听都与 §3.3 的组件**完全一致**，这里不再整段重复，只列出需要修改的三处：
 
-````vue
-<template>
-  <!-- eslint-disable-next-line vue/no-v-html -->
-  <div v-html="renderedContent" />
-</template>
+**① 导入方式**：不通过插件注入的 `$shiki`，改为直接使用 `shiki` 的顶层函数：
 
-<script lang="ts" setup>
-import { marked } from "marked"
+```ts
 import { codeToHtml } from "shiki"
-import DOMPurify from "isomorphic-dompurify"
+```
 
-const props = defineProps({ content: { type: String, required: true } })
-const colorMode = useColorMode()
-const renderedContent = ref("")
+**② 空内容守卫**：去掉对 `$shiki` 是否就绪的判断：
 
-// 根据当前颜色模式动态选择 Shiki 主题，确保与文档代码块配色一致
-const currentTheme = computed(() => {
-  return colorMode.value === "dark"
-    ? "material-theme-palenight" // 深色主题（请根据你的实际主题替换）
-    : "material-theme-lighter" // 浅色主题（请根据你的实际主题替换）
-})
-
-// 核心渲染函数：将用户输入的 Markdown 内容转换为安全的、高亮的 HTML
-const renderContent = async () => {
-  if (!props.content) {
-    renderedContent.value = ""
-    return
-  }
-
-  try {
-    // ---------- 第一步：手动提取并高亮所有代码块 ----------
-    let processed = props.content
-    // 正则匹配围栏代码块：```lang\n代码\n```（支持语言可选）
-    const codeBlockRegex = /```([a-zA-Z0-9+#-]+)\n([\s\S]*?)```/g
-    const matches = [...processed.matchAll(codeBlockRegex)]
-
-    for (const match of matches) {
-      const [fullMatch, lang, code] = match
-      try {
-        // 调用 Shiki 进行语法高亮（懒加载，按需加载主题和语言）
-        const highlighted = await codeToHtml(code.trim(), {
-          lang: lang || "text", // 未指定语言时当作纯文本
-          theme: currentTheme.value, // 使用当前主题
-        })
-
-        // 兼容 Shiki 不同版本的返回值（可能直接返回字符串，也可能返回 { html } 对象）
-        const htmlStr =
-          typeof highlighted === "string"
-            ? highlighted
-            : highlighted.html || highlighted.value || String(highlighted)
-
-        // 用高亮后的 HTML 替换原始代码块（使用函数替换避免 $ 符号被转义）
-        processed = processed.replace(fullMatch, () => htmlStr)
-      } catch (e) {
-        console.error("代码块高亮失败:", e)
-        // 高亮失败时保留原始代码块（不做高亮）
-      }
-    }
-
-    // ---------- 第二步：将处理后的内容（代码块已替换）解析为 Markdown ----------
-    const html = await marked.parse(processed, {
-      breaks: true, // 将换行符转换为 <br>
-      gfm: true, // 启用 GitHub 风格 Markdown（表格、删除线等）
-    })
-
-    // ---------- 第三步：使用 DOMPurify 过滤不安全内容，防止 XSS 攻击 ----------
-    renderedContent.value = DOMPurify.sanitize(html, {
-      // 明确允许的 HTML 标签（涵盖所有 Markdown 可能生成的标签）
-      ALLOWED_TAGS: [
-        "p",
-        "br",
-        "strong",
-        "em",
-        "u",
-        "s",
-        "del",
-        "ins",
-        "span",
-        "div",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "ul",
-        "ol",
-        "li",
-        "a",
-        "blockquote",
-        "code",
-        "pre",
-        "table",
-        "thead",
-        "tbody",
-        "tr",
-        "th",
-        "td",
-        "hr",
-        "img",
-        "sub",
-        "sup",
-      ],
-      // 允许的属性（class/style 用于代码高亮样式，其他为链接、图片等常用属性）
-      ALLOWED_ATTR: [
-        "class",
-        "style",
-        "href",
-        "lang",
-        "src",
-        "alt",
-        "title",
-        "target",
-        "rel",
-      ],
-      // 限制 URL 只能使用以下安全协议：
-      // - http: / https: → 网页链接、图片链接（评论区核心需求）
-      // - ftp: → 文件下载链接（极少出现，但保留无害）
-      // - mailto: → 邮箱联系方式（偶尔有人留邮箱）
-      // - tel: → 电话联系方式（虽少但保留）
-      // - blob: → 临时文件/本地文件（为可能的图片上传预留）
-      // - data: → base64 图片（用户直接贴 base64 图片时用）
-      // 其他协议（如 javascript:、vbscript:、file: 等）一律拦截，防止 XSS 攻击
-      ALLOWED_URI_REGEXP: /^(https?|ftp|mailto|tel|blob|data):/i,
-
-      // 是否允许未在 ALLOWED_URI_REGEXP 中列出的协议：
-      // - true  → 正则只作为“推荐列表”，未知协议可能被放行（不安全）
-      // - false → 正则作为“强制列表”，只有列出的协议才允许（安全）
-      // 评论区场景必须设置为 false，确保所有 URL 都经过协议白名单检查
-      ALLOW_UNKNOWN_PROTOCOLS: false,
-    })
-  } catch (error) {
-    console.error("Markdown 渲染失败:", error)
-    // 发生任何错误时，回退显示原始内容
-    renderedContent.value = props.content
-  }
+```ts
+if (!props.content) {
+  renderedContent.value = ""
+  return
 }
+```
 
-// 监听内容或主题变化，立即执行一次渲染，之后每次变化重新渲染
-watch([() => props.content, () => colorMode.value], renderContent, {
-  immediate: true,
+**③ 代码块高亮调用**：把循环里的 `$shiki.codeToHtml(...)` 换成异步的 `await codeToHtml(...)`，语言与主题参数不变（保留手动正则提取代码块的逻辑，确保参数类型安全，避免 marked 内部传递不确定对象）：
+
+```ts
+const highlighted = await codeToHtml(code.trim(), {
+  lang: lang || "text", // 未指定语言时当作纯文本
+  theme: currentTheme.value, // 使用当前主题
 })
-</script>
-````
+```
+
+将以上三处改动套用到 §3.3 的组件上，即可得到完整的懒加载版本。
 
 #### 与方案一（插件预加载）的对比
 
@@ -631,7 +510,7 @@ watch([() => props.content, () => colorMode.value], renderContent, {
 1. 删除原有的 `plugins/shiki.client.ts` 文件（如果存在）。
 2. 确保安装了 `shiki`、`marked`、`isomorphic-dompurify`。
 3. 根据你的博客实际配色，修改 `currentTheme` 中的主题 ID（参考 [Shiki 主题列表](https://shiki.zhcndoc.com/themes)）。
-4. 将上述组件保存为 `MarkdownRenderer.vue`，并在评论区引入使用。
+4. 将 §3.3 的组件套用上述三处改动后，保存为 `components/docs/MarkdownRenderer.vue`，并在评论区引入使用。
 
 该方案已在生产环境中验证，能稳定处理代码块高亮、主题切换、XSS 防护，并实现语言按需加载。
 

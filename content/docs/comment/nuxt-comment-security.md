@@ -201,6 +201,7 @@ import { validateComment } from "~/utils/commentValidator"
 
 export const useCommentStore = defineStore("comment", () => {
   const comment = ref("")
+  const error = ref("") // 后端返回的错误信息，用于在界面上展示（§3.3.3）
   // ... 其他状态
 
   const isCommentValid = computed(() => {
@@ -210,45 +211,31 @@ export const useCommentStore = defineStore("comment", () => {
 
   return {
     comment,
+    error,
     isCommentValid,
     // ... 其他
   }
 })
 ```
 
+> 💡 还需在 `submitComment` / `submitReply` 中写入或清空 `error`（完整方法见本系列第 2 篇 [《多级引用评论区》§4](./nuxt-multi-level-replies)），例如：`error.value = response.success ? "" : (response.message || "提交失败，请稍后再试")`。
+
 #### 3.3.3 修改评论区容器组件
 
-在 `CommentSection.vue` 中，使用 store 的计算属性禁用提交按钮，并显示后端错误。
+`CommentSection.vue` 的完整模板见本系列第 2 篇 [《多级引用评论区》§5.1](./nuxt-multi-level-replies)，这里只需改动两处：
 
 ```vue
-<template>
-  <!-- 其他部分... -->
-  <div class="flex justify-end mb-8">
-    <ClientOnly v-if="loggedIn">
-      <UButton
-        :disabled="
-          !commentStore.comment.trim() ||
-          commentStore.submitting ||
-          !commentStore.isCommentValid
-        "
-        :loading="commentStore.submitting"
-        :label="t('comment.actions.send')"
-        size="lg"
-        @click="commentStore.submitComment()"
-      />
-    </ClientOnly>
-    <div v-else class="flex items-center gap-2">
-      <p>{{ t("comment.status.login_to_comment") }}</p>
-      <SharedLogin />
-    </div>
-  </div>
+<!-- 改动1：提交按钮的 :disabled 追加验证条件（其余条件与 §5.1 相同） -->
+:disabled="
+  !commentStore.comment.trim() ||
+  commentStore.submitting ||
+  !commentStore.isCommentValid
+"
 
-  <!-- 显示后端错误 -->
-  <div v-if="commentStore.error" class="text-ui-error text-sm mt-2">
-    {{ commentStore.error }}
-  </div>
-  <!-- 其他部分... -->
-</template>
+<!-- 改动2：在评论区底部展示后端错误 -->
+<div v-if="commentStore.error" class="text-ui-error text-sm mt-2">
+  {{ commentStore.error }}
+</div>
 ```
 
 ### 3.4 后端严格验证
@@ -446,7 +433,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 6. 可选：防重复提交限流（同一用户对同一文档 1 分钟内只能回复一次）
-  // 注意：内存限流仅用于演示，生产环境请使用 Redis 或数据库
+  // 内存限流仅用于演示，生产环境实现见 §5.2
   const rateKey = `${user.id}:${body.permalink}`
   const last = rateLimit.get(rateKey)
   if (last && Date.now() - last < 60000) {
@@ -484,7 +471,7 @@ export default defineEventHandler(async (event) => {
 
 - 递归 CTE 查询支持多级引用（回复的回复），并获取根评论的 `permalink`。
 - 若不需要多级引用，可以限制 `target_type` 只能为 `'comment'`，简化归属验证。
-- 限流使用内存 Map，**生产环境请替换为 Redis 或数据库实现**，以保证多实例同步。
+- 限流使用内存 Map，仅用于演示；生产环境实现见 §5.2。
 - 增加了 `target_id` 类型校验，确保为有效数字。
 
 ## 5. 防重复提交与限流

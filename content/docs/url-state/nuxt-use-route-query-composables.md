@@ -15,70 +15,19 @@ tags:
 
 ## 一、背景：手写方案的痛点
 
-在 Nuxt 中实现 URL 与状态双向同步，常见的做法是：
+在 Nuxt 中实现 URL 与状态双向同步，最常见的做法是手写整套闭环：为每个状态定义 ref、写一段 `watch(route.query)` 把 URL 变化同步回 ref、再写一个 `pushQuery()` 把 ref 变化写回 URL（完整代码与逐行讲解见系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §2.2，此处不再重复）。它的形态大致是：
 
 ```ts
-// 1. 定义所有状态（从 URL 初始化）
-const searchInput = ref(route.query.search?.toString() || "")
-const searchOption = ref(Number(route.query.option) || 1)
-const page = ref(Number(route.query.page) || 1)
-const size = ref(Number(route.query.size) || 10)
-const viewMode = ref(Number(route.query.viewMode) || 1)
-const level = ref(route.query.level?.toString() || "")
-const tags = ref<string[]>([])
-
-// 解析 tags 数组
-const parseTagsFromQuery = () => {
-  const tagParam = route.query.tag
-  tags.value = tagParam
-    ? Array.isArray(tagParam)
-      ? tagParam
-      : tagParam.split(",")
-    : []
-}
-parseTagsFromQuery()
-
-// 2. 监听 URL 变化，同步到内部状态
-watch(
-  () => route.query,
-  (q) => {
-    searchInput.value = q.search?.toString() || ""
-    searchOption.value = Number(q.option) || 1
-    page.value = Number(q.page) || 1
-    size.value = Number(q.size) || 10
-    viewMode.value = Number(q.viewMode) || 1
-    level.value = q.level?.toString() || ""
-    parseTagsFromQuery()
-  },
-  { immediate: true },
-)
-
-// 3. 监听内部状态变化，同步到 URL
-function pushQuery() {
-  const query: Record<string, string> = {}
-  if (searchInput.value) query.search = searchInput.value
-  if (searchOption.value !== 1) query.option = String(searchOption.value)
-  if (page.value !== 1) query.page = String(page.value)
-  if (size.value !== 10) query.size = String(size.value)
-  if (viewMode.value !== 1) query.viewMode = String(viewMode.value)
-  if (level.value) query.level = level.value
-  if (tags.value.length) query.tag = tags.value.join(",")
-
-  if (JSON.stringify(route.query) !== JSON.stringify(query)) {
-    router.push({ query })
-  }
-}
-
-watch([searchInput, searchOption, page, size, viewMode, level, tags], () =>
-  pushQuery(),
-)
+// 7 个状态：searchInput / searchOption / page / size / viewMode / level / tags
+// 1 段 watch(route.query) → 同步到内部 ref（含 parseTagsFromQuery）
+// 1 个 pushQuery() 函数体 + 若干 watch(refs) → 写回 URL
 ```
 
 重复 7 个状态，代码量庞大，且每个新页面都要重写一遍。这种代码不仅笨重，还容易漏掉某个 `watch`，导致 URL 与状态不同步。
 
 ## 二、官方 `useRouteQuery` 的隐患
 
-`@vueuse/router` 提供了 `useRouteQuery`，看似简洁，但在生产环境中我遇到了 `Invalid value used as weak map key` 的错误，原因是其内部使用了全局 `WeakMap` 和 `nextTick` 批量更新，在 SSR 下可能跨请求污染。最终我放弃了第三方库，决定自己封装一个稳定、可控的版本。
+`@vueuse/router` 提供了 `useRouteQuery`，看似简洁，但我在生产环境踩过坑：它内部使用全局 `WeakMap` + `nextTick` 批量更新，SSR 下可能跨请求污染，最终导致 `Invalid value used as weak map key` 的 500 错误。完整排查经过见系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §三，此处不再重复。结论是：我放弃了第三方库，决定自己封装一个稳定、可控的版本。
 
 ## 三、封装设计：按类型拆分，各司其职
 
@@ -334,9 +283,18 @@ watch(searchInput, (val) => {
 
 ## 六、SSR 安全保证
 
+以下三条针对上文 3.1 的**简化版实现**成立（其中"初始状态从 URL 同步读取"等更通用的水合原则，与系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §四一致，此处不展开）：
+
 - **无全局状态**：所有数据存储在组件实例的 `ref` 中，不会跨请求污染。
 - **直接监听 `route.query`**：保证服务端和客户端初始值一致。
 - **不使用 `nextTick`**：避免在 SSR 中因异步更新导致 DOM 不匹配。
+
+> **实现演进（重要）**：上文 3.1 的简化版每个参数独立 `watch`，确实"无全局状态"。但当页面需要 **`resetFilters` 一次性重置多个参数** 时，多个独立 watch 会在同一 tick 各自基于旧的 `route.query` 写回，导致前面的修改被后面的覆盖（重置 6 个参数最终只生效最后一个）。
+>
+> 为解决覆盖问题，实际项目的实现演进出**注册表机制**：所有 `useRouteQuery*` 参数先向同一个注册表登记，写回 URL 前从注册表读取所有参数的最新值，一次构建完整 query。此时"无全局状态"的前提已不成立——注册表本身就是共享状态，它的存放位置直接决定 SSR 安全性：
+>
+> - ❌ **模块级 `Set`**：跨请求累积（`onUnmounted` 在服务端不触发），会造成服务端内存泄漏——正是 [《Nuxt SSR 内存泄漏排查实录》](./nuxt-ssr-memory-leak-troubleshooting) 记录的真实案例。
+> - ✅ **以 `nuxtApp` 为 key 的 `WeakMap`**：服务端每个请求有独立注册表（请求结束随 nuxtApp 被 GC），客户端全局唯一注册表（组件卸载时由 `onUnmounted` 清理）。这才是"SSR 安全"的完整形态。
 
 ## 七、完整代码
 
