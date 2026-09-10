@@ -13,9 +13,7 @@ tags:
 本篇做两件事：把第 3 篇的循环**变成常驻 HTTP 服务**（浏览器/客户端通过 SSE 实时接收 token），并让**同一套代码改个 `BASE_URL` 就能切到 OpenAI 云端**——把第 2 篇的“/v1 近似兼容”铁律落成代码。
 
 - 前置：第 3 篇的多轮循环已跑通
-- 运行要求：Go 1.27+（仓库 go.mod 为 go 1.27.1；本篇服务端用到的 `"GET /health"` 方法路由语法自 Go 1.22 起可用，已满足）
-
-> 环境说明：本文基于 **Ollama 0.33.3 + llama3.1:8b（A770/Vulkan，2026-09）** 实测；Ollama 迭代快，环境变量以 `ollama serve --help` 为准，`/v1` 兼容字段以[官方 OpenAI 兼容文档](https://docs.ollama.com/api/openai-compatibility)为准。
+- 运行要求：Go 1.27+（本篇服务端用到的 `"GET /health"` 方法路由语法自 Go 1.22 起可用，已满足）
 
 ## 1. 先看真实报文：两种流式格式的差别（本机抓包）
 
@@ -68,6 +66,8 @@ data: [DONE]
 
 浏览器端只需 `fetch` 后按行读 SSE；curl 测试则如下（见第 5 节真实输出）。
 
+> **SSE 最小知识（读懂本节代码只需要这三条）**：① 一条事件 = `event: 类型` + 若干 `data:` 行 + 一个**空行**收尾，客户端按行读、遇空行结束当前事件（SSE 即 Server-Sent Events，浏览器原生的服务端推送）；② 服务器每发一个事件都要 `Flush()`，否则第一批 token 会被缓冲区攒着，浏览器要等很久才看到；③ 连接长开，断开由客户端或超时决定——本篇没做取消与心跳，生产差异见第 8 节。
+
 ## 3. 两个最容易出错的流式细节（代码已做兼容处理）
 
 **① `delta.tool_calls` 的 `arguments` 可能是分片的。** OpenAI 云端流式时会把一个工具调用的参数 JSON **拆成多段**下发，客户端必须按 `index` 把多段拼起来；Ollama 本地实测是整段下发（见第 1 节抓包），但代码按"可能拆片"来写，两边都能跑：
@@ -80,10 +80,12 @@ if tc.Function.Arguments != "" {
 
 **② `content` 可能是空串、`finish_reason` 在最后一行才出现。** 判断"这轮要不要执行工具"，永远以**累积完一整轮后**的 `finish_reason == "tool_calls"` / `tool_calls` 非空为准，不要在收到第一个 chunk 时就下结论。
 
-## 4. 完整代码（demo/stream-server/main.go）
+另：代码里的 `sc.Buffer(make([]byte, 1024), 1<<20)` 把单行上限从 `bufio.Scanner` 默认的 64KB 提到 1MB——SSE 的一行（整段 `data:`）可能很长，不调大会直接报 `token too long` 并中断流。
+
+## 4. 完整代码
 
 <details>
-<summary>demo/stream-server/main.go 全文（点击展开）</summary>
+<summary>main.go 全文（点击展开）</summary>
 
 ```go
 // 第 4 篇演示：把 Agent 循环变成常驻 HTTP 服务（SSE 流式 + 可切云端）
@@ -99,7 +101,7 @@ if tc.Function.Arguments != "" {
 //
 // 运行：
 //
-//	OLLAMA_BASE="http://localhost:11434/v1" OLLAMA_MODEL=llama3.1:8b go run ./demo/stream-server
+//	OLLAMA_BASE="http://localhost:11434/v1" OLLAMA_MODEL=llama3.1:8b go run main.go
 //	默认监听 :8899。
 package main
 
@@ -511,11 +513,11 @@ func runTool(tc ToolCall) (string, error) {
 
 </details>
 
-## 5. 运行结果（本机实测）
+## 5. 运行结果（Ollama 0.33.3 + llama3.1:8b，2026-09 实测）
 
 ```bash
 # 启动（BASE_URL 指向本地 Ollama；切云端只需改环境变量，见第 6 节）
-PORT=8899 go run ./demo/stream-server
+PORT=8899 go run main.go
 ```
 
 `GET /health`：
@@ -551,24 +553,8 @@ event: delta
 data: :
 event: delta
 data: 10
-event: delta
-data: 。
-event: delta
-data: 7
-event: delta
-data:  乘
-event: delta
-data: 以
-event: delta
-data:  8
-event: delta
-data:  等
-event: delta
-data: 于
-event: delta
-data:  56
-event: delta
-data: 。
+…
+（其余 9 个 delta 事件从略：单 token 逐字到达，直到整句拼完）
 
 event: answer
 data: 现在是 22:10。7 乘以 8 等于 56。
@@ -611,14 +597,7 @@ data: get_current_time({}) -> 2026-09-08 16:48:21
 event: tool
 data: multiply({"a": 7, "b": 8}) -> 56
 
-event: delta
-data: 现在是 **202
-event: delta
-data: 6年9月8日
-event: delta
-data: 16:48:21
-event: delta
-data: **。
+…（delta 事件从略，逐 token 到达；这里注意 `arguments` 带空格）
 
 event: answer
 data: 现在是 **2026年9月8日 16:48:21**。另外，**7 × 8 = 56**。还有其他需要帮忙的吗？😊
@@ -631,13 +610,13 @@ data: [DONE]
 
 ## 7. 坑与对照
 
-| 现象                         | 原因                             | 处理                                                           |
-| ---------------------------- | -------------------------------- | -------------------------------------------------------------- |
-| SSE 断断续续/客户端收不全    | 没理解 `event:`/`data:`/空行分隔 | 按行读、遇到空行结束当前事件（见第 5 节原始流）                |
-| 工具调用参数丢失一半         | 把分片 arguments 当成了完整 JSON | 按 `index` 累积拼接后再整体解析                                |
-| 模型已调工具却当普通回答处理 | 只看了第一行 chunk 就返回        | 收完整轮再判 `finish_reason`                                   |
-| 本地正常、云端行为不同       | /v1 是近似兼容，云端字段更严     | 已实测 MiMo 云端（§6），代码零改动；换其他服务前仍建议先跑一遍 |
-| 长任务超时                   | 上游请求没有超时预算             | `http.Client.Timeout` 按需求调大 + 服务端 `context` 取消       |
+| 现象                         | 原因                                 | 处理                                                                         |
+| ---------------------------- | ------------------------------------ | ---------------------------------------------------------------------------- |
+| SSE 断断续续/客户端收不全    | 没理解 `event:`/`data:`/空行分隔     | 按行读、遇到空行结束当前事件（见第 5 节原始流）                              |
+| 工具调用参数丢失一半         | 把分片 arguments 当成了完整 JSON     | 按 `index` 累积拼接后再整体解析                                              |
+| 模型已调工具却当普通回答处理 | 只看了第一行 chunk 就返回            | 收完整轮再判 `finish_reason`                                                 |
+| 本地正常、云端行为不同       | /v1 是近似兼容，云端字段更严         | 已实测 MiMo 云端（§6），代码零改动；换其他服务前仍建议先跑一遍               |
+| 长任务超时 / curl 提前断开   | 上游请求没有超时预算；或代理缓冲没关 | `http.Client.Timeout` 按需求调大 + 服务端 `context` 取消；SSE 需关闭代理缓冲 |
 
 ## 8. 刻意简化 vs 生产做法
 
@@ -651,12 +630,11 @@ data: [DONE]
 
 ## FAQ
 
-| 问题                             | 解决                                                       |
-| -------------------------------- | ---------------------------------------------------------- |
-| curl 看到 `event: done` 前就断开 | 检查上游超时与 `http.Client.Timeout`；SSE 需要关闭代理缓冲 |
-| 浏览器收不到流                   | 服务端必须 `Flush()`；确认响应头 `text/event-stream`       |
-| 想比较 /api/chat 原生流          | 用第 1 节抓包命令自行对比；服务默认统一走 /v1              |
-| 切云端报 401                     | 检查 `OLLAMA_API_KEY`；Ollama 本地会忽略 key               |
+| 问题                    | 解决                                                 |
+| ----------------------- | ---------------------------------------------------- |
+| 浏览器收不到流          | 服务端必须 `Flush()`；确认响应头 `text/event-stream` |
+| 想比较 /api/chat 原生流 | 用第 1 节抓包命令自行对比；服务默认统一走 /v1        |
+| 切云端报 401            | 检查 `OLLAMA_API_KEY`；Ollama 本地会忽略 key         |
 
 ## 结论
 

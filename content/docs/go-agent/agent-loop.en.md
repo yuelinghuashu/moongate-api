@@ -13,9 +13,6 @@ tags:
 Part 2 stopped at "one tool, one round": a question can call a tool at most once before wrapping up. This part turns "one round" into a "loop" — the model can keep requesting tools round after round (multi-tool registration, parallel calls, error feedback, history trimming) until it produces its final answer.
 
 - Prerequisite: you understand the mechanism from Part 2 (`role=tool` + `tool_call_id` alignment, the `tool_calls` non-empty test, the `/v1` compatibility iron rules)
-- Requirements: same as the previous part (Go 1.27+; the repository's go.mod declares go 1.27.1)
-
-> Environment note: this article is based on measurements of **Ollama 0.33.3 + llama3.1:8b (A770/Vulkan, 2026-09)**; Ollama iterates fast, so treat `ollama serve --help` as the source of truth for environment variables, and the [official OpenAI compatibility docs](https://docs.ollama.com/api/openai-compatibility) as the source of truth for the `/v1` compatibility fields.
 
 ## 1. From one round to many: what the agentic loop looks like
 
@@ -78,6 +75,8 @@ if err != nil {
 
 The model reads that "result" and decides for itself: fix the arguments and retry, switch tools, or explain to the user that it is giving up. In our measurements the model deliberately called `divide(10, 0)` first to trigger an error, and after receiving `除数不能为 0` ("the divisor cannot be 0") it **chose to skip that step** and finished the rest of the task — giving up is a legitimate strategy too, see the discussion in Section 7.
 
+One more thing: the `assistant` message the model returns (the one carrying `tool_calls`) must be **appended to `messages` first**, and only then the `role="tool"` results; reverse the order and a tool result has no matching call, which upstream rejects outright — the same reason Section 4's `trimHistory` has to drop an exchange as a whole.
+
 ## 4. History growth: why a cap is mandatory, and how to keep it simple
 
 The price of looping is that every round resends **every message from the first user turn up to the present** to the model (both OpenAI and Ollama are stateless endpoints; the client accumulates the history). After several rounds:
@@ -87,12 +86,12 @@ The price of looping is that every round resends **every message from the first 
 
 This part implements a very simple fuse: when a round's `prompt_tokens` crosses a threshold and the history is long enough, drop the oldest exchange (`trimHistory`). In production the more common approach is "once it gets too long, compress the old conversation into a summary and continue" — that is summary-style long-term memory, which this series does not cover (Part 5 covers the two kinds it does: "key-value fact memory + document retrieval (RAG)").
 
-> Note: `trimHistory` cuts between two user messages — it removes the oldest exchange as a whole (that user message plus its assistant message and every `role=tool` result), avoiding the "orphan tool message with no matching assistant message" problem; this demo is a single question that keeps calling tools to the end, so it never triggers, and it only takes effect once you wire it into real multi-turn chat (where each turn appends a new user message).
+> Note: `trimHistory` cuts between two user messages — it removes the oldest exchange as a whole (that user message plus its assistant message and every `role=tool` result), avoiding the "orphan tool message with no matching assistant message" problem; this example is a single question that keeps calling tools to the end, so it never triggers, and it only takes effect once you wire it into real multi-turn chat (where each turn appends a new user message).
 
-## 5. Full code (demo/agent-loop/main.go)
+## 5. Full code
 
 <details>
-<summary>Full source of demo/agent-loop/main.go (click to expand)</summary>
+<summary>Full source of main.go (click to expand)</summary>
 
 ```go
 // Part 3 demo: letting the agent decide how many tools to call (multi-round loop)
@@ -386,7 +385,7 @@ func chat(messages []Message) (ChatResponse, error) {
 ## 6. Run results (measured on this machine)
 
 ```bash
-go run ./demo/agent-loop
+go run main.go
 ```
 
 Real output (Ollama 0.33.3 + llama3.1:8b, measured 2026-09-08):
@@ -433,12 +432,11 @@ Three things worth noting:
 
 ## FAQ
 
-| Question                                         | Fix                                                                                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| The loop is stuck in "call - error - call again" | Check whether the error wording gives the model a way to correct itself; confirm `maxRounds` is in effect          |
-| Results don't line up with the tool calls        | Check whether `tool_call_id` is aligned one by one (the mechanism from Part 2)                                     |
-| Only the first of several tools was executed     | Loop over every entry in `ToolCalls`; don't take only `[0]`                                                        |
-| Behavior got worse after switching models        | Small local models vary in compliance; try `llama3.1:8b` first, and see Appendix A of Part 1 for the Qwen pitfalls |
+| Question                                     | Fix                                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Results don't line up with the tool calls    | Check whether `tool_call_id` is aligned one by one (the mechanism from Part 2)                                     |
+| Only the first of several tools was executed | Loop over every entry in `ToolCalls`; don't take only `[0]`                                                        |
+| Behavior got worse after switching models    | Small local models vary in compliance; try `llama3.1:8b` first, and see Appendix A of Part 1 for the Qwen pitfalls |
 
 ## Conclusion
 

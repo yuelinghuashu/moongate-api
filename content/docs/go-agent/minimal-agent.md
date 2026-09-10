@@ -10,15 +10,11 @@ tags:
   - LLM
 ---
 
-本系列主线是“用最小案例讲透一个原理，再逐步工程化”。本篇是**刻意精简的最小案例**：一个工具、单轮调用、约 200 行 Go（含注释），只用标准库（`net/http`、`encoding/json`），跑通“模型点名 → Go 执行 → 结果回传 → 模型作答”的完整闭环。
+本篇是**刻意精简的最小案例**：一个工具、单轮调用、约 200 行 Go（含注释），只用标准库（`net/http`、`encoding/json`），跑通“模型点名 → Go 执行 → 结果回传 → 模型作答”的完整闭环。
 
 - 目标读者：有 Go 基础、第一次写 Agent 工具调用（前提：已按第 1 篇装好 Ollama 与 `llama3.1:8b`）
-- 代码：`demo/minimal-agent/main.go`，仓库根目录执行 `go run ./demo/minimal-agent`
-- 运行要求：Go 1.27+（仓库 go.mod 已声明 go 1.27.1）
-
-本系列默认读者是 **Go 开发者**。Python 等其他语言的读者仍可读第 1 篇与各篇的机制、避坑内容——工具调用机制、聊天模板问题、API 兼容与运维概念都和语言无关。
-
-> 环境说明：本文基于 **Ollama 0.33.3 + llama3.1:8b（A770/Vulkan，2026-09）** 实测；Ollama 迭代快，环境变量以 `ollama serve --help` 为准，`/v1` 兼容字段以[官方 OpenAI 兼容文档](https://docs.ollama.com/api/openai-compatibility)为准。
+- 代码：完整代码内嵌在本篇 §2、§3；保存为 `main.go` 后在本目录执行 `go run main.go`
+- 运行要求：Go 1.27+
 
 ## 1. 接口基调：/v1 近似兼容（先知道再写代码）
 
@@ -62,14 +58,19 @@ curl -s http://localhost:11434/v1/chat/completions \
 {
   "id": "chatcmpl-9",
   "model": "llama3.1:8b",
-  "choices": [{                   // ← Go: ChatResponse.Choices[]
-    "message": {                   // ← Go: ChatResponse.Choices[].Message
-      "role": "assistant",
-      "content": "我是语言模型，能理解和生成汉语。"  // ← 你要的答案
-    },
-    "finish_reason": "stop"        // ← 模型收工了（工具调用时会变成 "tool_calls"，见 §3）
-  }],
-  "usage": {                       // ← token 计数，第 3 篇"历史全量重发"的成本来源
+  "choices": [
+    {
+      // ← Go: ChatResponse.Choices[]
+      "message": {
+        // ← Go: ChatResponse.Choices[].Message
+        "role": "assistant",
+        "content": "我是语言模型，能理解和生成汉语。" // ← 你要的答案
+      },
+      "finish_reason": "stop" // ← 模型收工了（工具调用时会变成 "tool_calls"，见 §3）
+    }
+  ],
+  "usage": {
+    // ← token 计数，第 3 篇"历史全量重发"的成本来源
     "prompt_tokens": 19,
     "completion_tokens": 13
   }
@@ -82,10 +83,10 @@ curl -s http://localhost:11434/v1/chat/completions \
 
 而**纯文本聊天正是这条轻量路径的最简形态**：同样把 `messages` 数组发到 `/v1/chat/completions`，只是请求里没有 `tools` 字段、响应里也只有 `content` 没有 `tool_calls`。
 
-完整代码（`demo/plain-chat/main.go`，约 60 行、只有标准库）：
+完整代码（约 60 行、只有标准库）：
 
 <details>
-<summary>demo/plain-chat/main.go 全文（点击展开）</summary>
+<summary>main.go 全文（点击展开）</summary>
 
 ```go
 // 第 2 篇（纯文本起步版）演示：核心逻辑约 20 行跑通一次对话
@@ -168,12 +169,12 @@ func main() {
 
 - 请求体只有 `model` + `messages`，没有 `tools`——这正是第 1 节铁律"无工具时省略 `tools` 字段"的落地；
 - 响应读 `choices[0].message.content` 与 `finish_reason`（这里是 `stop`）；
-- **多轮对话 = 往 `messages` 里追加再整段重发**，这是后面所有 demo 的公共基础。
+- **多轮对话 = 往 `messages` 里追加再整段重发**，这是后面所有示例的公共基础。
 
 运行：
 
 ```bash
-go run ./demo/plain-chat
+go run main.go
 ```
 
 真实输出（Ollama 0.33.3 + llama3.1:8b，2026-09 实测）：
@@ -200,7 +201,7 @@ go run ./demo/plain-chat
 | HTTP 错误直接 `panic`                                     | 返回 `error` 并优雅降级/重试                                  |
 | `json.Marshal`、`io.ReadAll` 错误忽略                     | 逐一处理并带上上下文                                          |
 | 硬编码模型名 `llama3.1:8b`                                | 配置化（flag / 环境变量）                                     |
-| 固定 30s 超时、无并发控制                                            | `http.Client` 超时 + 连接池                                   |
+| 固定 30s 超时、无并发控制                                 | `http.Client` 超时 + 连接池                                   |
 | 只读 `message.content`/`tool_calls`，不判 `finish_reason` | 按本篇第 1 节兼容差异清单处理（`tool_choice`、空 `tools` 等） |
 
 ### 完整代码（main.go）
@@ -212,15 +213,18 @@ go run ./demo/plain-chat
 ```json
 {
   "model": "llama3.1:8b",
-  "messages": [{"role": "user", "content": "现在几点了？"}],
-  "tools": [{                             // ← Go: ChatRequest.Tools []Tool
-    "type": "function",
-    "function": {
-      "name": "get_current_time",
-      "description": "获取当前时间",
-      "parameters": {"type": "object", "properties": {}}
+  "messages": [{ "role": "user", "content": "现在几点了？" }],
+  "tools": [
+    {
+      // ← Go: ChatRequest.Tools []Tool
+      "type": "function",
+      "function": {
+        "name": "get_current_time",
+        "description": "获取当前时间",
+        "parameters": { "type": "object", "properties": {} }
+      }
     }
-  }]
+  ]
 }
 ```
 
@@ -228,28 +232,34 @@ go run ./demo/plain-chat
 
 ```json
 {
-  "choices": [{
-    "message": {                           // ← Go: ChatResponse.Choices[].Message
-      "role": "assistant",
-      "content": "",                       // ⚠️ 空字符串，不是 null
-      "tool_calls": [{                     // ← Go: Message.ToolCalls []ToolCall
-        "id": "call_dlj5358x",             // ⚠️ 关联 ID：执行结果回传时必须带上这个
-        "function": {
-          "name": "get_current_time",
-          "arguments": "{}"                // ⚠️ 这是字符串！不是对象！需要 json.RawMessage 再解析
-        }
-      }]
-    },
-    "finish_reason": "tool_calls"          // ⚠️ 不是 "stop"（第 3 篇循环判据）
-  }],
-  "usage": {"prompt_tokens": 146, "completion_tokens": 14}
+  "choices": [
+    {
+      "message": {
+        // ← Go: ChatResponse.Choices[].Message
+        "role": "assistant",
+        "content": "", // ⚠️ 空字符串，不是 null
+        "tool_calls": [
+          {
+            // ← Go: Message.ToolCalls []ToolCall
+            "id": "call_dlj5358x", // ⚠️ 关联 ID：执行结果回传时必须带上这个
+            "function": {
+              "name": "get_current_time",
+              "arguments": "{}" // ⚠️ 这是字符串！不是对象！需要 json.RawMessage 再解析
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls" // ⚠️ 不是 "stop"（第 3 篇循环判据）
+    }
+  ],
+  "usage": { "prompt_tokens": 146, "completion_tokens": 14 }
 }
 ```
 
 看完这两段 JSON，再看后面的 Go 代码：`ToolCall.Function.Arguments` 为什么要用 `json.RawMessage` 再解析一次、`ToolCallID` 是干什么用的，就一目了然了。
 
 <details>
-<summary>demo/minimal-agent/main.go 全文（点击展开）</summary>
+<summary>main.go 全文（点击展开）</summary>
 
 ```go
 package main
@@ -482,35 +492,19 @@ var toolMap = map[string]func(json.RawMessage) string{
 }
 ```
 
-#### 3. 主流程 `main()`（对应下方时序图）
+#### 3. 主流程 `main()`（对应下方流程示意）
 
-`main()` 内注释按「第一步 ~ 第七步」执行，与下方时序图一一对应：
+`main()` 内注释按「第一步 ~ 第七步」执行，与下方流程一一对应：
 
-```mermaid
-sequenceDiagram
-    participant U as 用户
-    participant G as Go 程序（main）
-    participant O as Ollama（llama3.1:8b）
-    U->>G: 输入问题
-    G->>O: POST /v1/chat/completions（messages + tools）
-    O-->>G: assistant 消息 + tool_calls
-    G->>G: 查 toolMap，本地执行 Go 函数
-    G->>O: 回传 role="tool" 结果，再次请求
-    O-->>G: 最终回答 content
-    G-->>U: 打印结果
 ```
-
-> 博客未启用 Mermaid 时，流程即：用户 → 带 tools 请求 → 收到 tool_calls → 本地执行工具 → 结果以 role="tool" 回传 → 拿到最终回答（对应下方步骤表）。
-
-| 步骤   | 做什么                                                          |
-| ------ | --------------------------------------------------------------- |
-| 第一步 | 准备用户消息（`role="user"`）                                   |
-| 第二步 | 定义可用工具列表（告诉模型"有这个工具"）                        |
-| 第三步 | 调 `sendRequest` 发给模型                                       |
-| 第四步 | 判断返回的 `assistant` 消息是否带 `tool_calls`                  |
-| 第五步 | 按工具名查 `toolMap`，执行对应的 Go 函数                        |
-| 第六步 | 把结果包装成 `role="tool"` 消息，`ToolCallID` 对齐模型的调用 ID |
-| 第七步 | 再次 `sendRequest`，模型基于真实结果生成最终回答                |
+1 用户输入问题         → Go 程序准备 messages（role="user"）
+2 Go 程序定义工具清单   → POST /v1/chat/completions（messages + tools）发给 Ollama
+3 Ollama 返回          → assistant 消息 + tool_calls（判定：tool_calls 非空）
+4 Go 程序本地执行       → 按工具名查 toolMap，调用对应 Go 函数（模型只"点名"，不执行）
+5 Go 程序回传结果       → 包装成 role="tool"，ToolCallID 对齐模型的调用 ID
+6 Ollama 返回          → 最终回答 content（基于真实工具结果生成）
+7 Go 程序打印回答       → 用户看到结果
+```
 
 > 关键点：第六步的 `ToolCallID` 必须与模型请求里的 `ID` 一致，模型才能把结果对应到那一次调用。整套机制的核心是——**模型不执行工具，只"点名"；执行永远发生在本地代码**。
 
@@ -524,7 +518,7 @@ sequenceDiagram
 
 ### 生产化起步：四个小改造（从 200 行到工程的过渡态）
 
-上面表格只给了方向，这里直接给最小的改造示例；更完整的演进在 demo 目录里按第 3、4 篇逐步展开。
+上面表格只给了方向，这里直接给最小的改造示例；更完整的演进按第 3、4 篇逐步展开。
 
 **① 固定 30s 超时 → 可配置超时预算**
 
@@ -572,7 +566,7 @@ if model == "" {
 ## 4. 运行结果
 
 ```bash
-go run ./demo/minimal-agent
+go run main.go
 ```
 
 成功输出：

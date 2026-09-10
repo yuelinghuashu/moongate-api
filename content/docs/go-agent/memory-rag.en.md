@@ -1,6 +1,6 @@
 ---
 title: "Memory: Multi-Session Facts and Lightweight RAG (Part 5)"
-description: "Giving the agent two kinds of memory: cross-session key-value facts (remember/recall, persisted to a JSON file) and lightweight RAG over local notes (embed → cosine → topK), including the two easy-to-miss pitfalls: the embedding prefix and the similarity threshold."
+description: "Giving the agent two kinds of memory: cross-session key-value facts (remember/recall, persisted to a JSON file) and lightweight RAG over local notes (embed → cosine → topK), with measurements showing why a fixed similarity threshold and the embedding prefix are the two most over-trusted details."
 date: 2026-09-08
 series: go-agent
 order: 5
@@ -13,11 +13,8 @@ tags:
 The multi-round loop of Part 3 made the agent able to get work done, but it starts every run with amnesia. This part adds two kinds of memory: **cross-session facts** (remember/recall key-value memory, persisted to JSON) and **document retrieval** (lightweight RAG doing vector search over local notes).
 
 - Prerequisite: the multi-round loop from Part 3 already works
-- Preparation: `ollama pull nomic-embed-text` (about 274MB; without this model the demo degrades to keyword retrieval automatically)
-- Requirements: same as the previous part (Go 1.27+; the repository's go.mod declares go 1.27.1)
+- Preparation: `ollama pull nomic-embed-text` (about 274MB; without this model the example degrades to keyword retrieval automatically)
 - Shape note: this part keeps the **one-shot command-line run** of Part 3 (three sessions demonstrating "session isolation" in sequence inside one process) rather than extending Part 4's SSE service; to wire memory into the service, move this tool table and loop into the server
-
-> Environment note: this article is based on measurements of **Ollama 0.33.3 + llama3.1:8b (A770/Vulkan, 2026-09)**; Ollama iterates fast, so treat `ollama serve --help` as the source of truth for environment variables, and the [official OpenAI compatibility docs](https://docs.ollama.com/api/openai-compatibility) as the source of truth for the `/v1` compatibility fields.
 
 ## 1. There are three kinds of memory; don't conflate them
 
@@ -27,7 +24,7 @@ The multi-round loop of Part 3 made the agent able to get work done, but it star
 | Long-term memory  | Facts that outlive a session (user name, preferences) | External storage               | Key-value pairs written to a local JSON file |
 | Document memory   | Local documents/notes that can be searched            | A document store + an index    | topK vector retrieval (lightweight RAG)      |
 
-The agents in the earlier parts start with amnesia every time: clear `messages` and they remember nothing. This part adds the latter two kinds with two sets of tools: `remember`/`recall`/`list_memory` (long-term facts) plus `search_notes` (document retrieval).
+The agents in the earlier parts start with amnesia every time: clear `messages` and they remember nothing. This part adds the latter two kinds with two sets of tools: `remember`/`recall`/`list_memory` (long-term facts) plus `search_notes` (document retrieval). (The "session isolation" this part refers to means: each session keeps its own `messages` slice, so A's conversation history never appears in B — the only thing shared across sessions is the `memory.json` on disk.)
 
 ## 2. Long-term memory: key-value facts plus enumeration
 
@@ -39,6 +36,8 @@ Three details of the tool design decide whether memory is actually usable:
 
 ## 3. Lightweight RAG: embed → cosine → topK
 
+In plain words first: **embedding turns a piece of text into a list of numbers (a vector)** — the closer two texts are in meaning, the closer their vectors point, so "how alike are these two?" becomes something you can compute directly with cosine similarity.
+
 The idea behind `search_notes` is the smallest possible RAG:
 
 ```
@@ -48,15 +47,20 @@ vectorize the question (query) and each note separately
 → paste the fragments into the tool result so the model "answers from the notes"
 ```
 
-Two easy-to-miss pitfalls:
+Two things here **go against the usual intuition**, so here are the measurements from this machine first (Ollama 0.33.3 + `nomic-embed-text`, over exactly the 6 notes above; the numbers are cosine similarities):
 
-- **Embedding models have an input-prefix convention**: `nomic-embed-text` expects documents prefixed with `search_document:` and queries with `search_query:`; without them, Chinese retrieval quality drops noticeably (in our measurements the same question pulled in unrelated notes);
-- **The similarity threshold**: without one, even completely unrelated fragments enter the topK with low scores and the model can answer off-topic. This part uses `>= 0.35`.
+| Query                                   | With prefixes (`search_document:` / `search_query:`) | Without prefixes |
+| --------------------------------------- | ---------------------------------------------------- | ---------------- |
+| `Intel Arc Ollama GPU 加速` (relevant)  | 0.560 ~ 0.778                                        | 0.592 ~ 0.771    |
+| `怎么做红烧肉？` (completely unrelated) | 0.500 ~ 0.598 (all 6 clear 0.35)                     | 0.465 ~ 0.530    |
 
-## 4. Full code (demo/memory-rag/main.go)
+- **The similarity threshold has to be calibrated against your own corpus; copying a 0.35 usually makes it a no-op**: with short, topically similar text the cosine scores are squeezed into a narrow high band (0.5–0.8 here), so **even a completely unrelated question scores above 0.5** and all 6 notes pass — what actually narrows things down to 3 is `topK`. A threshold is not a bad design (scores only spread out once your corpus is more diverse or your documents are long), but it must be tuned for that corpus; this part keeps `>= 0.35` purely to demonstrate the shape of the code, so **don't copy that number**.
+- **The embedding prefix is the model's own convention: follow it, but don't expect it to solve retrieval on its own**: `nomic-embed-text` expects documents prefixed with `search_document:` and queries with `search_query:`; measured here, with or without them the difference is small (top score 0.778 vs 0.771, essentially the same ranking), and it only becomes visible on a more diverse corpus. Compared with the prefix, **threshold calibration, chunking and topK usually matter more**.
+
+## 4. Full code
 
 <details>
-<summary>Full source of demo/memory-rag/main.go (click to expand)</summary>
+<summary>Full source of main.go (click to expand)</summary>
 
 ```go
 // Part 5 demo: memory and lightweight RAG
@@ -70,7 +74,7 @@ Two easy-to-miss pitfalls:
 //  3. session isolation: every session keeps its own messages history, never polluting
 //     the others.
 //
-// Run: go run ./demo/memory-rag
+// Run: go run main.go (run it from this file's directory)
 package main
 
 import (
@@ -528,7 +532,7 @@ func embedTexts(texts []string) ([][]float64, error) {
 ## 5. Run results (measured on this machine)
 
 ```bash
-go run ./demo/memory-rag
+go run main.go
 ```
 
 Real output (Ollama 0.33.3 + llama3.1:8b + nomic-embed-text, with `temperature=0` for reproducibility):
@@ -588,14 +592,14 @@ Each of the three sessions demonstrates one thing:
 
 ## 6. Pitfalls and comparisons (verified by measurement)
 
-| Symptom                                                               | Cause                                                                      | Handling                                                                                                                               |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Asking a small model to "extract facts by itself" writes wrong values | 8B models extract Chinese unstably (measured: it wrote `小明` as `小明积`) | Use an explicit key/value prompt for demos; in production let a stronger model extract, or validate before writing                     |
-| In a new session `recall` cannot guess the key                        | Key-value memory requires "knowing the key names"                          | Provide the `list_memory` enumeration tool (stable in our measurements)                                                                |
-| Chinese retrieval pulls in unrelated fragments                        | No embedding prefixes / no threshold                                       | `search_document:`/`search_query:` prefixes + a `>=0.35` threshold                                                                     |
-| Retrieval is right but the model adds its own material                | The model is not guaranteed to "copy the fragments"                        | State explicitly at the start of the tool result that answers must rely strictly on that content; production can add citation checking |
-| Output differs every time and is hard to reproduce                    | Default sampling is random                                                 | Use `temperature=0` for demos/tests, and raise it again for chat                                                                       |
-| The retrieval and chat models keep swapping each other out            | Ollama keeps only a limited number of models resident per GPU by default   | If VRAM allows, set `OLLAMA_MAX_LOADED_MODELS=2` (see Part 1, Section 5.3)                                                             |
+| Symptom                                                               | Cause                                                                                                                                                              | Handling                                                                                                                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Asking a small model to "extract facts by itself" writes wrong values | 8B models extract Chinese unstably (measured: it wrote `小明` as `小明积`)                                                                                         | Use an explicit key/value prompt for demos; in production let a stronger model extract, or validate before writing                                                                          |
+| In a new session `recall` cannot guess the key                        | Key-value memory requires "knowing the key names", and those keys are invisible to the model                                                                       | Provide the `list_memory` enumeration tool — enumeration is the precondition for "remembering" (stable in our measurements)                                                                 |
+| Retrieval is not accurate / pulls in unrelated fragments              | For short, topically similar text the cosine scores sit in a narrow 0.5–0.8 band, so a fixed threshold filters almost nothing; the prefix effect is overstated too | Calibrate the threshold against your own corpus; let `topK` do the narrowing, back it with the "answer only from these fragments" instruction, and add the model's prefixes as a convention |
+| Retrieval is right but the model adds its own material                | The model is not guaranteed to "copy the fragments"                                                                                                                | State explicitly at the start of the tool result that answers must rely strictly on that content; production can add citation checking                                                      |
+| Output differs every time and is hard to reproduce                    | Default sampling is random                                                                                                                                         | Use `temperature=0` for demos/tests, and raise it again for chat                                                                                                                            |
+| The retrieval and chat models keep swapping each other out            | Ollama keeps only a limited number of models resident per GPU by default                                                                                           | If VRAM allows, set `OLLAMA_MAX_LOADED_MODELS=2` (see Part 1, Section 5.3)                                                                                                                  |
 
 ## 7. Deliberately simplified vs. production practice
 
@@ -614,7 +618,6 @@ Each of the three sessions demonstrates one thing:
 | Can it run without an embedding model?                   | Yes: the code degrades to keyword retrieval automatically (it probes `/api/tags` at startup), just with worse results |
 | `memory.json` keeps growing                              | Design the keys properly and clean up periodically; use a database in real scenarios                                  |
 | Computing cosine over everything is slow with many notes | Index with a vector store; coarse-filter by tag or directory before ranking precisely                                 |
-| Why is `list_memory` needed?                             | The keys of key-value memory are invisible to the model, and enumeration is the precondition for "remembering"        |
 
 ## Conclusion
 

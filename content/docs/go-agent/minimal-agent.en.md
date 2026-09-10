@@ -10,15 +10,11 @@ tags:
   - LLM
 ---
 
-The through-line of this series is "explain one principle with the smallest possible example, then engineer it step by step". This part is a **deliberately minimal example**: one tool, a single round, about 200 lines of Go (comments included), standard library only (`net/http`, `encoding/json`), running the complete "model names a tool → Go executes it → the result goes back → the model answers" loop.
+This part is a **deliberately minimal example**: one tool, a single round, about 200 lines of Go (comments included), standard library only (`net/http`, `encoding/json`), running the complete "model names a tool → Go executes it → the result goes back → the model answers" loop.
 
 - Who it's for: you know some Go and are writing your first agent tool call (prerequisite: Ollama and `llama3.1:8b` installed as in Part 1)
-- Code: `demo/minimal-agent/main.go`; run `go run ./demo/minimal-agent` from the repository root
-- Requirements: Go 1.27+ (the repository's go.mod already declares go 1.27.1)
-
-This series assumes a **Go developer**. Readers working in Python or any other language can still read Part 1 and the mechanism and pitfall sections of every part — tool-calling mechanics, chat-template problems, API compatibility and operations concepts are all independent of the language.
-
-> Environment note: this article is based on measurements of **Ollama 0.33.3 + llama3.1:8b (A770/Vulkan, 2026-09)**; Ollama iterates fast, so treat `ollama serve --help` as the source of truth for environment variables, and the [official OpenAI compatibility docs](https://docs.ollama.com/api/openai-compatibility) as the source of truth for the `/v1` compatibility fields.
+- Code: the full source is embedded in Sections 2 and 3 below; save it as `main.go` and run `go run main.go` in that directory
+- Requirements: Go 1.27+
 
 ## 1. Interface baseline: /v1 is approximately compatible (know this before you write code)
 
@@ -87,10 +83,10 @@ Before "adding tools" to the code, think one question through: **when do you not
 
 And **plain-text chat is the simplest form of that lightweight path**: the same `messages` array posted to `/v1/chat/completions`, except that the request carries no `tools` field and the response carries only `content`, with no `tool_calls`.
 
-Full code (`demo/plain-chat/main.go`, about 60 lines, standard library only):
+Full code (about 60 lines, standard library only):
 
 <details>
-<summary>Full source of demo/plain-chat/main.go (click to expand)</summary>
+<summary>Full source of main.go (click to expand)</summary>
 
 ```go
 // Part 2 (the plain-text starting version) demo: the core logic runs one
@@ -177,12 +173,12 @@ Three points:
 
 - The request body holds only `model` + `messages`, no `tools` — this is the iron rule from Section 1, "omit the `tools` field when there are no tools", put into practice;
 - The response is read from `choices[0].message.content` and `finish_reason` (`stop` here);
-- **Multi-turn chat = append to `messages` and resend the whole array**, which is the shared foundation of every later demo.
+- **Multi-turn chat = append to `messages` and resend the whole array**, which is the shared foundation of every later example.
 
 Running it:
 
 ```bash
-go run ./demo/plain-chat
+go run main.go
 ```
 
 Real output (Ollama 0.33.3 + llama3.1:8b, measured 2026-09):
@@ -267,7 +263,7 @@ Response (measured on Ollama 0.33.3):
 With those two JSON documents in view, the Go code that follows explains itself: why `ToolCall.Function.Arguments` needs a second parse through `json.RawMessage`, and what `ToolCallID` is for.
 
 <details>
-<summary>Full source of demo/minimal-agent/main.go (click to expand)</summary>
+<summary>Full source of main.go (click to expand)</summary>
 
 ```go
 package main
@@ -505,35 +501,19 @@ var toolMap = map[string]func(json.RawMessage) string{
 }
 ```
 
-#### 3. The main flow `main()` (matching the sequence diagram below)
+#### 3. The main flow `main()` (matching the flow diagram below)
 
-The comments inside `main()` walk through "step one" to "step seven", matching the sequence diagram below one-to-one:
+The comments inside `main()` walk through "step one" to "step seven", matching the flow below one-to-one:
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant G as Go program (main)
-    participant O as Ollama (llama3.1:8b)
-    U->>G: Ask a question
-    G->>O: POST /v1/chat/completions (messages + tools)
-    O-->>G: assistant message + tool_calls
-    G->>G: look up toolMap and run the Go function locally
-    G->>O: send the result back as role="tool" and request again
-    O-->>G: final answer in content
-    G-->>U: print the result
 ```
-
-> If your blog has Mermaid disabled, the flow reads: user → request with tools → receive tool_calls → run the tool locally → send the result back as role="tool" → get the final answer (matching the step table below).
-
-| Step   | What it does                                                                               |
-| ------ | ------------------------------------------------------------------------------------------ |
-| Step 1 | Prepare the user message (`role="user"`)                                                   |
-| Step 2 | Define the list of available tools (tell the model "this tool exists")                     |
-| Step 3 | Call `sendRequest` to send it to the model                                                 |
-| Step 4 | Check whether the returned `assistant` message carries `tool_calls`                        |
-| Step 5 | Look the tool name up in `toolMap` and run the matching Go function                        |
-| Step 6 | Wrap the result in a `role="tool"` message, with `ToolCallID` matching the model's call ID |
-| Step 7 | Call `sendRequest` again so the model produces its final answer from the real result       |
+1 User asks a question         → Go program prepares messages (role="user")
+2 Go program defines the tools → POST /v1/chat/completions (messages + tools) to Ollama
+3 Ollama responds              → assistant message + tool_calls (test: tool_calls is non-empty)
+4 Go program runs it locally   → look the tool name up in toolMap and run the Go function
+5 Go program sends it back     → wrapped as role="tool", ToolCallID matching the model's call ID
+6 Ollama responds              → the final answer in content (generated from the real tool result)
+7 Go program prints the answer → the user sees the result
+```
 
 > Key point: the `ToolCallID` in step six must match the `ID` in the model's request, so that the model can tie the result to that specific call. The heart of the whole mechanism is this — **the model does not execute tools, it only names them; execution always happens in your local code**.
 
@@ -547,7 +527,7 @@ The only place in the program that talks to Ollama:
 
 ### First steps toward production: four small changes (the transition from 200 lines to engineering)
 
-The table above only gives direction; here are the smallest versions of each change. The fuller evolution unfolds part by part in Parts 3 and 4 inside the demo directory.
+The table above only gives direction; here are the smallest versions of each change. The fuller evolution unfolds part by part in Parts 3 and 4.
 
 **① A fixed 30s timeout → a configurable timeout budget**
 
@@ -595,7 +575,7 @@ Wrap "receive `tool_calls` → execute → send back" in a `for` until the respo
 ## 4. Run results
 
 ```bash
-go run ./demo/minimal-agent
+go run main.go
 ```
 
 Successful output:

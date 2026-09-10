@@ -13,9 +13,7 @@ tags:
 This part does two things: it turns the loop from Part 3 **into a long-running HTTP service** (browsers/clients receive tokens in real time over SSE), and it makes **the same code switch to an OpenAI-compatible cloud endpoint by changing one `BASE_URL`** — putting Part 2's "/v1 is approximately compatible" iron rules into code.
 
 - Prerequisite: the multi-round loop from Part 3 already works
-- Requirements: Go 1.27+ (the repository's go.mod declares go 1.27.1; the `"GET /health"` method-routing syntax used by this part's server has been available since Go 1.22, so that is satisfied)
-
-> Environment note: this article is based on measurements of **Ollama 0.33.3 + llama3.1:8b (A770/Vulkan, 2026-09)**; Ollama iterates fast, so treat `ollama serve --help` as the source of truth for environment variables, and the [official OpenAI compatibility docs](https://docs.ollama.com/api/openai-compatibility) as the source of truth for the `/v1` compatibility fields.
+- Requirements: Go 1.27+ (the `"GET /health"` method-routing syntax used by this part's server has been available since Go 1.22, so that is satisfied)
 
 ## 1. Real messages first: how the two streaming formats differ (captured on this machine)
 
@@ -68,6 +66,8 @@ Event types (the `event:` field):
 
 The browser side only needs to `fetch` and read the SSE line by line; testing with curl looks like this (see the real output in Section 5).
 
+> **The minimum you need to know about SSE — three points, and that is enough for the code below**: ① one event = an `event: type` line + one or more `data:` lines + a **blank line** to finish it; clients read line by line and close the event at that blank line (SSE = Server-Sent Events, the browser-native server push); ② the server must `Flush()` after every event, otherwise the first tokens sit in a buffer and the browser waits; ③ the connection stays open and is closed by the client or a timeout — this part implements neither cancellation nor heartbeats, see Section 8 for the production differences.
+
 ## 3. The two streaming details that break most easily (the code already handles both)
 
 **① `delta.tool_calls`' `arguments` may arrive in fragments.** When streaming from the OpenAI cloud, the argument JSON of a single tool call can be **split across several chunks**, and the client has to reassemble them by `index`; measured locally, Ollama sends it in one piece (see the capture in Section 1), but the code is written to expect fragments, so it works against both:
@@ -80,10 +80,12 @@ if tc.Function.Arguments != "" {
 
 **② `content` may be the empty string, and `finish_reason` only shows up on the last line.** To decide "does this round need to execute tools?", always wait until **a whole round has been accumulated** and go by `finish_reason == "tool_calls"` / `tool_calls` being non-empty — never conclude from the first chunk you receive.
 
-## 4. Full code (demo/stream-server/main.go)
+One more: `sc.Buffer(make([]byte, 1024), 1<<20)` raises the per-line limit from `bufio.Scanner`'s default 64KB to 1MB — a single SSE line (a whole `data:` payload) can be long, and without this it reports `token too long` and kills the stream.
+
+## 4. Full code
 
 <details>
-<summary>Full source of demo/stream-server/main.go (click to expand)</summary>
+<summary>Full source of main.go (click to expand)</summary>
 
 ```go
 // Part 4 demo: turning the agent loop into a long-running HTTP service (SSE streaming + cloud-switchable)
@@ -102,7 +104,7 @@ if tc.Function.Arguments != "" {
 //
 // Run:
 //
-//	OLLAMA_BASE="http://localhost:11434/v1" OLLAMA_MODEL=llama3.1:8b go run ./demo/stream-server
+//	OLLAMA_BASE="http://localhost:11434/v1" OLLAMA_MODEL=llama3.1:8b go run main.go
 //	Listens on :8899 by default.
 package main
 
@@ -518,11 +520,11 @@ func runTool(tc ToolCall) (string, error) {
 
 </details>
 
-## 5. Run results (measured on this machine)
+## 5. Run results (Ollama 0.33.3 + llama3.1:8b, measured 2026-09)
 
 ```bash
 # Start (BASE_URL points at local Ollama; moving to the cloud only changes environment variables, see Section 6)
-PORT=8899 go run ./demo/stream-server
+PORT=8899 go run main.go
 ```
 
 `GET /health`:
@@ -558,24 +560,8 @@ event: delta
 data: :
 event: delta
 data: 10
-event: delta
-data: 。
-event: delta
-data: 7
-event: delta
-data:  乘
-event: delta
-data: 以
-event: delta
-data:  8
-event: delta
-data:  等
-event: delta
-data: 于
-event: delta
-data:  56
-event: delta
-data: 。
+…
+(the remaining 9 delta events are elided: one token each, arriving until the sentence is complete)
 
 event: answer
 data: 现在是 22:10。7 乘以 8 等于 56。
@@ -618,14 +604,7 @@ data: get_current_time({}) -> 2026-09-08 16:48:21
 event: tool
 data: multiply({"a": 7, "b": 8}) -> 56
 
-event: delta
-data: 现在是 **202
-event: delta
-data: 6年9月8日
-event: delta
-data: 16:48:21
-event: delta
-data: **。
+…(the delta events are elided — one token at a time; note that `arguments` carries spaces here)
 
 event: answer
 data: 现在是 **2026年9月8日 16:48:21**。另外，**7 × 8 = 56**。还有其他需要帮忙的吗？😊
@@ -638,13 +617,13 @@ Compared with local Ollama: the event stream structure is exactly the same (`rou
 
 ## 7. Pitfalls and comparisons
 
-| Symptom                                                                 | Cause                                                               | Handling                                                                                                                                           |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE arrives in fits and starts / the client misses parts                | Not understanding `event:`/`data:`/blank-line separation            | Read line by line and end the current event at a blank line (see the raw stream in Section 5)                                                      |
-| Half of a tool call's arguments go missing                              | Treating a fragmented `arguments` as complete JSON                  | Accumulate by `index`, concatenate, then parse the whole thing                                                                                     |
-| The model already called a tool but it is treated as an ordinary answer | Returning after only the first chunk                                | Accumulate the whole round before checking `finish_reason`                                                                                         |
-| Works locally, behaves differently in the cloud                         | /v1 is approximately compatible; the cloud is stricter about fields | Already measured against the MiMo cloud (§6) with zero code changes; still worth running through the checklist before switching to another service |
-| Long tasks time out                                                     | The upstream request has no timeout budget                          | Raise `http.Client.Timeout` as needed + server-side `context` cancellation                                                                         |
+| Symptom                                                                 | Cause                                                                     | Handling                                                                                                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE arrives in fits and starts / the client misses parts                | Not understanding `event:`/`data:`/blank-line separation                  | Read line by line and end the current event at a blank line (see the raw stream in Section 5)                                                      |
+| Half of a tool call's arguments go missing                              | Treating a fragmented `arguments` as complete JSON                        | Accumulate by `index`, concatenate, then parse the whole thing                                                                                     |
+| The model already called a tool but it is treated as an ordinary answer | Returning after only the first chunk                                      | Accumulate the whole round before checking `finish_reason`                                                                                         |
+| Works locally, behaves differently in the cloud                         | /v1 is approximately compatible; the cloud is stricter about fields       | Already measured against the MiMo cloud (§6) with zero code changes; still worth running through the checklist before switching to another service |
+| Long tasks time out / curl disconnects early                            | No timeout budget on the upstream request, or proxy buffering is still on | Raise `http.Client.Timeout` as needed + server-side `context` cancellation; SSE needs proxy buffering off                                          |
 
 ## 8. Deliberately simplified vs. production practice
 
@@ -660,7 +639,6 @@ Compared with local Ollama: the event stream structure is exactly the same (`rou
 
 | Question                                    | Fix                                                                                                               |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| curl disconnects before `event: done`       | Check the upstream timeout and `http.Client.Timeout`; SSE needs proxy buffering off                               |
 | The browser receives no stream              | The server must `Flush()`; confirm the `text/event-stream` response header                                        |
 | Want to compare the native /api/chat stream | Use the capture command from Section 1 to compare for yourself; the service goes through /v1 uniformly by default |
 | 401 after switching to the cloud            | Check `OLLAMA_API_KEY`; local Ollama ignores the key                                                              |

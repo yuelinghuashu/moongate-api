@@ -9,7 +9,7 @@ tags:
   - LLM
 ---
 
-This series builds an agent locally in Go, without touching Python/Node at any point. Part 1 covers environment and operations only, with no code: install Ollama, light up Vulkan, pull the models, and explain clearly which pitfalls long-running deployments hit and how to monitor them; the code starts in Part 2.
+This series builds an agent locally in Go, without touching Python/Node at any point (readers working in Python or another language can still read the mechanism and pitfall sections of every part — tool-calling mechanics, chat templates, API compatibility and operations concepts are language-independent). Part 1 covers environment and operations only, with no code: install Ollama, light up Vulkan, pull the models, and explain clearly which pitfalls long-running deployments hit and how to monitor them; the code starts in Part 2.
 
 - Prerequisites: a basic Linux command line, and enough familiarity to follow systemd service concepts (`systemctl`/`journalctl`)
 - Heads-up: Section 5, "the long-term operations handbook", is **ops-facing content (an SRE/DevOps view)** — pure Go developers can skip it for now (it does not affect Parts 2–5), but it is the most distinctive stability knowledge in this series; before running long-term in production, be sure to come back and read it closely
@@ -123,9 +123,7 @@ ollama pull llama3.1:8b
 
 ## 4. Measured performance (Intel Arc A770 + llama3.1:8b)
 
-> The data comes from measurements on this machine (Ollama 0.33.3), read from the model-loading and timing logs in `journalctl -u ollama`.
-
-> Environment snapshot (measured 2026-09): Ubuntu 24.04 LTS · kernel 7.0.0-31-generic · Mesa Vulkan driver 25.2.8 (intel-media-va-driver 24.1.0) · Arc A770 (DG2). Performance and stability vary with the kernel/Mesa combination; the numbers in this article use that as their baseline.
+> The data comes from measurements on this machine (Ollama 0.33.3), read from the model-loading and timing logs in `journalctl -u ollama`; environment snapshot (measured 2026-09): Ubuntu 24.04 LTS · kernel 7.0.0-31-generic · Mesa Vulkan driver 25.2.8 (intel-media-va-driver 24.1.0) · Arc A770 (DG2) — performance and stability vary with the kernel/Mesa combination, and the numbers in this article use that as their baseline.
 
 > ⚠️ The table below is **static usage after loading**, which is not the same as long-term stability: on some kernel/Mesa driver combinations the Vulkan backend has known problems with VRAM accounting drift and idle VRAM being swapped out, so over a long run you should monitor the VRAM curve rather than this one moment — see Section 2 for how.
 

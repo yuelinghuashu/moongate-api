@@ -9,7 +9,7 @@ tags:
   - LLM
 ---
 
-本系列用 Go 在本地搭建 Agent，全程不碰 Python/Node。第 1 篇只做环境与运维、不写代码：装好 Ollama、点亮 Vulkan、拉好模型，并讲清楚长期运行会踩哪些坑、怎么监控；代码从第 2 篇开始。
+本系列用 Go 在本地搭建 Agent，全程不碰 Python/Node（用 Python 等其他语言的读者，仍可读各篇的机制与避坑内容——工具调用机制、聊天模板、API 兼容与运维概念都与语言无关）。第 1 篇只做环境与运维、不写代码：装好 Ollama、点亮 Vulkan、拉好模型，并讲清楚长期运行会踩哪些坑、怎么监控；代码从第 2 篇开始。
 
 - 前置：基础 Linux 命令行，看得懂 systemd 服务概念（`systemctl`/`journalctl`）
 - 提示：第 5 节「长期运维手册」为**运维向内容（SRE/DevOps 视角）**——纯 Go 开发读者可先跳过（不影响第 2~5 篇），但它是本系列最独特的稳定性知识，上线长期运行前务必回来精读
@@ -123,9 +123,7 @@ ollama pull llama3.1:8b
 
 ## 4. 实测性能（Intel Arc A770 + llama3.1:8b）
 
-> 数据来自本机实测（Ollama 0.33.3），通过 `journalctl -u ollama` 的模型加载与计时日志读取。
-
-> 环境快照（2026-09 实测）：Ubuntu 24.04 LTS · 内核 7.0.0-31-generic · Mesa Vulkan 驱动 25.2.8（intel-media-va-driver 24.1.0）· Arc A770（DG2）。性能与稳定性随内核/Mesa 组合变化，本文数字以此为基线。
+> 数据来自本机实测（Ollama 0.33.3），通过 `journalctl -u ollama` 的模型加载与计时日志读取；环境快照（2026-09 实测）：Ubuntu 24.04 LTS · 内核 7.0.0-31-generic · Mesa Vulkan 驱动 25.2.8（intel-media-va-driver 24.1.0）· Arc A770（DG2）——性能与稳定性随内核/Mesa 组合变化，本文数字以此为基线。
 
 > ⚠️ 下表是**加载后的静态占用**，不等同于长期稳定性：Vulkan 后端在部分内核/Mesa 驱动下有显存记账失步、空闲显存被换出等已知问题，长时间运行应监控显存曲线而非只看这一时刻，方法见第 2 节。
 
