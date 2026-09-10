@@ -8,7 +8,6 @@ tags:
   - SSR
   - Vue
   - Performance
-  - Debugging
 ---
 
 ## 1. The Symptom: Disk Alert, SSH Dead
