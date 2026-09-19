@@ -465,8 +465,8 @@ go run main.go
 ```
 
 Real output (Ollama 0.33.3 + llama3.1:8b, measured 2026-09-19; the request pins `temperature=0`):
-> The console output and prompts in this transcript are Chinese exactly as captured; substituting English prompts changes the wording, not the structure or the conclusions.
 
+> The console output and prompts in this transcript are Chinese exactly as captured; substituting English prompts changes the wording, not the structure or the conclusions.
 
 ```
 🧑 用户: 请先计算 10 除以 0，再计算 10 除以 2，然后把两个结果与当前时间一起告诉我。
@@ -488,7 +488,7 @@ Four things worth noting:
 1. **Three tools were called in parallel in one round**: `divide(10,0)`, `divide(10,2)` and `get_current_time` all came back in the same assistant message, and the loop executed every one of them and sent each back as its own `role=tool` message (they run in the order the model listed them, which is not guaranteed to be the same every time);
 2. **The error was fed back correctly**: the `divide(10,0)` failure entered the conversation history, and in the next round the model explicitly cited it and explained that "dividing 10 by 0 is invalid" instead of inventing a number;
 3. **The token counts make the cost of looping visible**: `prompt=197` in the final round is the total length of the resent history — the more rounds and the longer the history, the bigger that number grows, which confirms why Section 4's trimming is necessary;
-4. **`temperature=0` does not mean "always byte-identical"**: measured here, the same request run three times produced identical output (greedy decoding *is* deterministic for one fixed prompt); but the prompt in this loop **contains dynamic content** — the timestamp the tool returns differs every round — so two runs will not word the answer the same way. What stays stable is the **structure and the conclusion**; for a byte-for-byte reproduction you have to freeze the tool's return value too.
+4. **`temperature=0` does not mean "always byte-identical"**: measured here, the same request run three times produced identical output (greedy decoding _is_ deterministic for one fixed prompt); but the prompt in this loop **contains dynamic content** — the timestamp the tool returns differs every round — so two runs will not word the answer the same way. What stays stable is the **structure and the conclusion**; for a byte-for-byte reproduction you have to freeze the tool's return value too.
 
 ## 7. Pitfalls and comparisons (verified by measurement)
 
