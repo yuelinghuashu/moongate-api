@@ -1,6 +1,6 @@
 ---
 title: "Minimal Code: The Complete Single-Tool, Single-Round Loop (Part 2)"
-description: "Running the minimal tool-calling loop in about 200 lines of Go (standard library only) — the model names a tool, Go executes it, the result goes back, the model answers — and spelling out the three iron rules of Ollama's “approximately compatible” /v1."
+description: "Running the minimal tool-calling loop in about 200 lines of Go (standard library only) — the model names a tool, Go executes it, the result goes back, the model answers — and spelling out the four iron rules of Ollama's “approximately compatible” /v1."
 date: 2026-09-08
 series: go-agent
 order: 2
@@ -14,7 +14,7 @@ This part is a **deliberately minimal example**: one tool, a single round, about
 
 - Who it's for: you know some Go and are writing your first agent tool call (prerequisite: Ollama and `llama3.1:8b` installed as in Part 1)
 - Code: the full source is embedded in Sections 2 and 3 below; save it as `main.go` and run `go run main.go` in that directory
-- Requirements: Go 1.27+
+- Requirements: Go 1.22+ (measured here on Go 1.27.1; this part only uses base standard-library APIs, so even older versions work)
 
 ## 1. Interface baseline: /v1 is approximately compatible (know this before you write code)
 
@@ -27,22 +27,27 @@ The code in this part calls `POST http://localhost:11434/v1/chat/completions` �
 | `tool_choice` parameter         | Partially supported and unstable (measured on 0.33.3: `required` does force a call, `none` has no effect; the official compatibility docs do not list it as a supported field and upstream is still working on it: [#17921](https://github.com/ollama/ollama/issues/17921), [#11171](https://github.com/ollama/ollama/issues/11171)) | Supports `auto`/`required`/a named function; commonly used to force a call      |
 | Empty `tools: []`               | Returns 200, same as sending no tools at all                                                                                                                                                                                                                                                                                         | Usually errors, or requires omitting the field (several SDKs write workarounds) |
 | `message.content` on tool calls | The empty string `""`                                                                                                                                                                                                                                                                                                                | `null`                                                                          |
-| `finish_reason`                 | `tool_calls` on tool calls (this version already matches OpenAI)                                                                                                                                                                                                                                                                     | `tool_calls`                                                                    |
+| `finish_reason`                 | `tool_calls` on a tool call (this version already matches OpenAI); `length` when cut off by `max_tokens`                                                                                                                                                                                                                             | Same values: `tool_calls` / `stop` / `length`                                   |
+| **The native `options` object** | **Silently ignored**: `/v1` does not accept `options` (measured on 0.33.3: `options.num_predict=8` still produced 51–394 tokens, reproduced twice)                                                                                                                                                                                   | Put the parameters at the top level: `max_tokens` / `stop` / `temperature`      |
 | `n` / `user` / `logit_bias`     | Not supported                                                                                                                                                                                                                                                                                                                        | Supported                                                                       |
 | Streaming messages              | Inconsistent with OpenAI at first (only aligned on `choices[].delta` after Ollama [PR #17485](https://github.com/ollama/ollama/pull/17485)); older versions still differ                                                                                                                                                             | `choices[].delta`                                                               |
 
-Three iron rules when writing code (the code in this part already follows them):
+Four iron rules when writing code (the code in this part already follows them):
 
-- Decide "is a tool call wanted?" from **`tool_calls` being non-empty / `finish_reason == "tool_calls"`**, never from `content` alone;
+- Decide "is a tool call wanted?" from **`tool_calls` being non-empty** (`finish_reason` is only a cross-check: it matches OpenAI on Ollama, but other upstreams may report `stop` or omit it — treating it as the sole criterion silently drops tool calls), never from `content` alone;
 - When checking for emptiness, accept both `content == ""` and `content == null`;
-- With no tools, **omit the `tools` field**; never send `tools: []`;
+- With no tools, **omit the `tools` field**; never send `tools: []` (in Go this is the struct tag `omitempty`: a zero-valued field is left out of the JSON);
 - When you need to "force a particular tool", don't count on `tool_choice` (measured on 0.33.3: `required` forces a call, `none` has no effect, field support is unstable) — constrain it through the prompt instead, or use the native `/api/chat` (Section 1 of Part 4 compares the native `/api/chat` message shapes, but the service sticks to `/v1` throughout so it can move to the cloud).
+
+> To understand what the model actually sees — how `tools` is rendered into the prompt by the chat template, and why a model sometimes writes JSON into `content` — see **Appendix B of Part 1**; for any unfamiliar word (token, temperature, `finish_reason`, …) use the glossary in **Appendix C of Part 1**.
 
 Reference: [Ollama OpenAI compatibility official docs](https://docs.ollama.com/api/openai-compatibility)
 
 ---
 
 ## 2. Starting from plain text: the core logic in about 20 lines
+
+> **Only want to chat with a local model from Go? This section is enough on its own** — it is the complete "minimal usable" shape (request, parsing and multi-turn all carry over); the tool part that follows can wait for another day.
 
 First run one conversation by hand with curl — it is language-independent and the easiest way to confirm the service and the model are ready:
 
@@ -149,6 +154,14 @@ func main() {
 	}
 	defer resp.Body.Close()
 
+	// Check the status code first: a model that was never pulled or a service that
+	// is not running shows up right here. Skip it and the unmarshal below "succeeds"
+	// (Ollama's error body is valid JSON), leaving you with a bare "无响应"
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		panic(fmt.Errorf("Ollama 返回 %d：%s\n排查：模型是否已 pull？服务是否在跑（systemctl status ollama）？", resp.StatusCode, string(b)))
+	}
+
 	body, _ := io.ReadAll(resp.Body)
 	var result ChatResponse
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -182,6 +195,8 @@ go run main.go
 ```
 
 Real output (Ollama 0.33.3 + llama3.1:8b, measured 2026-09):
+> The console output and prompts in this transcript are Chinese exactly as captured; substituting English prompts changes the wording, not the structure or the conclusions.
+
 
 ```
 🧑 用户: 你好，请用一句话介绍你自己。
@@ -194,6 +209,16 @@ Real output (Ollama 0.33.3 + llama3.1:8b, measured 2026-09):
 ---
 
 ## 3. The Go implementation (adding tools to plain text)
+
+**Compared with the previous section the skeleton is the same and only three things are new** — read this table first, then decide which parts deserve a close reading:
+
+| What is new                                                                                 | Where it lives                                                                    | Already covered above, safe to skim                                                |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| ① A `tools` field in the request (the tool definition: name, description, parameter Schema) | the `Tool` / `FunctionDef` structs + the `toolMap` registry + `ChatRequest.Tools` | the HTTP skeleton of `sendRequest`, `Choice`/`ChatResponse`, the bulk of `Message` |
+| ② Parsing `tool_calls` out of the response (with its `id` and its string-form `arguments`)  | the `ToolCall` / `FunctionCall` structs + step 4 of `main()`                      | JSON marshalling and unmarshalling are written exactly as in the previous section  |
+| ③ Sending the result back with `role="tool"` + `tool_call_id`                               | steps 5–7 of `main()` (one extra `sendRequest`)                                   | multi-turn chat = append to `messages` and resend everything (established above)   |
+
+> Line-level comparison: the previous section's program is 79 lines, and **49 of them are reused verbatim here** (62%), with 30 rewritten and 164 new. In other words the genuinely new knowledge in this section is the three rows above; the rest is the same skeleton extended.
 
 This is the **deliberately minimal example**: one tool, a single round, about 200 lines (comments included), Go standard library only (`net/http`, `encoding/json`).
 
@@ -260,7 +285,16 @@ Response (measured on Ollama 0.33.3):
 }
 ```
 
-With those two JSON documents in view, the Go code that follows explains itself: why `ToolCall.Function.Arguments` needs a second parse through `json.RawMessage`, and what `ToolCallID` is for.
+With those two JSON documents in view, the Go code that follows explains itself: why `FunctionCall.Arguments` is declared as `string` and still needs a second parse through `json.RawMessage`, and what `ToolCallID` is for.
+
+**Read those 213 lines in four blocks** (the banner comments in the code mark them; if you only want the new knowledge, read ② and ③):
+
+| Block                        | Lines | Contents                                                                                       | Relation to the previous section                                                              |
+| ---------------------------- | ----- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| ① Data structures            | ~57   | `Message`/`ToolCall`/`Tool`/`FunctionDef`/`FunctionCall`/`ChatRequest`/`Choice`/`ChatResponse` | A superset of the previous section: three new structs, plus two fields on `Message`           |
+| ② Tool function and registry | ~17   | `getCurrentTime` + `toolMap`                                                                   | **The genuinely new part**: the model only sends a name, and this table maps it to a function |
+| ③ `main()`                   | ~76   | Steps 1–7 walk the whole loop                                                                  | ③ is where the tool-calling mechanism actually lives                                          |
+| ④ `sendRequest`              | ~53   | Send, read, parse                                                                              | Nearly identical to the same function above (plus `tools` and `stream`)                       |
 
 <details>
 <summary>Full source of main.go (click to expand)</summary>
@@ -291,32 +325,35 @@ type Message struct {
 
 // ToolCall is a tool the AI asked to call
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 // Tool is one of the tools we offer to the AI
 type Tool struct {
-	Type     string   `json:"type"`
-	Function Function `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
 }
 
-// Function is the definition of a tool function
-type Function struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+// FunctionDef is the shape of the function inside a tool definition (tools[].function)
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// FunctionCall is the shape of the function inside one tool call (tool_calls[].function)
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // ChatRequest is the request sent to Ollama
 type ChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
-	Tools    []Tool    `json:"tools"`
+	Tools    []Tool    `json:"tools,omitempty"` // omitted when empty, per Part 2's compatibility iron rule
 	Stream   bool      `json:"stream"`
 }
 
@@ -364,12 +401,12 @@ func main() {
 	tools := []Tool{
 		{
 			Type: "function",
-			Function: Function{
+			Function: FunctionDef{
 				Name:        "get_current_time",
 				Description: "获取当前的日期和时间",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				},
 			},
 		},
@@ -379,7 +416,7 @@ func main() {
 	// Send the user message and the tool list to the model together
 	resp := sendRequest(messages, tools)
 	if len(resp.Choices) == 0 {
-		fmt.Println("无响应")
+		fmt.Println("无响应（HTTP 200 但没有 choices，检查模型名与请求体）")
 		return
 	}
 
@@ -456,14 +493,23 @@ func sendRequest(messages []Message, tools []Tool) ChatResponse {
 	}
 	defer resp.Body.Close()
 
+	// Check the status code before parsing: a model that was never pulled (404
+	// not found) or a service that is not running surfaces right here. Skip it and
+	// the json.Unmarshal below "succeeds", because Ollama's error body is itself
+	// valid JSON — you end up with a bare "无响应" and a newcomer concludes the
+	// model is not installed. So print the status code together with the raw body.
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		panic(fmt.Errorf("Ollama 返回 %d：%s\n排查：模型是否已 pull（ollama list）？服务是否在跑（systemctl status ollama）？", resp.StatusCode, string(b)))
+	}
+
 	// Read the response
 	body, _ := io.ReadAll(resp.Body)
 
 	// Parse the JSON response
-	// Note: when Ollama reports an error the body is not the standard shape, so
-	// parsing it directly yields an empty response; silently printing "无响应"
-	// would make newcomers think the model is not installed, so print the raw
-	// body on failure
+	// Note: reaching this point means the status code was 200, but the body can
+	// still have an unexpected shape (a proxy may hand back HTML), so print the
+	// raw body when parsing fails
 	var result ChatResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		fmt.Printf("解析失败，原始响应: %s\n", string(body))
@@ -475,6 +521,20 @@ func sendRequest(messages []Message, tools []Tool) ChatResponse {
 
 </details>
 
+> **On `omitempty` (measured, and easy to get wrong)**: the `Content` field carries `omitempty`, which **only affects what you send** — an empty field is left out. But upstream tolerance for a missing `content` depends on the role:
+>
+> - A `role="tool"` message **must carry the `content` field**: omit it and you get **HTTP 400** `invalid message content type: <nil>`; write `content: ""` explicitly and it is 200.
+> - A `role="assistant"` message with `tool_calls` is fine with `content` omitted or empty → 200 (which is what this series' code has always sent, so nothing ever broke).
+>
+> In other words, "**omit the `tools` field when there are no tools**" is an iron rule, but "**omit `content` when a tool result is empty**" fails outright. Self-test:
+>
+> ```bash
+> # no content: 400 invalid message content type: <nil>
+> curl -s http://localhost:11434/v1/chat/completions -H "Content-Type: application/json" \
+>   -d '{"model":"llama3.1:8b","messages":[{"role":"user","content":"现在几点了？"},{"role":"assistant","tool_calls":[{"id":"c1","type":"function","function":{"name":"get_current_time","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1"}],"stream":false}' | head -c 120
+> # with content (even an empty string): 200
+> ```
+
 ### Code walkthrough
 
 The code has three parts, and understanding their responsibilities is enough:
@@ -485,6 +545,8 @@ The code has three parts, and understanding their responsibilities is enough:
 
 - a `role="assistant"` message carries `tool_calls` (which tool the AI wants to call)
 - a `role="tool"` message carries `tool_call_id` (the tool's result, sent back to the AI)
+
+> A naming trap built into the protocol itself: the JSON calls both of them `function` — `tools[].function` is the **tool definition** (`name`/`description`/`parameters`), while `tool_calls[].function` is **a single call** (`name`/`arguments`). On the Go side the two type names `FunctionDef` and `FunctionCall` keep them apart, while both fields keep `json:"function"`.
 
 #### 2. Tool definition and registry
 
@@ -525,25 +587,17 @@ The only place in the program that talks to Ollama:
 - Requests go to the OpenAI-compatible endpoint `POST http://localhost:11434/v1/chat/completions`
 - The response is parsed and returned as a `ChatResponse`, and `main()` reads the AI's reply from `Choices[0].Message`
 
-### First steps toward production: four small changes (the transition from 200 lines to engineering)
+### First steps toward production: five small changes (the transition from 200 lines to engineering)
 
 The table above only gives direction; here are the smallest versions of each change. The fuller evolution unfolds part by part in Parts 3 and 4.
 
-**① A fixed 30s timeout → a configurable timeout budget**
+#### ① A fixed 30s timeout → a configurable timeout budget
 
-The minimal version already sends requests with a 30s-timeout `http.Client` (see `sendRequest` in the full code above); this step turns the timeout into a budget you can tune per scenario:
-
-```go
-// Before (the minimal version: a fixed 30 seconds)
-client := &http.Client{Timeout: 30 * time.Second}
-
-// After (long contexts / slow cloud inference need headroom)
-client := &http.Client{Timeout: 5 * time.Minute}
-```
+The minimal version already uses a 30s-timeout `http.Client` (see `sendRequest` in the full code above) — what changes here is not the code shape but **where that number comes from**: treat the timeout as a budget tuned per scenario, where 30s is plenty for short local requests and long contexts or slow cloud inference need headroom (say `5 * time.Minute`).
 
 > What matters is not the number but giving the upstream request an **explicit timeout budget**: without one, a stuck Ollama hangs the request forever.
 
-**② `panic` → returning an `error`**
+#### ② `panic` → returning an `error`
 
 ```go
 // Before
@@ -553,9 +607,11 @@ func sendRequest(...) ChatResponse { ...; panic(err) }
 func sendRequest(...) (ChatResponse, error) { ...; return ChatResponse{}, fmt.Errorf("请求失败: %w", err) }
 ```
 
+> `%w` is Go's error-wrapping verb: it nests the original error inside the new one so `errors.Is` / `errors.As` can still identify the cause later (`%v` merely formats a string and loses that).
+
 The main flow then goes from "crashing" to "logging and degrading gracefully".
 
-**③ A hard-coded model name → an environment variable**
+#### ③ A hard-coded model name → an environment variable
 
 ```go
 model := os.Getenv("OLLAMA_MODEL")
@@ -564,11 +620,21 @@ if model == "" {
 }
 ```
 
-**④ One round → a loop (the subject of Part 3)**
+#### ④ An empty tool result needs a fallback (or upstream returns 400)
+
+Today's tools always return a non-empty string, which is why the `omitempty` problem above never showed; the moment a tool can return nothing (no match, silent success, empty file) you hit a 400. The loops in Parts 3 and 5 include this line:
+
+```go
+if result == "" {
+    result = "(工具无输出)" // even an empty result has to be a message the model can read
+}
+```
+
+#### ⑤ One round → a loop (the subject of Part 3)
 
 Wrap "receive `tool_calls` → execute → send back" in a `for` until the response no longer contains `tool_calls` — that is the subject of Part 3, which also fills in multi-tool registration, argument parsing and error feedback.
 
-> Summary: those four points, plus the loop, multiple tools and error handling of Part 3, and the service-ization, timeouts and concurrency of Part 4, are the concrete path to the right-hand column of "deliberately simplified vs. production practice" — each part moves one small step forward, and there is no need to write "production-grade" code in one go.
+> Summary: those five points, plus the loop, multiple tools and error handling of Part 3, and the service-ization, timeouts and concurrency of Part 4, are the concrete path to the right-hand column of "deliberately simplified vs. production practice" — each part moves one small step forward, and there is no need to write "production-grade" code in one go.
 
 ---
 
@@ -578,12 +644,12 @@ Wrap "receive `tool_calls` → execute → send back" in a `for` until the respo
 go run main.go
 ```
 
-Successful output:
+Successful output (measured 2026-09-19; this minimal version does not pin `temperature`, and the **tool result carries a live timestamp** — both make the final wording vary between runs, while the structure and the source of the three lines below stay the same):
 
 ```
 🔧 模型决定调用工具: get_current_time
-✅ 工具结果: 2026-09-07 19:58:44
-💬 最终回答: 当前时间是 2026年09月07日 19:58:44
+✅ 工具结果: 2026-09-19 14:57:56
+💬 最终回答: 目前的时间是 2026 年 9 月 19 日 14:57:56。
 ```
 
 The agent really did execute my Go function and take the real time, instead of making an answer up.
@@ -602,11 +668,13 @@ It "knows" it should call a tool but never writes it into the `tool_calls` field
 
 ## FAQ: quick answers (code)
 
-| Problem                                                      | Cause                                                                                                                                                   | Fix                                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| The code returns 404 / 400                                   | The Ollama version is too old and `/v1/chat/completions` is not enabled                                                                                 | Upgrade to >= 0.3.0 (see the install in Part 1)                                          |
-| The model's answer contains `{"name": ...}`                  | The template lacks the tool format, or model compliance is insufficient (qwen2.5-coder reproduces this on 0.33.3 even with a correct official template) | Switch to `llama3.1:8b`; for the Qwen transcript and self-check see Appendix A of Part 1 |
-| Behavior differs after switching to OpenAI / a cloud service | `/v1` is only approximately compatible, so field details differ                                                                                         | Self-test against the list in Section 1 (empty `tools`, empty content, `tool_choice`, …) |
+| Problem                                                        | Cause                                                                                                                                                   | Fix                                                                                                                                     |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `panic: Ollama 返回 404`, body contains `not found`            | The model was never pulled (measured on 0.33.3: a missing model returns 404, not 400)                                                                   | `ollama pull llama3.1:8b`, then confirm with `ollama list`                                                                              |
+| `panic: Ollama 返回 404`, body has no `not found`              | `/v1/chat/completions` is not enabled; the Ollama version is too old                                                                                    | Upgrade to >= 0.3.0 (see the install in Part 1)                                                                                         |
+| `panic: dial tcp 127.0.0.1:11434: connect: connection refused` | The Ollama service is not running                                                                                                                       | `systemctl start ollama` (WSL/containers: Section 5.6 of Part 1)                                                                        |
+| The model's answer contains `{"name": ...}`                    | The template lacks the tool format, or model compliance is insufficient (qwen2.5-coder reproduces this on 0.33.3 even with a correct official template) | Switch to `llama3.1:8b`; for the Qwen transcript and self-check see Appendix A of Part 1                                                |
+| `options.num_predict` has no effect                            | `/v1` ignores `options` (that is a native `/api/chat` parameter); `tool_choice: "none"` likewise has no effect on 0.33.3                                | Use `max_tokens` for the budget instead (measured: `max_tokens: 8` truncates to exactly 8 tokens and returns `finish_reason: "length"`) |
 
 ---
 

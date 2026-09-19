@@ -12,6 +12,7 @@ tags:
 This series builds an agent locally in Go, without touching Python/Node at any point (readers working in Python or another language can still read the mechanism and pitfall sections of every part — tool-calling mechanics, chat templates, API compatibility and operations concepts are language-independent). Part 1 covers environment and operations only, with no code: install Ollama, light up Vulkan, pull the models, and explain clearly which pitfalls long-running deployments hit and how to monitor them; the code starts in Part 2.
 
 - Prerequisites: a basic Linux command line, and enough familiarity to follow systemd service concepts (`systemctl`/`journalctl`)
+- Want to get to the code: Sections 1–4 are enough (Section 4 ends with a 📌 reminder) — once the environment is ready, jump to Part 2 and come back to Section 5 when you plan to run this long-term or ship it
 - Heads-up: Section 5, "the long-term operations handbook", is **ops-facing content (an SRE/DevOps view)** — pure Go developers can skip it for now (it does not affect Parts 2–5), but it is the most distinctive stability knowledge in this series; before running long-term in production, be sure to come back and read it closely
 
 > Environment note: this article is based on measurements of **Ollama 0.33.3 + llama3.1:8b (A770/Vulkan, 2026-09)**; Ollama iterates fast, so treat `ollama serve --help` as the source of truth for environment variables, and the [official OpenAI compatibility docs](https://docs.ollama.com/api/openai-compatibility) as the source of truth for the `/v1` compatibility fields.
@@ -111,6 +112,8 @@ inference compute id=0 library=Vulkan name=Vulkan0
 
 This tutorial uses **`llama3.1:8b`** by default: it follows the tool-calling format more reliably, and an 8B quantized model still fits entirely in the A770's VRAM.
 
+> Reading a model name: `8b` means 8 billion parameters (more parameters usually means smarter and hungrier for VRAM); quantization such as `Q4` squeezes the weights to about 4 bits, roughly a quarter of the size and VRAM for a small quality cost. `llama3.1:8b` is 4.9GB on disk here (`ollama list`).
+
 ```bash
 ollama pull llama3.1:8b
 ```
@@ -127,14 +130,16 @@ ollama pull llama3.1:8b
 
 > ⚠️ The table below is **static usage after loading**, which is not the same as long-term stability: on some kernel/Mesa driver combinations the Vulkan backend has known problems with VRAM accounting drift and idle VRAM being swapped out, so over a long run you should monitor the VRAM curve rather than this one moment — see Section 2 for how.
 
+> Units first: **a token is the model's smallest unit of text**, not a character and not a word — measured here with the `llama3.1` tokenizer, Chinese ≈ **0.78 token/char** and English ≈ **1.1 token/word**. The tokens/s figures below, and the context window discussed later, are all counted in tokens. To reproduce: ask the same question with a 13-character and a 193-character prompt and compare `usage.prompt_tokens` (a difference of 140 here).
+
 #### VRAM and memory usage
 
-| Item              | Measured value                    | Notes                                                           |
-| ----------------- | --------------------------------- | --------------------------------------------------------------- |
-| GPU layer loading | **33/33 layers, fully offloaded** | The whole model sits on the A770, not a CPU hybrid              |
-| Model VRAM        | ~4.4 GB                           | Ample headroom in the A770's 16GB of VRAM                       |
-| KV Cache          | ~512 MB                           | The context cache lives in VRAM too                             |
-| System memory     | ~300 MB                           | The bulk of the model is in VRAM; 16GB of RAM handles it easily |
+| Item              | Measured value                    | Notes                                                                                                                                 |
+| ----------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| GPU layer loading | **33/33 layers, fully offloaded** | The whole model sits on the A770, not a CPU hybrid (a "layer" is a transformer block; offloading means placing layer weights in VRAM) |
+| Model VRAM        | ~4.4 GB                           | Ample headroom in the A770's 16GB of VRAM                                                                                             |
+| KV Cache          | ~512 MB                           | Cached attention keys/values; grows linearly with context length and occupies VRAM too                                                |
+| System memory     | ~300 MB                           | The bulk of the model is in VRAM; 16GB of RAM handles it easily                                                                       |
 
 #### Inference speed (measured range for generating 14–24 tokens)
 
@@ -189,12 +194,15 @@ Environment="OLLAMA_LOAD_TIMEOUT=10m"
 Environment="OLLAMA_GPU_OVERHEAD=1073741824"
 ```
 
-| Variable                   | Default   | Meaning / when to change it                                                                                      |
-| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
-| `OLLAMA_KEEP_ALIVE`        | 5m        | How long an idle model stays loaded. Raise it (e.g. 10m) under frequent calls to avoid repeated loading          |
-| `OLLAMA_LOAD_TIMEOUT`      | 5m        | How long a stalled model load waits before giving up. Raise it with a slow driver or a long first shader compile |
-| `OLLAMA_GPU_OVERHEAD`      | 0         | VRAM reserved for the driver/desktop processes (bytes). Reserving prevents OOM when VRAM is near full            |
-| `OLLAMA_MAX_LOADED_MODELS` | 1 per GPU | Controls swapping models in and out when several share the same VRAM                                             |
+| Variable                   | Default             | Meaning / when to change it                                                                                                 |
+| -------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `OLLAMA_KEEP_ALIVE`        | 5m                  | How long an idle model stays loaded. Raise it (e.g. 10m) under frequent calls to avoid repeated loading                     |
+| `OLLAMA_LOAD_TIMEOUT`      | 5m                  | How long a stalled model load waits before giving up. Raise it with a slow driver or a long first shader compile            |
+| `OLLAMA_GPU_OVERHEAD`      | 0                   | VRAM reserved for the driver/desktop processes (bytes). Reserving prevents OOM when VRAM is near full                       |
+| `OLLAMA_MAX_LOADED_MODELS` | 1 per GPU           | Controls swapping models in and out when several share the same VRAM                                                        |
+| `OLLAMA_HOST`              | 127.0.0.1:11434     | Bind address/port. **Setting `0.0.0.0` exposes an unauthenticated inference API to your network** — pair it with a firewall |
+| `OLLAMA_NUM_PARALLEL`      | automatic from VRAM | How many requests are served at once; matters once Part 4's service has several callers                                     |
+| `OLLAMA_MAX_QUEUE`         | 512                 | Queue cap; requests beyond it are rejected — tune it together with the line above                                           |
 
 > Treat the environment-variable list printed by `ollama serve --help` as the complete reference (Section 2 mentions this too; support can change between versions); whether `OLLAMA_VULKAN` appears in that list also depends on the version — see Section 2.
 
@@ -251,7 +259,127 @@ The conclusion depends on the model line: to keep using Qwen, first try **`qwen2
 
 - `ollama show <model> --modelfile | grep -n "Tools\|tool_call"`: seeing `.Tools` / `<tool_call>` means the template itself supports tool calling;
 - Templates for official library models are updated as the library is maintained: `ollama pull` the latest first, then compare with `ollama show`;
-- When you need a custom template or parameters, derive a new model with a Modelfile: `FROM <original model>` plus overriding `TEMPLATE` and `PARAMETER`, then `ollama create` and point the API at the new model name — note: the template only decides what the prompt looks like; whether the model complies is a separate matter.
+- When you need a custom template or parameters, derive a new model with a Modelfile: `FROM <original model>` plus overriding `TEMPLATE` and `PARAMETER`, then `ollama create` and point the API at the new model name — note: the template only decides what the prompt looks like; whether the model complies is a separate matter;
+- To understand *why* a template makes the model emit JSON text, and why tool results are rendered as an `ipython` block, see **Appendix B** below.
+
+---
+
+## Appendix B: What the model actually sees (tools are rendered into the prompt by the template)
+
+Every earlier part keeps putting a `tools` array into the request, but the model **never sees JSON fields** — it only sees text. `tools` works because Ollama renders them into the prompt using the **model's own chat template**. Once you see that layer, the "iron rules" of Parts 2 and 3 stop being arbitrary, and the strange Part 2 §4 case of "the model wrote JSON into `content`" explains itself.
+
+Look at the template first (measured here on Ollama 0.33.3 + `llama3.1:8b`; run the same command to inspect your own model):
+
+```bash
+ollama show llama3.1:8b --modelfile | sed -n '/^TEMPLATE/,/^"""/p'
+```
+
+<details>
+<summary>The full TEMPLATE of llama3.1:8b (click to expand; all four conclusions below come from it)</summary>
+
+```text
+TEMPLATE """{{- if or .System .Tools }}<|start_header_id|>system<|end_header_id|>
+{{- if .System }}
+
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+
+Cutting Knowledge Date: December 2023
+
+When you receive a tool call response, use the output to format an answer to the orginal user question.
+
+You are a helpful assistant with tool calling capabilities.
+{{- end }}<|eot_id|>
+{{- end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+{{- if eq .Role "user" }}<|start_header_id|>user<|end_header_id|>
+{{- if and $.Tools $last }}
+
+Given the following functions, please respond with a JSON for a function call with its proper arguments that best answers the given prompt.
+
+Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}. Do not use variables.
+
+{{ range $.Tools }}
+{{- . }}
+{{ end }}
+Question: {{ .Content }}<|eot_id|>
+{{- else }}
+
+{{ .Content }}<|eot_id|>
+{{- end }}{{ if $last }}<|start_header_id|>assistant<|end_header_id|>
+
+{{ end }}
+{{- else if eq .Role "assistant" }}<|start_header_id|>assistant<|end_header_id|>
+{{- if .ToolCalls }}
+{{ range .ToolCalls }}
+{"name": "{{ .Function.Name }}", "parameters": {{ .Function.Arguments }}}{{ end }}
+{{- else }}
+
+{{ .Content }}
+{{- end }}{{ if not $last }}<|eot_id|>{{ end }}
+{{- else if eq .Role "tool" }}<|start_header_id|>ipython<|end_header_id|>
+
+{{ .Content }}<|eot_id|>{{ if $last }}<|start_header_id|>assistant<|end_header_id|>
+
+{{ end }}
+{{- end }}
+{{- end }}"""
+```
+
+</details>
+
+The same thing at three levels:
+
+| Level                      | What it looks like                                                                                                                                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ① The struct in Go         | `Tool{Type: "function", Function: FunctionDef{Name: "get_current_time", Description: "获取当前的日期和时间", Parameters: …}}`                                                                                                                                               |
+| ② The request JSON we send | `"tools": [{"type": "function", "function": {"name": "get_current_time", "description": "…", "parameters": {"type": "object", …}}}]`                                                                                                                                        |
+| ③ The text the model reads | The system block gains *"You are a helpful assistant with tool calling capabilities."*; the last user message is preceded by *"Given the following functions, please respond with a JSON …"*, then the JSON definition of each tool, and only then `Question: 现在几点了？` |
+
+> ③ is a hand-rendering of the template above (field order and whitespace vary slightly by version and change nothing here). The prompt the server really renders is only visible in the logs with `OLLAMA_DEBUG` enabled, which this series deliberately does not require.
+
+Four conclusions follow from the template source:
+
+1. **`tools` is expanded in exactly one place, and only for the last user message**: `{{ if and $.Tools $last }}` in the template pins the tool list to the last user message, so older user messages in the history sit next to no tool list at all. That is also why every request has to carry `tools` again — the server is stateless and the template is re-rendered each time.
+2. **`role="tool"` is rendered as an `ipython` block**: tool results land inside `<|start_header_id|>ipython<|end_header_id|>` (the role name llama3.1 was trained with). This is the reason Parts 2 and 3 insist that a `role="tool"` message must directly follow the `assistant(tool_calls)` it answers, and that reversing the order makes upstream reject the request outright: the template renders messages one by one, in order, and a misplaced message renders as different text.
+3. **The prompt itself asks the model to "respond with JSON", and `tool_calls` is what the server parses out afterwards**: the template says *"Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}"*. If the model does not emit text in that shape — or emits something the parser will not accept — the API layer finds no `tool_calls` and the JSON stays in `content` verbatim. That closes the loop on the `qwen2.5-coder` output in Part 2 §4 and on Appendix A's "model compliance" conclusion. (qwen2.5-coder's template uses `<tool_call></tool_call>` markers instead; inspect it with the same command.)
+4. **Inconsistent naming is the norm**: the template says `parameters`, the API response says `arguments`, and `tools[].function` is not the same thing as `tool_calls[].function` (Part 2 §3). When moving between models or providers, details like these *are* the cost of "approximately compatible".
+
+**How to use this**: when a model will not call tools the way you expect, look at how its template teaches it first (the self-check command in Appendix A), then decide whether to switch models or to state the format more forcefully in the tool description — rather than suspecting your Go code.
+
+---
+
+## Appendix C: Glossary (skim this before the code parts)
+
+Ordered as "what it is → the measured number → where it is used". The point of first use in the body carries a short note too.
+
+| Term                                 | In one line                                                                                                                             | See        |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| token                                | The model's smallest unit of text: Chinese ≈ **0.78 token/char**, English ≈ **1.1 token/word** (measured with the `llama3.1` tokenizer) | §4         |
+| prompt / completion tokens           | How many tokens went in and came out; the `usage` object reports both                                                                   | Part 2 §2  |
+| context window                       | The token budget of one request (input + output share it); Ollama defaults to **4096** ≈ 5,000 Chinese characters                       | §4         |
+| cost of a tool definition            | A single tool is about **+134 tokens** (149 with tools vs 15 without, same question), and it is **resent every round**                  | Part 3 §4  |
+| `finish_reason`                      | Why the round ended: `stop` normally / `tool_calls` to call tools / `length` cut off by `max_tokens`                                    | Part 2 §1  |
+| `max_tokens` vs `options`            | `/v1` takes the top-level `max_tokens` and **silently ignores `options`** (measured); only native `/api/chat` uses `options`            | Part 2 §1  |
+| temperature / `top_p`                | Sampling randomness: 0 = greedy decoding (as reproducible as it gets); the default is more random                                       | Part 2 §3  |
+| chat template                        | The model's own template that turns messages + tools into one block of text; the model only reads text                                  | Appendix B |
+| system prompt                        | The instruction block the template always injects (with tools, llama3.1 injects "you have tool calling capabilities")                   | Appendix B |
+| JSON Schema                          | A JSON convention describing a tool's parameters (`type`/`properties`/`required`) — text for the model to read, not a validator         | Part 3 §2  |
+| quantization (Q4 …)                  | Weights squeezed to roughly 4 bits: about 1/4 the size and VRAM, slightly lower quality; `8B` = 8 billion parameters, 4.9GB on disk     | §3         |
+| offload / layers                     | A "layer" is a transformer block; offloading means placing layer weights in VRAM                                                        | §4         |
+| KV Cache                             | Cached attention keys/values; grows linearly with context (about **512MB** of VRAM at a 4096 context)                                   | §4         |
+| stateless                            | The server keeps no conversation; multi-turn means the client resends the whole history                                                 | Part 3 §4  |
+| streaming / SSE                      | Pushing tokens as they are produced; SSE = Server-Sent Events, native to browsers                                                       | Part 4 §2  |
+| ndjson                               | Newline-delimited JSON: one JSON object per line (the native Ollama streaming format)                                                   | Part 4 §1  |
+| embedding / cosine similarity / topK | Text → vector; the angle between vectors measures likeness; sort by score and take the top K                                            | Part 5 §3  |
+| RAG                                  | Retrieval-Augmented Generation: retrieve material first, then have the model answer from it                                             | Part 5     |
+| chunking / reranking                 | Cut long documents into small pieces (with overlap); rank coarsely, then re-rank                                                        | Part 5 §7  |
+| hallucination / compliance           | Making things up / how well a model follows formats and instructions (decides how stable tool calling is)                               | Appendix A |
+| agentic loop                         | Letting the model decide how many tools to call: `while tool_calls is non-empty`                                                        | Part 3 §1  |
+| the `tool_calls` non-empty test      | Decide "call a tool?" from `tool_calls` alone; `finish_reason` is only a cross-check                                                    | Part 2 §1  |
+| `role="tool"` must carry `content`   | A tool-result message with `content` omitted is rejected with 400 (measured)                                                            | Part 2 §3  |
 
 ---
 

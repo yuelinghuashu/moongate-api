@@ -12,6 +12,7 @@ tags:
 本系列用 Go 在本地搭建 Agent，全程不碰 Python/Node（用 Python 等其他语言的读者，仍可读各篇的机制与避坑内容——工具调用机制、聊天模板、API 兼容与运维概念都与语言无关）。第 1 篇只做环境与运维、不写代码：装好 Ollama、点亮 Vulkan、拉好模型，并讲清楚长期运行会踩哪些坑、怎么监控；代码从第 2 篇开始。
 
 - 前置：基础 Linux 命令行，看得懂 systemd 服务概念（`systemctl`/`journalctl`）
+- 想直接上手代码：读完 §1–§4 就够了（本文第 4 节末尾也有 📌 提示）——环境备好即可跳到第 2 篇，第 5 节等要长期运行/上线时再回来精读
 - 提示：第 5 节「长期运维手册」为**运维向内容（SRE/DevOps 视角）**——纯 Go 开发读者可先跳过（不影响第 2~5 篇），但它是本系列最独特的稳定性知识，上线长期运行前务必回来精读
 
 > 环境说明：本文基于 **Ollama 0.33.3 + llama3.1:8b（A770/Vulkan，2026-09）** 实测；Ollama 迭代快，环境变量以 `ollama serve --help` 为准，`/v1` 兼容字段以[官方 OpenAI 兼容文档](https://docs.ollama.com/api/openai-compatibility)为准。
@@ -111,6 +112,8 @@ inference compute id=0 library=Vulkan name=Vulkan0
 
 本教程默认使用 **`llama3.1:8b`**：它对工具调用格式的遵循更稳，8B 量化模型也能全量放入 A770 显存。
 
+> 读模型名：`8b` = 80 亿参数（参数越多通常越"聪明"、越吃显存）；`Q4` 之类的量化把权重压到约 4 位，体积与显存约占 1/4、质量略降。`llama3.1:8b` 在本机落盘 4.9GB（`ollama list`）。
+
 ```bash
 ollama pull llama3.1:8b
 ```
@@ -127,14 +130,16 @@ ollama pull llama3.1:8b
 
 > ⚠️ 下表是**加载后的静态占用**，不等同于长期稳定性：Vulkan 后端在部分内核/Mesa 驱动下有显存记账失步、空闲显存被换出等已知问题，长时间运行应监控显存曲线而非只看这一时刻，方法见第 2 节。
 
+> 先对齐计量单位：**token 是模型的最小文本单位**，不是字也不是词——本机用 `llama3.1` 分词器实测，中文 ≈ **0.78 token/字**、英文 ≈ **1.1 token/词**。速度表里的 tokens/s、以及后文的上下文窗口都以它计。复现命令：同一问题分别用 13 字与 193 字提问，对比响应 `usage.prompt_tokens`（实测差 140）。
+
 #### 显存与内存占用
 
-| 项目         | 实测值                   | 说明                              |
-| ------------ | ------------------------ | --------------------------------- |
-| GPU 层加载   | **33/33 层全量 offload** | 整个模型都在 A770 上，非 CPU 混合 |
-| 模型占显存   | ~4.4 GB                  | A770 16GB 显存余量充足            |
-| KV Cache     | ~512 MB                  | 上下文缓存也放显存                |
-| 系统内存占用 | ~300 MB                  | 模型主体在显存，16GB 内存轻松扛住 |
+| 项目         | 实测值                   | 说明                                                                                  |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------------- |
+| GPU 层加载   | **33/33 层全量 offload** | 整个模型都在 A770 上，非 CPU 混合（"层"= transformer 块，offload = 把层权重放进显存） |
+| 模型占显存   | ~4.4 GB                  | A770 16GB 显存余量充足                                                                |
+| KV Cache     | ~512 MB                  | 推理时缓存的注意力 Key/Value，随上下文长度线性增长，也占显存                          |
+| 系统内存占用 | ~300 MB                  | 模型主体在显存，16GB 内存轻松扛住                                                     |
 
 #### 推理速度（生成 14~24 个 token 的实测区间）
 
@@ -189,12 +194,15 @@ Environment="OLLAMA_LOAD_TIMEOUT=10m"
 Environment="OLLAMA_GPU_OVERHEAD=1073741824"
 ```
 
-| 变量                       | 默认     | 含义 / 何时调                                               |
-| -------------------------- | -------- | ----------------------------------------------------------- |
-| `OLLAMA_KEEP_ALIVE`        | 5m       | 模型空闲多久卸载。频繁调用可调大（如 10m）减少重复加载      |
-| `OLLAMA_LOAD_TIMEOUT`      | 5m       | 模型加载停滞多久后放弃。驱动慢/首次编译着色器久时可调大     |
-| `OLLAMA_GPU_OVERHEAD`      | 0        | 为驱动/桌面进程预留显存（字节）。显存接近满时预留可避免 OOM |
-| `OLLAMA_MAX_LOADED_MODELS` | 每 GPU 1 | 同显存跑多个模型时控制换入换出                              |
+| 变量                       | 默认            | 含义 / 何时调                                                                        |
+| -------------------------- | --------------- | ------------------------------------------------------------------------------------ |
+| `OLLAMA_KEEP_ALIVE`        | 5m              | 模型空闲多久卸载。频繁调用可调大（如 10m）减少重复加载                               |
+| `OLLAMA_LOAD_TIMEOUT`      | 5m              | 模型加载停滞多久后放弃。驱动慢/首次编译着色器久时可调大                              |
+| `OLLAMA_GPU_OVERHEAD`      | 0               | 为驱动/桌面进程预留显存（字节）。显存接近满时预留可避免 OOM                          |
+| `OLLAMA_MAX_LOADED_MODELS` | 每 GPU 1        | 同显存跑多个模型时控制换入换出                                                       |
+| `OLLAMA_HOST`              | 127.0.0.1:11434 | 改监听地址/端口。**改成 `0.0.0.0` 等于把无鉴权的推理接口暴露到内网**，务必配合防火墙 |
+| `OLLAMA_NUM_PARALLEL`      | 按显存自动      | 同时处理的请求数；第 4 篇的常驻服务被多人调用时要看它                                |
+| `OLLAMA_MAX_QUEUE`         | 512             | 排队上限，超出直接拒绝；配合上一行一起调                                             |
 
 > 完整清单以 `ollama serve --help` 输出的环境变量为准（第 2 节也提过这一点，版本不同支持情况可能变化）；`OLLAMA_VULKAN` 是否出现在清单里同样随版本而定，见第 2 节。
 
@@ -251,7 +259,127 @@ sudo systemctl enable --now ollama  # 没自启就这样开启并立即启动（
 
 - `ollama show <model> --modelfile | grep -n "Tools\|tool_call"`：能看到 `.Tools` / `<tool_call>` 说明模板本身支持工具调用；
 - 官方库模型的模板随库维护更新：先 `ollama pull` 拉最新，再 `ollama show` 对比；
-- 需要自定义模板/参数时用 Modelfile 派生新模型：`FROM <原模型>` + 覆盖 `TEMPLATE`、`PARAMETER`，`ollama create` 后 API 改用新模型名——注意：模板只决定提示词长什么样，模型是否遵守是另一回事。
+- 需要自定义模板/参数时用 Modelfile 派生新模型：`FROM <原模型>` + 覆盖 `TEMPLATE`、`PARAMETER`，`ollama create` 后 API 改用新模型名——注意：模板只决定提示词长什么样，模型是否遵守是另一回事；
+- 想理解"模板为什么会让模型吐 JSON 文本"、"工具结果为什么被渲染成 `ipython` 块"，见下方**附录 B**。
+
+---
+
+## 附录 B：模型实际看到什么（tools 是被模板渲染进提示词的）
+
+前面几篇一直在往请求里塞 `tools` 数组，但模型**看不到 JSON 字段**——它只看到一串文本。`tools` 之所以管用，是因为 Ollama 用**模型自带的聊天模板**把它们渲染进了提示词。理解这一层，第 2/3 篇那些"铁律"为什么必须遵守、以及第 2 篇 §4「模型把 JSON 写进 `content`」的怪现象，就都讲得通了。
+
+先看模板（本机 Ollama 0.33.3 + `llama3.1:8b` 实测，你也可以用同一条命令自查自己的模型）：
+
+```bash
+ollama show llama3.1:8b --modelfile | sed -n '/^TEMPLATE/,/^"""/p'
+```
+
+<details>
+<summary>llama3.1:8b 的 TEMPLATE 原文（点击展开；下面四条结论全部出自它）</summary>
+
+```text
+TEMPLATE """{{- if or .System .Tools }}<|start_header_id|>system<|end_header_id|>
+{{- if .System }}
+
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+
+Cutting Knowledge Date: December 2023
+
+When you receive a tool call response, use the output to format an answer to the orginal user question.
+
+You are a helpful assistant with tool calling capabilities.
+{{- end }}<|eot_id|>
+{{- end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+{{- if eq .Role "user" }}<|start_header_id|>user<|end_header_id|>
+{{- if and $.Tools $last }}
+
+Given the following functions, please respond with a JSON for a function call with its proper arguments that best answers the given prompt.
+
+Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}. Do not use variables.
+
+{{ range $.Tools }}
+{{- . }}
+{{ end }}
+Question: {{ .Content }}<|eot_id|>
+{{- else }}
+
+{{ .Content }}<|eot_id|>
+{{- end }}{{ if $last }}<|start_header_id|>assistant<|end_header_id|>
+
+{{ end }}
+{{- else if eq .Role "assistant" }}<|start_header_id|>assistant<|end_header_id|>
+{{- if .ToolCalls }}
+{{ range .ToolCalls }}
+{"name": "{{ .Function.Name }}", "parameters": {{ .Function.Arguments }}}{{ end }}
+{{- else }}
+
+{{ .Content }}
+{{- end }}{{ if not $last }}<|eot_id|>{{ end }}
+{{- else if eq .Role "tool" }}<|start_header_id|>ipython<|end_header_id|>
+
+{{ .Content }}<|eot_id|>{{ if $last }}<|start_header_id|>assistant<|end_header_id|>
+
+{{ end }}
+{{- end }}
+{{- end }}"""
+```
+
+</details>
+
+同一件事在三个层次的样子：
+
+| 层次                 | 长什么样                                                                                                                                                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ① Go 里写的结构体    | `Tool{Type: "function", Function: FunctionDef{Name: "get_current_time", Description: "获取当前的日期和时间", Parameters: …}}`                                                                                                                 |
+| ② 发出去的请求 JSON  | `"tools": [{"type": "function", "function": {"name": "get_current_time", "description": "…", "parameters": {"type": "object", …}}}]`                                                                                                          |
+| ③ 模型真正读到的文本 | 系统块尾部多了一句 *"You are a helpful assistant with tool calling capabilities."*；最后一条 user 消息前面多了 *"Given the following functions, please respond with a JSON …"*，接着是每个工具的 JSON 定义，最后才是 `Question: 现在几点了？` |
+
+> ③ 是按上面模板手工渲染的示意（字段顺序与空白随版本略有差异，不影响结论）。服务端真实渲染出的提示词要开 `OLLAMA_DEBUG` 才能从日志里看到，本系列不把它作为前置条件。
+
+从模板原文能读出四条结论：
+
+1. **`tools` 只在"最后一条 user 消息"处展开**：模板里的 `{{ if and $.Tools $last }}` 决定工具清单跟着最后一条 user 消息走，历史里早先的 user 消息旁边并没有工具清单。所以每次请求都得把 `tools` 重新带上——服务端无状态，模板每次都要重渲染。
+2. **`role="tool"` 在提示词里被渲染成 `ipython` 块**：工具结果落在 `<|start_header_id|>ipython<|end_header_id|>` 里（llama3.1 训练时用的就是这个名字）。这就是第 2/3 篇反复强调"`role="tool"` 消息必须紧跟对应的 `assistant(tool_calls)`、顺序反了上游直接校验失败"的底层原因：模板按消息顺序逐条渲染，错位渲染出来的就是另一串文本。
+3. **提示词本身就在要求模型"输出 JSON"，`tool_calls` 是服务端事后解析出来的**：模板写着 *"Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}"*。模型若不按这个格式吐文本（或吐出的格式解析器不认），API 层就解析不出 `tool_calls`，这段 JSON 便原样留在 `content` 里——第 2 篇 §4 的 `qwen2.5-coder` 输出、附录 A 的"模型遵循度"结论到这里闭环。（qwen2.5-coder 的模板改用 `<tool_call></tool_call>` 标记，同样可以用上面的命令自查。）
+4. **命名不一致是常态**：模板里叫 `parameters`，API 响应里叫 `arguments`；`tools[].function` 与 `tool_calls[].function` 也不同义（第 2 篇 §3）。跨模型、跨服务商迁移时，这类细节正是"近似兼容"的成本来源。
+
+**这层知识怎么用**：模型不按预期调工具时，先看它的模板在怎么教它（附录 A 的自查命令），再决定是换模型、还是把格式要求写进工具描述；而不是先怀疑自己的 Go 代码。
+
+---
+
+## 附录 C：术语与概念速查（读代码前扫一眼）
+
+按"这个概念是什么 → 相关实测数字 → 在哪篇用到"排；正文首次出现处也都有短注。
+
+| 术语                           | 一句话                                                                                         | 详见       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- | ---------- |
+| token                          | 模型的最小文本单位：中文 ≈ **0.78 token/字**、英文 ≈ **1.1 token/词**（`llama3.1` 分词器实测） | §4         |
+| prompt / completion tokens     | 输入与输出各占多少 token，响应 `usage` 里直接给出                                              | 第 2 篇 §2 |
+| 上下文窗口                     | 一次请求的 token 上限（输入+输出共享），Ollama 默认 **4096** ≈ 5,000 中文字                    | §4         |
+| 工具定义的 token 成本          | 单个工具约 **+134 tokens**（同问题带 tools 149 vs 不带 15），且**每轮重发**                    | 第 3 篇 §4 |
+| `finish_reason`                | 这轮为何结束：`stop` 正常 / `tool_calls` 要调工具 / `length` 被 `max_tokens` 截断              | 第 2 篇 §1 |
+| `max_tokens` vs `options`      | `/v1` 用顶层 `max_tokens`，**会静默忽略 `options`**（实测）；原生 `/api/chat` 才用 `options`   | 第 2 篇 §1 |
+| temperature / `top_p`          | 采样随机性：0 = 贪心解码（尽量可复现），默认更随机                                             | 第 2 篇 §3 |
+| 聊天模板（chat template）      | 模型自带的"把 messages + tools 拼成一段文本"的模板；模型只读文本                               | 附录 B     |
+| system prompt                  | 模板固定注入的指令段（带工具时 llama3.1 会注入"你有工具调用能力"）                             | 附录 B     |
+| JSON Schema                    | 描述工具参数形状的 JSON 约定（`type`/`properties`/`required`），只是给模型读的文本             | 第 3 篇 §2 |
+| 量化（Q4 等）                  | 权重压到约 4 位：体积/显存约 1/4、质量略降；`8B` = 80 亿参数，落盘 4.9GB                       | §3         |
+| offload / 层                   | "层" = transformer 块；offload = 把层权重放进显存                                              | §4         |
+| KV Cache                       | 缓存的注意力 Key/Value，随上下文线性增长（4096 上下文约 **512MB** 显存）                       | §4         |
+| 无状态（stateless）            | 服务端不记对话，多轮靠客户端把历史整段重发                                                     | 第 3 篇 §4 |
+| 流式 / SSE                     | 边生成边推 token；SSE = Server-Sent Events，浏览器原生                                         | 第 4 篇 §2 |
+| ndjson                         | newline-delimited JSON：一行一个 JSON 对象（Ollama 原生接口的流式格式）                        | 第 4 篇 §1 |
+| embedding / 余弦相似度 / topK  | 文本→向量；用夹角衡量"像不像"；按分数排序取前 K 条                                             | 第 5 篇 §3 |
+| RAG                            | Retrieval-Augmented Generation（检索增强生成）：先检索资料，再让模型照着答                     | 第 5 篇    |
+| 分块 / 重排                    | 长文档切小片（相邻留重叠）；先粗排再精排                                                       | 第 5 篇 §7 |
+| 幻觉 / 遵循度                  | 编造事实 / 按格式与指令行事的能力（决定工具调用稳不稳）                                        | 附录 A     |
+| Agentic 循环                   | 让模型自己决定调几次工具：`while tool_calls 非空`                                              | 第 3 篇 §1 |
+| `tool_calls` 非空（判据）      | 判"要不要调工具"只看 `tool_calls` 是否非空，`finish_reason` 仅作校验                           | 第 2 篇 §1 |
+| `role="tool"` 必须带 `content` | 工具结果消息省略 `content` 会被上游判 400（实测）                                              | 第 2 篇 §3 |
 
 ---
 

@@ -10,10 +10,25 @@ tags:
   - LLM
 ---
 
-This part does two things: it turns the loop from Part 3 **into a long-running HTTP service** (browsers/clients receive tokens in real time over SSE), and it makes **the same code switch to an OpenAI-compatible cloud endpoint by changing one `BASE_URL`** — putting Part 2's "/v1 is approximately compatible" iron rules into code.
+This part does two things: it turns the loop from Part 3 **into a long-running HTTP service** (browsers/clients receive tokens in real time over SSE), and it makes **the same code switch to an OpenAI-compatible cloud endpoint by changing one `OLLAMA_BASE`** — putting Part 2's "/v1 is approximately compatible" iron rules into code.
 
-- Prerequisite: the multi-round loop from Part 3 already works
-- Requirements: Go 1.27+ (the `"GET /health"` method-routing syntax used by this part's server has been available since Go 1.22, so that is satisfied)
+- Prerequisite: the environment checklist at the end of Part 1 is all green, and the multi-round loop from Part 3 already works
+- Requirements: Go 1.22+ (measured here on Go 1.27.1; the `"GET /health"` method-routing syntax used by this part's server has been available since Go 1.22, which is where the floor comes from)
+
+**What changed since Part 3 (read this table before the code):**
+
+| Change                                                                                                         | Where                                    | Why                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| New `client` (`baseURL`/`apiKey`/`model`/`http`), all driven by environment variables                          | `newClient`                              | One OpenAI-compatible client; point `OLLAMA_BASE` at the cloud to switch (§6)                         |
+| `chat()` → `streamChat()`: line-by-line SSE parsing, `tool_calls` accumulated by `index`, callback push        | `streamChat`                             | Streaming (§1, §3); fragmented `arguments` must be concatenated                                       |
+| Output goes from `fmt.Printf` to an `emitter` interface (`eventSink` / `sseWriter`)                            | `emitter` + both impls                   | The same loop can collect events (non-streaming JSON) or push them live (SSE)                         |
+| New HTTP service: `GET /health`, `POST /chat` (streaming and non-streaming paths)                              | `main` / `handleChat`                    | Turns a one-shot CLI run into a long-running service (§2)                                             |
+| `runAgent` emits events instead of printing, and `sseWriter` gains `Flush()` plus multi-line `data:` splitting | `runAgent` / `sseWriter`                 | Lets the browser render as tokens arrive; newlines inside `data` cannot go on one line (§3)           |
+| `handleChat` → `runAgent` → `streamChat` thread `context.Context`, switching to `http.NewRequestWithContext`   | three signatures + `handleChat`          | A browser disconnect cancels the upstream generation instead of leaving the GPU spinning (§2)         |
+| The request body goes back to a `ChatRequest` struct (same shape as Parts 2/3/5)                               | `streamChat` (plus a struct declaration) | One style across the series, so readers do not wonder whether the server does something special       |
+| `trimHistory` removed                                                                                          | —                                        | Server-side history currently lives only inside one request; for cross-request sessions see Part 3 §4 |
+
+> Unchanged from Part 3 and worth skimming past: the tool registry (`toolEntry`/`binaryOp`/`tools`/`toolDefs`), the loop skeleton, the "`tool_calls` non-empty" criterion, and the `role="tool"` feedback shape.
 
 ## 1. Real messages first: how the two streaming formats differ (captured on this machine)
 
@@ -64,13 +79,34 @@ Event types (the `event:` field):
 | `answer`         | The final answer has been assembled                                         |
 | `error` / `done` | An exception / the end of the session                                       |
 
+The full sequence of one conversation (`round`/`tool` events arrive first, `delta` after):
+
+```
+Browser               Go service (this program)         Ollama / cloud
+  │  POST /chat          │                                  │
+  ├──────────────────────▶│  POST /v1/chat/completions       │
+  │                       │  (stream:true, tools, history)   │
+  │                       ├─────────────────────────────────▶│
+  │                       │  ◀── data: delta.tool_calls ─────│  accumulate by index, concatenate arguments
+  │  ◀── event: round ────│      (decide on non-empty tool_calls once the round is complete)
+  │  ◀── event: tool ×N ──│  run tools locally → append role="tool" (ids aligned)
+  │                       │  send again (still the full history) ─▶│
+  │  ◀── event: delta ────│  ◀── data: delta.content ────────│  Flush() every token immediately
+  │  ◀── event: answer ───│      (this round had no tool_calls, so it is the final answer)
+  │  ◀── event: done ─────│                                  │
+```
+
+The server keeps no session: `history` is a local variable inside `handleChat` and dies when the request ends — so the browser has to resend the history every round (or the server must store it, see §8).
+
 The browser side only needs to `fetch` and read the SSE line by line; testing with curl looks like this (see the real output in Section 5).
 
-> **The minimum you need to know about SSE — three points, and that is enough for the code below**: ① one event = an `event: type` line + one or more `data:` lines + a **blank line** to finish it; clients read line by line and close the event at that blank line (SSE = Server-Sent Events, the browser-native server push); ② the server must `Flush()` after every event, otherwise the first tokens sit in a buffer and the browser waits; ③ the connection stays open and is closed by the client or a timeout — this part implements neither cancellation nor heartbeats, see Section 8 for the production differences.
+> **The minimum you need to know about SSE — three points, and that is enough for the code below**: ① one event = an `event: type` line + one or more `data:` lines + a **blank line** to finish it; clients read line by line and close the event at that blank line (SSE = Server-Sent Events, the browser-native server push); ② the server must `Flush()` after every event, otherwise the first tokens sit in a buffer and the browser waits; ③ the connection stays open and is closed by the client or a timeout — heartbeats are still not implemented, see Section 8 for the production differences.
 
-## 3. The two streaming details that break most easily (the code already handles both)
+> **Cancellation and timeouts (implemented in this part's code)**: `handleChat` threads `r.Context()` all the way down through `runAgent` → `streamChat` → `http.NewRequestWithContext`. So **the moment the browser disconnects, the upstream generation request is cancelled** and stops burning GPU time. `http.Client.Timeout` (5 minutes) caps *how long* a call may take; `ctx` answers *whether the caller still wants it* — different jobs, both required. This is also idiomatic Go: whenever a function makes a downstream call, thread `ctx` through as its first parameter.
 
-**① `delta.tool_calls`' `arguments` may arrive in fragments.** When streaming from the OpenAI cloud, the argument JSON of a single tool call can be **split across several chunks**, and the client has to reassemble them by `index`; measured locally, Ollama sends it in one piece (see the capture in Section 1), but the code is written to expect fragments, so it works against both:
+## 3. The three streaming details that break most easily (the code already handles all three)
+
+**① `delta.tool_calls`' `arguments` may arrive in fragments** (the code concatenates them with `strings.Builder`, Go's recommended way to build strings without reallocating on every `+`). When streaming from the OpenAI cloud, the argument JSON of a single tool call can be **split across several chunks**, and the client has to reassemble them by `index`; measured locally, Ollama sends it in one piece (see the capture in Section 1), but the code is written to expect fragments, so it works against both:
 
 ```go
 if tc.Function.Arguments != "" {
@@ -78,9 +114,9 @@ if tc.Function.Arguments != "" {
 }
 ```
 
-**② `content` may be the empty string, and `finish_reason` only shows up on the last line.** To decide "does this round need to execute tools?", always wait until **a whole round has been accumulated** and go by `finish_reason == "tool_calls"` / `tool_calls` being non-empty — never conclude from the first chunk you receive.
+**② `content` may be the empty string, and `finish_reason` only shows up on the last line.** To decide "does this round need to execute tools?", always wait until **a whole round has been accumulated** and go by whether **`tool_calls` is non-empty** (`finish_reason` is only a cross-check — some upstreams still report `stop` while calling tools, and trusting it alone drops the tool calls) — never conclude from the first chunk you receive.
 
-One more: `sc.Buffer(make([]byte, 1024), 1<<20)` raises the per-line limit from `bufio.Scanner`'s default 64KB to 1MB — a single SSE line (a whole `data:` payload) can be long, and without this it reports `token too long` and kills the stream.
+**③ A single line can exceed `bufio.Scanner`'s 64KB default.** The code's `sc.Buffer(make([]byte, 1024), 1<<20)` raises the per-line limit to 1MB — a single SSE line (a whole `data:` payload) can be long (a long `arguments` or a long `delta`), and without this it reports `token too long` and **kills the entire stream**. Of the three, this one is the easiest to reproduce and the easiest to overlook.
 
 ## 4. Full code
 
@@ -88,19 +124,10 @@ One more: `sc.Buffer(make([]byte, 1024), 1<<20)` raises the per-line limit from 
 <summary>Full source of main.go (click to expand)</summary>
 
 ```go
-// Part 4 demo: turning the agent loop into a long-running HTTP service (SSE streaming + cloud-switchable)
-//
-// Design points:
-//  1. only one OpenAI-compatible client (/v1/chat/completions) is implemented, and
-//     BASE_URL points at local Ollama or any OpenAI-compatible cloud service — the
-//     same code can switch between them;
-//  2. streaming (stream:true) drives the multi-round tool loop: each round's model
-//     output is forwarded to the browser/client over SSE in real time, and tool
-//     calls and their results are emitted as events too;
-//  3. delta parsing is defensive: content may be "" or null, and a tool call's
-//     arguments may be split into several fragments (OpenAI splits them, Ollama
-//     sends them whole), so they are accumulated by index — both kinds of server
-//     are handled correctly.
+// Part 4 demo: turning the agent loop into a long-running HTTP service (SSE streaming, cloud-switchable).
+// Differences from Part 3 are in the article's "what changed" table; the core is client
+// (OLLAMA_BASE switches local/cloud), streamChat (accumulating fragmented arguments by index)
+// and server (turning loop output into SSE events).
 //
 // Run:
 //
@@ -111,12 +138,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -133,21 +162,37 @@ type Message struct {
 }
 
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 type Tool struct {
-	Type     string `json:"type"`
-	Function struct {
-		Name        string         `json:"name"`
-		Description string         `json:"description"`
-		Parameters  map[string]any `json:"parameters"`
-	} `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
+}
+
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// FunctionCall is explained in Part 2 §3 (tool_calls[].function)
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ChatRequest matches Part 3's (every part is a self-contained program, so it is
+// declared again here). A struct rather than an inline map: Parts 2/3/5 all use the
+// struct, so readers do not have to wonder whether the server does something special.
+type ChatRequest struct {
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	Tools       []Tool    `json:"tools,omitempty"`
+	Stream      bool      `json:"stream"`
+	Temperature float64   `json:"temperature"`
 }
 
 // ===========================================
@@ -160,13 +205,10 @@ type streamChunk struct {
 			Role      string `json:"role"`
 			Content   string `json:"content"`
 			ToolCalls []struct {
-				Index    int    `json:"index"`
-				ID       string `json:"id"`
-				Type     string `json:"type"`
-				Function struct {
-					Name      string `json:"name"`
-					Arguments string `json:"arguments"`
-				} `json:"function"`
+				Index    int          `json:"index"`
+				ID       string       `json:"id"`
+				Type     string       `json:"type"`
+				Function FunctionCall `json:"function"`
 			} `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
@@ -185,13 +227,41 @@ type pendingCall struct {
 // Tool registry (same as Part 3, comments omitted)
 // ===========================================
 
-type tool struct {
+type toolEntry struct {
 	description string
 	parameters  map[string]any
 	run         func(args json.RawMessage) (string, error)
 }
 
-var tools = map[string]*tool{
+// binaryOp factors out the pattern shared by the three arithmetic tools: parse the integer
+// arguments {a,b} → run the operation → return the result. Each tool only passes in a one-line
+// operation (e.g. func(a,b int)(int,error){ return a+b, nil }).
+func binaryOp(desc string, fn func(int, int) (int, error)) *toolEntry {
+	return &toolEntry{
+		description: desc,
+		parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"a": map[string]any{"type": "integer"},
+				"b": map[string]any{"type": "integer"},
+			},
+			"required": []string{"a", "b"},
+		},
+		run: func(args json.RawMessage) (string, error) {
+			var p struct{ A, B int }
+			if err := json.Unmarshal(args, &p); err != nil {
+				return "", fmt.Errorf("参数解析失败（应为 {\"a\":整数,\"b\":整数}）：%v", err)
+			}
+			v, err := fn(p.A, p.B)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%d", v), nil
+		},
+	}
+}
+
+var tools = map[string]*toolEntry{
 	"get_current_time": {
 		description: "获取当前的日期和时间",
 		parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
@@ -199,53 +269,30 @@ var tools = map[string]*tool{
 			return time.Now().Format("2006-01-02 15:04:05"), nil
 		},
 	},
-	"add": {
-		description: "计算两个整数 a 与 b 的和",
-		parameters: map[string]any{"type": "object", "properties": map[string]any{
-			"a": map[string]any{"type": "integer"},
-			"b": map[string]any{"type": "integer"},
-		}, "required": []string{"a", "b"}},
-		run: intTool(func(a, b int) (string, error) { return fmt.Sprintf("%d", a+b), nil }),
-	},
-	"multiply": {
-		description: "计算两个整数 a 与 b 的乘积",
-		parameters: map[string]any{"type": "object", "properties": map[string]any{
-			"a": map[string]any{"type": "integer"},
-			"b": map[string]any{"type": "integer"},
-		}, "required": []string{"a", "b"}},
-		run: intTool(func(a, b int) (string, error) { return fmt.Sprintf("%d", a*b), nil }),
-	},
-	"divide": {
-		description: "计算两个整数 a 除以 b 的商（整除）",
-		parameters: map[string]any{"type": "object", "properties": map[string]any{
-			"a": map[string]any{"type": "integer"},
-			"b": map[string]any{"type": "integer"},
-		}, "required": []string{"a", "b"}},
-		run: intTool(func(a, b int) (string, error) {
+	"add": binaryOp("计算两个整数 a 与 b 的和",
+		func(a, b int) (int, error) { return a + b, nil }),
+	"multiply": binaryOp("计算两个整数 a 与 b 的乘积",
+		func(a, b int) (int, error) { return a * b, nil }),
+	"divide": binaryOp("计算两个整数 a 除以 b 的商（整除）",
+		func(a, b int) (int, error) {
 			if b == 0 {
-				return "", errors.New("除数不能为 0")
+				return 0, errors.New("除数不能为 0")
 			}
-			return fmt.Sprintf("%d", a/b), nil
+			return a / b, nil
 		}),
-	},
 }
 
-func intTool(fn func(a, b int) (string, error)) func(json.RawMessage) (string, error) {
-	return func(args json.RawMessage) (string, error) {
-		var p struct {
-			A int `json:"a"`
-			B int `json:"b"`
-		}
-		if err := json.Unmarshal(args, &p); err != nil {
-			return "", fmt.Errorf("参数解析失败（应为 {\"a\":整数,\"b\":整数}）：%v", err)
-		}
-		return fn(p.A, p.B)
-	}
-}
-
+// toolDefs is identical to Part 3's (sorted by name for a stable request body; see Part 3 §2).
 func toolDefs() []Tool {
-	var out []Tool
-	for name, t := range tools {
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]Tool, 0, len(names))
+	for _, name := range names {
+		t := tools[name]
 		var td Tool
 		td.Type = "function"
 		td.Function.Name = name
@@ -257,7 +304,7 @@ func toolDefs() []Tool {
 }
 
 // ===========================================
-// OpenAI-compatible client (BASE_URL switches local/cloud)
+// OpenAI-compatible client (OLLAMA_BASE switches local/cloud)
 // ===========================================
 
 type client struct {
@@ -287,14 +334,18 @@ func newClient() *client {
 // streamChat sends one streaming request and accumulates the model output into
 // a single assistant message.
 // callback pushes every token downstream (SSE) in real time.
-func (c *client) streamChat(messages []Message, onDelta func(string)) (Message, string, error) {
-	body, _ := json.Marshal(map[string]any{
-		"model":    c.model,
-		"messages": messages,
-		"tools":    toolDefs(),
-		"stream":   true,
+// ctx is threaded down from handleChat: when the client disconnects or its request
+// times out, the upstream call is cancelled with it (http.Client.Timeout caps how
+// long, ctx answers whether the caller still wants it).
+func (c *client) streamChat(ctx context.Context, messages []Message, onDelta func(string)) (Message, string, error) {
+	body, _ := json.Marshal(ChatRequest{
+		Model:       c.model,
+		Messages:    messages,
+		Tools:       toolDefs(),
+		Stream:      true,
+		Temperature: 0, // greedy decoding: keeps the recorded output reproducible; use 0.7 for chat
 	})
-	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return Message{}, "", err
 	}
@@ -360,6 +411,11 @@ func (c *client) streamChat(messages []Message, onDelta func(string)) (Message, 
 		}
 	}
 
+	// Check whether the Scanner has an error after the loop ends
+	if err := sc.Err(); err != nil {
+		return Message{}, "", fmt.Errorf("failed to read stream: %w", err)
+	}
+
 	msg := Message{Role: "assistant", Content: acc.String()}
 	for _, p := range calls {
 		var tc ToolCall
@@ -412,12 +468,12 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Stream {
-		s.runAgentSSE(w, req.Messages)
+		s.runAgentSSE(r.Context(), w, req.Messages)
 		return
 	}
 	// Non-streaming: run the same logic, collect the events in memory, return JSON at the end
 	events := &eventSink{}
-	s.runAgent(events, req.Messages)
+	s.runAgent(r.Context(), events, req.Messages)
 	answer, _ := events.lastAnswer()
 	json.NewEncoder(w).Encode(map[string]any{"answer": answer, "events": events.list})
 }
@@ -466,10 +522,10 @@ type emitter interface{ emit(typ, data string) }
 
 // runAgent is the core multi-round loop: model output is pushed token by token,
 // and tool results are pushed once the tool has run.
-func (s *server) runAgent(em emitter, history []Message) {
+func (s *server) runAgent(ctx context.Context, em emitter, history []Message) {
 	const maxRounds = 8
 	for round := 1; round <= maxRounds; round++ {
-		msg, finish, err := s.client.streamChat(history, func(token string) {
+		msg, finish, err := s.client.streamChat(ctx, history, func(token string) {
 			em.emit("delta", token) // push every token in real time
 		})
 		if err != nil {
@@ -478,11 +534,19 @@ func (s *server) runAgent(em emitter, history []Message) {
 		}
 		history = append(history, msg)
 
-		if len(msg.ToolCalls) == 0 || finish != "tool_calls" {
+		// Iron rule: go by tool_calls being non-empty (same as Parts 2 and 3).
+		// finish_reason is only a cross-check: some upstreams still report "stop"
+		// (or omit it) while requesting tools, and trusting it alone silently
+		// drops the tool calls.
+		if len(msg.ToolCalls) == 0 {
 			em.emit("answer", msg.Content)
 			return
 		}
-		em.emit("round", fmt.Sprintf("第 %d 轮：模型请求 %d 个工具", round, len(msg.ToolCalls)))
+		roundMsg := fmt.Sprintf("第 %d 轮：模型请求 %d 个工具", round, len(msg.ToolCalls))
+		if finish != "tool_calls" {
+			roundMsg += fmt.Sprintf("（finish_reason=%q，仍按 tool_calls 执行）", finish)
+		}
+		em.emit("round", roundMsg)
 		for _, tc := range msg.ToolCalls {
 			result, err := runTool(tc)
 			if err != nil {
@@ -495,7 +559,7 @@ func (s *server) runAgent(em emitter, history []Message) {
 	em.emit("error", "达到最大轮数")
 }
 
-func (s *server) runAgentSSE(w http.ResponseWriter, history []Message) {
+func (s *server) runAgentSSE(ctx context.Context, w http.ResponseWriter, history []Message) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -505,7 +569,7 @@ func (s *server) runAgentSSE(w http.ResponseWriter, history []Message) {
 		return
 	}
 	sw := &sseWriter{w: w, f: f}
-	s.runAgent(sw, history)
+	s.runAgent(ctx, sw, history)
 	sw.emit("done", "[DONE]")
 }
 
@@ -520,10 +584,12 @@ func runTool(tc ToolCall) (string, error) {
 
 </details>
 
-## 5. Run results (Ollama 0.33.3 + llama3.1:8b, measured 2026-09)
+## 5. Run results (Ollama 0.33.3 + llama3.1:8b, request pins `temperature=0`; re-run 2026-09-19)
+
+> The console output and prompts in this transcript are Chinese exactly as captured; substituting English prompts changes the wording, not the structure or the conclusions.
 
 ```bash
-# Start (BASE_URL points at local Ollama; moving to the cloud only changes environment variables, see Section 6)
+# Start (OLLAMA_BASE points at local Ollama; moving to the cloud only changes environment variables, see Section 6)
 PORT=8899 go run main.go
 ```
 
@@ -545,26 +611,26 @@ event: round
 data: 第 1 轮：模型请求 2 个工具
 
 event: tool
-data: get_current_time({}) -> 2026-09-07 22:10:16
+data: get_current_time({}) -> 2026-09-19 14:59:28
 
 event: tool
-data: multiply({"b":8,"a":7}) -> 56
+data: multiply({"a":7,"b":8}) -> 56
 
 event: delta
 data: 现在
 event: delta
 data: 是
 event: delta
-data: 22
+data: 202
 event: delta
-data: :
+data: 6
 event: delta
-data: 10
+data: -
 …
-(the remaining 9 delta events are elided: one token each, arriving until the sentence is complete)
+(26 delta events in this round; the rest are elided — one token each, arriving until the sentence is complete)
 
 event: answer
-data: 现在是 22:10。7 乘以 8 等于 56。
+data: 现在是 2026-09-19 14:59:28。7 乘以 8 等于 56。
 
 event: done
 data: [DONE]
@@ -584,13 +650,15 @@ OLLAMA_BASE="http://localhost:11434/v1" OLLAMA_API_KEY=ollama OLLAMA_MODEL=llama
 OLLAMA_BASE="https://api.xiaomimimo.com/v1" OLLAMA_API_KEY=sk-xxx OLLAMA_MODEL=mimo-v2.5-pro
 ```
 
-Part 2's compatibility iron rules are already in place in this code:
+How Part 2's compatibility iron rules land in this code (this part's requests always carry tools, so the empty-`tools` rule does not apply here):
 
-- With no tools, **omit the `tools` field** (`toolDefs()` always has tools; make it conditional in production) — avoiding the empty `tools: []` difference;
-- Tool calls are detected from `finish_reason == "tool_calls"`, not from content alone;
+- With no tools, **omit the `tools` field** — note this part's requests always carry tools, so the empty `tools: []` difference never arises here; if your tool set can be empty, either omit the field or self-test against the Part 2 checklist;
+- Tool calls are detected from **`tool_calls` being non-empty**, not from content alone (`finish_reason` is only a cross-check);
 - `delta.content` emptiness checks accept both `""` and a missing field.
 
 ### Cloud measurement (MiMo-v2.5-pro, 2026-09-08)
+
+> Note: the transcript below is the original 2026-09-08 record (that request did not pin `temperature`, and this endpoint can no longer be re-measured from here); it does not affect the point that the structure (`round → tool → delta → answer → done`) matches the local run.
 
 The same code and the same curl request, with only the environment variables pointing at the MiMo cloud:
 
@@ -617,13 +685,13 @@ Compared with local Ollama: the event stream structure is exactly the same (`rou
 
 ## 7. Pitfalls and comparisons
 
-| Symptom                                                                 | Cause                                                                     | Handling                                                                                                                                           |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE arrives in fits and starts / the client misses parts                | Not understanding `event:`/`data:`/blank-line separation                  | Read line by line and end the current event at a blank line (see the raw stream in Section 5)                                                      |
-| Half of a tool call's arguments go missing                              | Treating a fragmented `arguments` as complete JSON                        | Accumulate by `index`, concatenate, then parse the whole thing                                                                                     |
-| The model already called a tool but it is treated as an ordinary answer | Returning after only the first chunk                                      | Accumulate the whole round before checking `finish_reason`                                                                                         |
-| Works locally, behaves differently in the cloud                         | /v1 is approximately compatible; the cloud is stricter about fields       | Already measured against the MiMo cloud (§6) with zero code changes; still worth running through the checklist before switching to another service |
-| Long tasks time out / curl disconnects early                            | No timeout budget on the upstream request, or proxy buffering is still on | Raise `http.Client.Timeout` as needed + server-side `context` cancellation; SSE needs proxy buffering off                                          |
+| Symptom                                                                 | Cause                                                                                   | Handling                                                                                                                                                        |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE arrives in fits and starts / the client misses parts                | Not understanding `event:`/`data:`/blank-line separation                                | Read line by line and end the current event at a blank line (see the raw stream in Section 5)                                                                   |
+| Half of a tool call's arguments go missing                              | Treating a fragmented `arguments` as complete JSON                                      | Accumulate by `index`, concatenate, then parse the whole thing                                                                                                  |
+| The model already called a tool but it is treated as an ordinary answer | Returning after only the first chunk, or treating `finish_reason` as the sole criterion | Accumulate the whole round, then go by `tool_calls` being non-empty (`finish_reason` is only a cross-check)                                                     |
+| Works locally, behaves differently in the cloud                         | /v1 is approximately compatible; the cloud is stricter about fields                     | Already measured against the MiMo cloud (§6) with zero code changes; still worth running through the checklist before switching to another service              |
+| Long tasks time out / curl disconnects early                            | No timeout budget on the upstream request, or proxy buffering is still on               | Raise `http.Client.Timeout` as needed; this part already threads `r.Context()` for cancellation (§2); with a proxy in front you still have to disable buffering |
 
 ## 8. Deliberately simplified vs. production practice
 
@@ -632,6 +700,7 @@ Compared with local Ollama: the event stream structure is exactly the same (`rou
 | No auth and no rate limiting on the service        | API keys / middleware / per-user quotas                                                                                     |
 | Conversation history lives only inside one request | Session isolation is discussed in Part 5; production-grade session storage and multi-tenancy are outside this series' scope |
 | One SSE connection runs the whole exchange         | A task queue plus progress events and reconnection                                                                          |
+| No heartbeats or reconnection                      | SSE comment heartbeats (`: ping`) plus `Last-Event-ID` resumption                                                           |
 | Four tools, hard-coded                             | A plugin registry / configuration loading                                                                                   |
 | Cloud migration already measured                   | Still worth running through the compatibility checklist before switching to another OpenAI-compatible service               |
 

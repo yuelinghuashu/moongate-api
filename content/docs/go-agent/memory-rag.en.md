@@ -12,9 +12,23 @@ tags:
 
 The multi-round loop of Part 3 made the agent able to get work done, but it starts every run with amnesia. This part adds two kinds of memory: **cross-session facts** (remember/recall key-value memory, persisted to JSON) and **document retrieval** (lightweight RAG doing vector search over local notes).
 
-- Prerequisite: the multi-round loop from Part 3 already works
+- Prerequisite: the environment checklist at the end of Part 1 is all green, and the multi-round loop from Part 3 already works
 - Preparation: `ollama pull nomic-embed-text` (about 274MB; without this model the example degrades to keyword retrieval automatically)
-- Shape note: this part keeps the **one-shot command-line run** of Part 3 (three sessions demonstrating "session isolation" in sequence inside one process) rather than extending Part 4's SSE service; to wire memory into the service, move this tool table and loop into the server
+- Shape note: this part keeps the **one-shot command-line run** of Part 3 (three sessions demonstrating "session isolation" in sequence inside one process; `go run main.go recall` starts a separate process to prove cross-process persistence) rather than extending Part 4's SSE service; to wire memory into the service, move this tool table and loop into the server
+
+**What changed since Part 3 (read this table before the code):**
+
+| Change                                                                                  | Where                                  | Why                                                                                            |
+| --------------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The tools are swapped wholesale: `remember` / `recall` / `list_memory` / `search_notes` | `tools`                                | One set of tools per memory kind: key-value facts plus document retrieval (§1, §2)             |
+| New `memoryStore` reading and writing a local `memory.json`                             | `loadMemory` / `set`                   | Cross-session, cross-process facts (surviving process exit)                                    |
+| New `retriever` interface with two implementations                                      | `vectorRetriever` / `keywordRetriever` | Vector search when an embedding model exists, automatic keyword fallback when it does not      |
+| New `tokenize` / `top` / `cosine` / `embedTexts`                                        | retrieval parts                        | The whole lightweight RAG implementation, about 60 lines (§3)                                  |
+| `runAgent(userPrompt)` → `runAgent(messages)`, plus three session functions             | `main` / `runSessionA-C`               | Demonstrate "session isolation" in one run; `go run main.go recall` demonstrates cross-process |
+| `temperature=0` pinned                                                                  | `chat()`                               | Keeps the measured output stable and reproducible                                              |
+| `trimHistory` and the `usage` counters removed                                          | —                                      | This part focuses on memory and retrieval; history growth is still Part 3 §4                   |
+
+> Unchanged from Part 3 and worth skimming past: the `Message`/`ToolCall`/`Tool` structs, the loop skeleton, the `role="tool"` feedback and "`tool_calls` non-empty" criterion, and the `toolEntry` registry shape.
 
 ## 1. There are three kinds of memory; don't conflate them
 
@@ -24,7 +38,7 @@ The multi-round loop of Part 3 made the agent able to get work done, but it star
 | Long-term memory  | Facts that outlive a session (user name, preferences) | External storage               | Key-value pairs written to a local JSON file |
 | Document memory   | Local documents/notes that can be searched            | A document store + an index    | topK vector retrieval (lightweight RAG)      |
 
-The agents in the earlier parts start with amnesia every time: clear `messages` and they remember nothing. This part adds the latter two kinds with two sets of tools: `remember`/`recall`/`list_memory` (long-term facts) plus `search_notes` (document retrieval). (The "session isolation" this part refers to means: each session keeps its own `messages` slice, so A's conversation history never appears in B — the only thing shared across sessions is the `memory.json` on disk.)
+This part adds the latter two kinds with two sets of tools (the agents in the earlier parts start with amnesia every time — clear `messages` and they remember nothing): `remember`/`recall`/`list_memory` (long-term facts) plus `search_notes` (document retrieval). (The "session isolation" this part refers to means: each session keeps its own `messages` slice, so A's conversation history never appears in B — the only thing shared across sessions is the `memory.json` on disk.)
 
 ## 2. Long-term memory: key-value facts plus enumeration
 
@@ -38,7 +52,7 @@ Three details of the tool design decide whether memory is actually usable:
 
 In plain words first: **embedding turns a piece of text into a list of numbers (a vector)** — the closer two texts are in meaning, the closer their vectors point, so "how alike are these two?" becomes something you can compute directly with cosine similarity.
 
-The idea behind `search_notes` is the smallest possible RAG:
+The idea behind `search_notes` is the smallest possible **RAG** (Retrieval-Augmented Generation: retrieve the material first, then have the model answer *from that material* rather than from its own memory):
 
 ```
 vectorize the question (query) and each note separately
@@ -46,6 +60,26 @@ vectorize the question (query) and each note separately
 → keep the topK fragments with similarity >= 0.35
 → paste the fragments into the tool result so the model "answers from the notes"
 ```
+
+What happens inside one `search_notes` call:
+
+```
+The model supplies a query
+      │
+      ▼
+Wrap it for the embedding model: the query gets "search_query: ", every note gets "search_document: "
+      │   (the prefixes are nomic-embed-text's own convention — follow them, but do not expect them alone to save you)
+      ▼
+POST /api/embed (every text in one request) ──▶ [vectors…]
+      ▼
+Cosine similarity per note ──▶ coarse filter at 0.35 ──▶ sort and take topK=3
+      ▼
+Build the tool result: a fixed "answer only from these fragments, invent nothing" header + [片段N 相似度X.XX] text
+      ▼
+Feed it back as role="tool" ──▶ the model answers from the fragments (measured output in §5, session C)
+```
+
+> Fallback path: without `nomic-embed-text` the same interface scores by keyword matches (count of matched words), with an identical flow — only the score label changes from "相似度" to "命中词数". The two scores are not comparable, so they must not share one label.
 
 Two things here **go against the usual intuition**, so here are the measurements from this machine first (Ollama 0.33.3 + `nomic-embed-text`, over exactly the 6 notes above; the numbers are cosine similarities):
 
@@ -63,18 +97,13 @@ Two things here **go against the usual intuition**, so here are the measurements
 <summary>Full source of main.go (click to expand)</summary>
 
 ```go
-// Part 5 demo: memory and lightweight RAG
+// Part 5 demo: memory and lightweight RAG.
+// Differences from Part 3 are in the article's "what changed" table; the core is memoryStore
+// (JSON on disk), the retriever (vector search with a keyword fallback) and the four new tools.
 //
-// This part upgrades the agent loop from the earlier parts to a "with memory" shape:
-//  1. cross-session long-term memory: the remember/recall tools write facts to a local
-//     JSON file, so they are still there in another session (even after a process restart);
-//  2. lightweight RAG: the search_notes tool retrieves from the built-in "operations
-//     notes" — with nomic-embed-text it uses vector cosine similarity, and without it
-//     it degrades to keyword scoring automatically;
-//  3. session isolation: every session keeps its own messages history, never polluting
-//     the others.
+// Run: go run main.go        — runs sessions A / B / C in order
 //
-// Run: go run main.go (run it from this file's directory)
+//	go run main.go recall   — runs session B alone (proves cross-process recall, see Section 5)
 package main
 
 import (
@@ -85,6 +114,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -101,21 +131,26 @@ type Message struct {
 }
 
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 type Tool struct {
-	Type     string `json:"type"`
-	Function struct {
-		Name        string         `json:"name"`
-		Description string         `json:"description"`
-		Parameters  map[string]any `json:"parameters"`
-	} `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
+}
+
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// FunctionCall is explained in Part 2 §3 (tool_calls[].function)
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type ChatRequest struct {
@@ -172,8 +207,12 @@ var notes = []string{
 }
 
 // retriever finds the most relevant note fragments for a query.
+// metric() names what score means: cosine similarity for the vector path, matched-word
+// count for the keyword fallback. The two are different units, so they must not share
+// the "similarity" label when printed.
 type retriever interface {
 	search(query string, topK int) []searchHit
+	metric() string
 }
 
 type searchHit struct {
@@ -186,6 +225,8 @@ type searchHit struct {
 // "search_document:" and queries get "search_query:" (the embedding model's own
 // convention).
 type vectorRetriever struct{}
+
+func (vectorRetriever) metric() string { return "相似度" }
 
 func (vectorRetriever) search(query string, topK int) []searchHit {
 	texts := make([]string, 0, len(notes)+1)
@@ -215,6 +256,8 @@ func (vectorRetriever) search(query string, topK int) []searchHit {
 
 // keywordRetriever is the fallback when there is no embedding model: score by the number of matched words.
 type keywordRetriever struct{}
+
+func (keywordRetriever) metric() string { return "命中词数" }
 
 func (keywordRetriever) search(query string, topK int) []searchHit {
 	words := tokenize(query)
@@ -266,6 +309,9 @@ func top(hits []searchHit, k int) []searchHit {
 }
 
 func cosine(a, b []float64) float64 {
+	if len(a) != len(b) { // different dimensions: return 0 instead of panicking on an out-of-range index
+		return 0
+	}
 	var dot, na, nb float64
 	for i := range a {
 		dot += a[i] * b[i]
@@ -282,7 +328,7 @@ func cosine(a, b []float64) float64 {
 // Tool registration
 // ===========================================
 
-type tool struct {
+type toolEntry struct {
 	description string
 	parameters  map[string]any
 	run         func(args json.RawMessage) (string, error)
@@ -295,8 +341,11 @@ var (
 
 func newRetriever() retriever {
 	// Probe /api/tags for an embedding model; use vectors if present, otherwise
-	// fall back to keywords
-	resp, err := http.Get("http://localhost:11434/api/tags")
+	// fall back to keywords. This HTTP call sits on the startup path, so it needs a
+	// timeout: a stuck Ollama must not stall startup (Part 2's "give every upstream
+	// request an explicit timeout budget" applies here too).
+	probe := &http.Client{Timeout: 3 * time.Second}
+	resp, err := probe.Get("http://localhost:11434/api/tags")
 	if err == nil {
 		defer resp.Body.Close()
 		var tags struct {
@@ -317,7 +366,7 @@ func newRetriever() retriever {
 	return keywordRetriever{}
 }
 
-var tools = map[string]*tool{
+var tools = map[string]*toolEntry{
 	"remember": {
 		description: "把一条事实写入长期记忆（跨会话保留）。key 用命名空间风格，如 用户:名字、项目:目标",
 		parameters: map[string]any{"type": "object", "properties": map[string]any{
@@ -363,9 +412,18 @@ var tools = map[string]*tool{
 			if len(mem.data) == 0 {
 				return "长期记忆为空", nil
 			}
+			// Sort the output: Go iterates maps in random order, so without sorting the
+			// key order changes from run to run (same reason as toolDefs: stable output
+			// is what makes a run reproducible and comparable)
+			keys := make([]string, 0, len(mem.data))
+			for k := range mem.data {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
 			var sb strings.Builder
-			for k, v := range mem.data {
-				fmt.Fprintf(&sb, "%s = %s\n", k, v)
+			for _, k := range keys {
+				fmt.Fprintf(&sb, "%s = %s\n", k, mem.data[k])
 			}
 			return strings.TrimSpace(sb.String()), nil
 		},
@@ -389,16 +447,24 @@ var tools = map[string]*tool{
 			var sb strings.Builder
 			sb.WriteString("（以下是检索到的笔记片段，请严格只依据这些内容回答，不要编造笔记里没有的细节）\n")
 			for i, h := range hits {
-				fmt.Fprintf(&sb, "[片段%d 相似度%.2f] %s\n", i+1, h.score, h.text)
+				fmt.Fprintf(&sb, "[片段%d %s%.2f] %s\n", i+1, retrieve.metric(), h.score, h.text)
 			}
 			return strings.TrimSpace(sb.String()), nil
 		},
 	},
 }
 
+// toolDefs is identical to Part 3's (sorted by name for a stable request body; see Part 3 §2).
 func toolDefs() []Tool {
-	var out []Tool
-	for name, t := range tools {
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]Tool, 0, len(names))
+	for _, name := range names {
+		t := tools[name]
 		var td Tool
 		td.Type = "function"
 		td.Function.Name = name
@@ -414,6 +480,15 @@ func toolDefs() []Tool {
 // ===========================================
 
 func main() {
+	// Cross-process persistence demo: run `go run main.go` once to write the memory
+	// (then the process exits), then `go run main.go recall` to run session B alone —
+	// nothing is shared but memory.json.
+	if len(os.Args) > 1 && os.Args[1] == "recall" {
+		fmt.Println("===== 会话 B（新进程）：换一个全新会话（历史不共享），问它记得我吗 =====")
+		runSessionB()
+		return
+	}
+
 	fmt.Println("===== 会话 A：让 Agent 记住一些事实 =====")
 	runSessionA()
 	fmt.Println()
@@ -437,7 +512,7 @@ func runSessionC() {
 }
 
 func runAgent(messages []Message) {
-	const maxRounds = 6
+	const maxRounds = 8 // fuse, same as Parts 3/4: stop the model from looping forever
 	for round := 1; round <= maxRounds; round++ {
 		resp, err := chat(messages)
 		if err != nil {
@@ -451,10 +526,14 @@ func runAgent(messages []Message) {
 		msg := resp.Choices[0].Message
 		finish := resp.Choices[0].FinishReason
 		messages = append(messages, msg)
-		// Same as Parts 2 and 3: go by tool_calls being non-empty + finish_reason=="tool_calls"
-		if len(msg.ToolCalls) == 0 || finish != "tool_calls" {
+		// Same as Parts 2 and 3: go by tool_calls being non-empty (finish_reason is
+		// only a cross-check — some upstreams still report "stop" while calling tools)
+		if len(msg.ToolCalls) == 0 {
 			fmt.Println("🤖", msg.Content)
 			return
+		}
+		if finish != "tool_calls" {
+			fmt.Printf("   ⚠️ finish_reason=%q 但本轮有 tool_calls，按 tool_calls 继续执行\n", finish)
 		}
 		fmt.Printf("🔧 第 %d 轮模型请求 %d 个工具\n", round, len(msg.ToolCalls))
 		for _, tc := range msg.ToolCalls {
@@ -467,6 +546,9 @@ func runAgent(messages []Message) {
 				if err != nil {
 					result = fmt.Sprintf("工具执行出错：%v。请修正参数后重试，或放弃这一步。", err)
 				}
+			}
+			if result == "" {
+				result = "(工具无输出)" // as in Part 3: a role="tool" message must carry content (Part 2 §3)
 			}
 			fmt.Printf("   - %s(%s)\n     => %s\n", tc.Function.Name, tc.Function.Arguments, result)
 			messages = append(messages, Message{Role: "tool", ToolCallID: tc.ID, Content: result})
@@ -531,11 +613,16 @@ func embedTexts(texts []string) ([][]float64, error) {
 
 ## 5. Run results (measured on this machine)
 
+> ⚠️ **Clear the old memory before running**: `rm -f memory.json` — otherwise it starts with the facts written by the previous run and session A looks like it did nothing.
+
 ```bash
+rm -f memory.json   # clean reproduction: do not carry history over
 go run main.go
 ```
 
-Real output (Ollama 0.33.3 + llama3.1:8b + nomic-embed-text, with `temperature=0` for reproducibility):
+Real output (Ollama 0.33.3 + llama3.1:8b + nomic-embed-text, measured 2026-09-19; `temperature=0`, and this part's prompt carries no dynamic content such as a timestamp, so it reproduces word for word):
+> The console output and prompts in this transcript are Chinese exactly as captured; substituting English prompts changes the wording, not the structure or the conclusions.
+
 
 ```
 📚 检测到 nomic-embed-text，启用向量检索
@@ -548,16 +635,13 @@ Real output (Ollama 0.33.3 + llama3.1:8b + nomic-embed-text, with `temperature=0
 🤖 这两次调用成功记住了用户的名字和语言。
 
 ===== 会话 B：换一个全新会话（历史不共享），问它记得我吗 =====
-🔧 第 1 轮模型请求 1 个工具
+🔧 第 1 轮模型请求 2 个工具
    - list_memory({})
      => 用户:名字 = 小明
 用户:语言 = Go
-🤖 根据列出的内容，我记得关于你的信息如下：
-
-* 名字：小明
-* 语言：Go
-
-所以，我知道你是叫小明，且你使用Go语言。
+   - recall({"key":"用户:名字"})
+     => 小明
+🤖 你记得关于我的名字是“小明”，语言是Go。
 
 ===== 会话 C：查笔记回答问题（轻量 RAG）=====
 🔧 第 1 轮模型请求 1 个工具
@@ -585,10 +669,32 @@ journalctl -u ollama --no-pager | grep 'inference compute'
 Each of the three sessions demonstrates one thing:
 
 1. **A (writing)**: two `remember` calls write facts into `memory.json`;
-2. **B (reading across sessions)**: a brand-new session with no shared history answers correctly after enumerating with `list_memory` — that is the difference between "memory" and "context";
+2. **B (reading across sessions)**: a brand-new session with no shared history enumerates the keys with `list_memory`, fetches a value with `recall`, and answers correctly — that is the difference between "memory" and "context". To verify *cross-process* rather than merely cross-session, run two commands (the second is a **separate process**, so its in-process `messages` is guaranteed empty):
+
+   ```bash
+   go run main.go          # session A writes memory.json, then the process exits
+   go run main.go recall   # a new process runs session B only: it still answers "小明 / Go"
+   ```
+
+   The measured output of that second command (same `memory.json`, new process, no conversation history at all):
+
+   ```
+   📚 检测到 nomic-embed-text，启用向量检索
+   ===== 会话 B（新进程）：换一个全新会话（历史不共享），问它记得我吗 =====
+   🔧 第 1 轮模型请求 2 个工具
+      - list_memory({})
+        => 用户:名字 = 小明
+   用户:语言 = Go
+      - recall({"key":"用户:名字"})
+        => 小明
+   🤖 你记得关于我的名字是“小明”，语言是Go。
+   ```
+
+   > This is "memory = external state + tools" in action: the model itself remembers nothing — it simply **calls the tools again**.
+
 3. **C (RAG)**: retrieval hits the note about "setting `OLLAMA_VULKAN=true`" (similarity 0.78), and the answer sticks strictly to the retrieved fragments, including the verification command.
 
-> To reproduce clean results, delete any old `memory.json` first (`rm -f memory.json`), otherwise it runs with the memory left over from last time.
+
 
 ## 6. Pitfalls and comparisons (verified by measurement)
 
@@ -603,19 +709,32 @@ Each of the three sessions demonstrates one thing:
 
 ## 7. Deliberately simplified vs. production practice
 
-| Deliberately simplified                 | What production does                                                                      |
-| --------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Memory stored in a local JSON file      | A database plus per-user isolation and expiry policies                                    |
-| Six fixed notes vectorized wholesale    | Chunking and overlapping real documents plus a vector store (pgvector/sqlite-vec, …)      |
-| Pure vector retrieval                   | Hybrid retrieval (keywords + vectors) with reranking                                      |
-| A hard-coded 0.35 threshold             | Tune and evaluate per embedding model and corpus                                          |
-| Fact memory is a "dead key-value store" | Summary-style long-term memory (compress old conversations into a summary and store that) |
+| Deliberately simplified                 | What production does                                                                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory stored in a local JSON file      | A database plus per-user isolation and expiry policies                                                                                                   |
+| Six fixed notes vectorized wholesale    | Real **chunking** (cut documents into small pieces, overlapping neighbours so no meaning is sliced in half) plus a vector store (pgvector/sqlite-vec, …) |
+| Pure vector retrieval                   | Hybrid retrieval (keywords + vectors) with reranking                                                                                                     |
+| A hard-coded 0.35 threshold             | Tune and evaluate per embedding model and corpus                                                                                                         |
+| Fact memory is a "dead key-value store" | Summary-style long-term memory (compress old conversations into a summary and store that)                                                                |
+| Memory is global (single user)          | Isolate by user/session (`用户:<id>:名字`-style) plus a database and expiry policies                                                                     |
+
+
+### Wiring memory into Part 4's service (three steps, no changes to this part's code)
+
+Part 4's conclusion says "the service still has no memory", and this part goes back to a command-line demo — merging the two takes three steps:
+
+1. **Swap the tool table**: replace Part 4's `tools` (time and arithmetic) with this part's `remember`/`recall`/`list_memory`/`search_notes` (copy the `tools` variable; the loop code does not change).
+2. **Give a session somewhere to live**: `handleChat` already has `history []Message`. The stateless option is to let the client send the history every time; to keep sessions server-side, add a `map[string][]Message` keyed by `session_id` — and **guard it with a `sync.Mutex`**, because Go's HTTP handlers run concurrently (something the command-line version never has to think about).
+3. **Give memory a dimension**: `mem` (`memory.json`) and `retrieve` are **package-level shared state** in a server, so several users would see each other's facts. Before shipping, key entries by user (`用户:<id>:名字`-style) or give each user their own file or database layer.
+
+> On concurrency: Ollama does not serve unlimited requests in parallel either (`OLLAMA_NUM_PARALLEL`, `OLLAMA_MAX_QUEUE`; see Part 1 §5.3). Once ten requests arrive at your service at once, the extras queue or get rejected — another gap between "demo" and "shipped".
 
 ## FAQ
 
 | Question                                                 | Fix                                                                                                                   |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Can it run without an embedding model?                   | Yes: the code degrades to keyword retrieval automatically (it probes `/api/tags` at startup), just with worse results |
+| I pulled an embedding model but it still uses keywords   | The probe runs **once, at process start**; restart the process after pulling to switch to vector retrieval            |
 | `memory.json` keeps growing                              | Design the keys properly and clean up periodically; use a database in real scenarios                                  |
 | Computing cosine over everything is slow with many notes | Index with a vector store; coarse-filter by tag or directory before ranking precisely                                 |
 

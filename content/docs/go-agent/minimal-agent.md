@@ -1,6 +1,6 @@
 ---
 title: 最小代码：单工具一轮调用的完整闭环
-description: 用约 200 行 Go（仅标准库）跑通“模型点名 → Go 执行 → 结果回传 → 模型作答”的最小工具调用闭环，并讲清 Ollama /v1“近似兼容”的三条铁律。
+description: 用约 200 行 Go（仅标准库）跑通“模型点名 → Go 执行 → 结果回传 → 模型作答”的最小工具调用闭环，并讲清 Ollama /v1“近似兼容”的四条铁律。
 date: 2026-09-08
 series: go-agent
 order: 2
@@ -14,7 +14,7 @@ tags:
 
 - 目标读者：有 Go 基础、第一次写 Agent 工具调用（前提：已按第 1 篇装好 Ollama 与 `llama3.1:8b`）
 - 代码：完整代码内嵌在本篇 §2、§3；保存为 `main.go` 后在本目录执行 `go run main.go`
-- 运行要求：Go 1.27+
+- 运行要求：Go 1.22+（本文实测于 Go 1.27.1；本篇只用标准库基础 API，更旧的版本也能跑）
 
 ## 1. 接口基调：/v1 近似兼容（先知道再写代码）
 
@@ -27,22 +27,27 @@ tags:
 | `tool_choice` 参数           | 部分支持且不稳定（0.33.3 实测：`required` 可强制调用、`none` 不生效；官方兼容文档未列入支持字段，上游仍在完善：[#17921](https://github.com/ollama/ollama/issues/17921)、[#11171](https://github.com/ollama/ollama/issues/11171)） | 支持 `auto`/`required`/指定函数，强制调用场景常用           |
 | 空 `tools: []`               | 返回 200，等同没传工具                                                                                                                                                                                                            | 通常报错或要求省略该字段（多个 SDK 专门写 workaround 规避） |
 | 工具调用时 `message.content` | 空字符串 `""`                                                                                                                                                                                                                     | `null`                                                      |
-| `finish_reason`              | 工具调用时为 `tool_calls`（本版本已与 OpenAI 一致）                                                                                                                                                                               | `tool_calls`                                                |
+| `finish_reason`              | 工具调用时为 `tool_calls`（本版本已与 OpenAI 一致）；被 `max_tokens` 截断时为 `length`                                                                                                                                            | 同为 `tool_calls` / `stop` / `length`                       |
+| **原生参数 `options`**       | **被静默忽略**：`/v1` 不认 `options`（0.33.3 实测传 `options.num_predict=8`，模型仍生成 51~394 个 token，两次复现）                                                                                                               | 参数放顶层：`max_tokens` / `stop` / `temperature`           |
 | `n` / `user` / `logit_bias`  | 不支持                                                                                                                                                                                                                            | 支持                                                        |
 | 流式报文                     | 早期与 OpenAI 不一致（Ollama [PR #17485](https://github.com/ollama/ollama/pull/17485) 后才对齐 `choices[].delta`），旧版本仍有差异                                                                                                | `choices[].delta`                                           |
 
-写代码时的三条铁律（本篇代码已经在遵守）：
+写代码时的四条铁律（本篇代码已经在遵守）：
 
-- 判"是否要调工具"以 **`tool_calls` 非空 / `finish_reason == "tool_calls"`** 为准，不要只依赖 `content`；
+- 判"是否要调工具"以 **`tool_calls` 非空**为准（`finish_reason` 只作校验：Ollama 与 OpenAI 一致时为 `tool_calls`，其他上游可能是 `stop` 或缺失——拿它当唯一判据会静默丢掉工具调用），不要只依赖 `content`；
 - 判空时同时兼容 `content == ""` 与 `content == null`；
-- 无工具时**省略 `tools` 字段**，不要传 `tools: []`；
+- 无工具时**省略 `tools` 字段**，不要传 `tools: []`（Go 里靠结构体 tag 的 `omitempty` 实现：字段为零值时不写进 JSON）；
 - 需要"强制调用某工具"时别指望 `tool_choice`（0.33.3 实测 required 可强制、none 不生效，字段支持不稳定），改用提示词约束或原生 `/api/chat`（第 4 篇第 1 节会对比原生 `/api/chat` 的报文差异，但服务为了可切云端统一走 `/v1`）。
+
+> 想理解"模型到底看到什么"——`tools` 是怎么被聊天模板拼进提示词的、为什么模型有时会把 JSON 写进 `content`，见**第 1 篇附录 B**；碰到不认识的词（token、temperature、`finish_reason`…）查**第 1 篇附录 C** 的术语表。
 
 参考：[Ollama OpenAI compatibility 官方文档](https://docs.ollama.com/api/openai-compatibility)
 
 ---
 
 ## 2. 纯文本起步：核心逻辑约 20 行跑通一次对话
+
+> **只想用 Go 跟本地模型聊天？读完本节就够了**——它是"最小可用"的完整形态（请求、解析、多轮都可复用），本节之后的工具部分可以改天再看。
 
 先用 curl 徒手跑通一次——与语言无关，也最容易确认服务与模型就绪：
 
@@ -145,6 +150,13 @@ func main() {
 	}
 	defer resp.Body.Close()
 
+	// 先看状态码：模型没 pull、服务没起来都会在这一步暴露，
+	// 否则下面解析会因为响应体是合法 JSON 而"成功"，最后只打印一句"无响应"
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		panic(fmt.Errorf("Ollama 返回 %d：%s\n排查：模型是否已 pull？服务是否在跑（systemctl status ollama）？", resp.StatusCode, string(b)))
+	}
+
 	body, _ := io.ReadAll(resp.Body)
 	var result ChatResponse
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -190,6 +202,16 @@ go run main.go
 ---
 
 ## 3. Go 实现（在纯文本上加工具）
+
+**与上一节相比，代码骨架同构、只多了三处**——先看这张表，再决定要精读哪几段：
+
+| 新增的事                                                        | 落在哪里                                                               | 上一节已有、可跳过的部分                                            |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| ① 请求里加 `tools` 字段（工具定义：名称、描述、参数 Schema）    | `Tool` / `FunctionDef` 结构体 + `toolMap` 注册表 + `ChatRequest.Tools` | `sendRequest` 的 HTTP 骨架、`Choice`/`ChatResponse`、`Message` 主体 |
+| ② 响应里解析 `tool_calls`（含 `id` 与字符串形式的 `arguments`） | `ToolCall` / `FunctionCall` 结构体 + `main()` 第四步                   | JSON 序列化/反序列化写法与上一节完全一致                            |
+| ③ 用 `role="tool"` + `tool_call_id` 把执行结果回传              | `main()` 第五~七步（多了一次 `sendRequest`）                           | 多轮对话 = 往 `messages` 追加再整段重发（上一节已建立）             |
+
+> 行级对比：上一节程序 79 行，其中 **49 行在本节原样复用**（62%），改写 30 行、新增 164 行。也就是说这一节真正的新知识就是上表三件事，其余是同一套骨架的延伸。
 
 这是**刻意精简的最小案例**：一个工具、单轮调用、约 200 行（含注释），只用 Go 标准库（`net/http`、`encoding/json`）。
 
@@ -256,7 +278,16 @@ go run main.go
 }
 ```
 
-看完这两段 JSON，再看后面的 Go 代码：`ToolCall.Function.Arguments` 为什么要用 `json.RawMessage` 再解析一次、`ToolCallID` 是干什么用的，就一目了然了。
+看完这两段 JSON，再看后面的 Go 代码：`FunctionCall.Arguments` 声明成 `string` 为什么还要转 `json.RawMessage` 再解析一次、`ToolCallID` 是干什么用的，就一目了然了。
+
+**这 213 行按四块读**（代码里的分隔注释已经标好，只想看新知识就读 ②③）：
+
+| 块                 | 行数 | 内容                                                                                           | 和上一节的关系                                             |
+| ------------------ | ---- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| ① 数据结构         | ~57  | `Message`/`ToolCall`/`Tool`/`FunctionDef`/`FunctionCall`/`ChatRequest`/`Choice`/`ChatResponse` | 上一节的超集：多了 3 个结构体、`Message` 多两个字段        |
+| ② 工具函数与注册表 | ~17  | `getCurrentTime` + `toolMap`                                                                   | **本节真正的新东西**：模型只发工具名，程序靠这张表找到函数 |
+| ③ 主流程 `main()`  | ~76  | 按"第一步~第七步"走一遍完整闭环                                                                | ③ 才是工具调用的机制本体                                   |
+| ④ `sendRequest`    | ~53  | 发请求、读响应、解析 JSON                                                                      | 与上一节的同名函数几乎相同（多了 `tools` 与 `stream`）     |
 
 <details>
 <summary>main.go 全文（点击展开）</summary>
@@ -287,32 +318,35 @@ type Message struct {
 
 // ToolCall 表示 AI 请求调用的一个工具
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 // Tool 表示我们提供给 AI 的一个可用工具
 type Tool struct {
-	Type     string   `json:"type"`
-	Function Function `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
 }
 
-// Function 表示工具函数的定义
-type Function struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+// FunctionDef 是"工具定义"里函数的形状（对应 tools[].function）
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// FunctionCall 是一次工具调用里函数的形状（对应 tool_calls[].function）
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // ChatRequest 表示发送给 Ollama 的请求
 type ChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
-	Tools    []Tool    `json:"tools"`
+	Tools    []Tool    `json:"tools,omitempty"` // 空则不传，遵守第 2 篇的兼容铁律
 	Stream   bool      `json:"stream"`
 }
 
@@ -360,12 +394,12 @@ func main() {
 	tools := []Tool{
 		{
 			Type: "function",
-			Function: Function{
+			Function: FunctionDef{
 				Name:        "get_current_time",
 				Description: "获取当前的日期和时间",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				},
 			},
 		},
@@ -375,7 +409,7 @@ func main() {
 	// 把用户消息和工具列表一起发给模型
 	resp := sendRequest(messages, tools)
 	if len(resp.Choices) == 0 {
-		fmt.Println("无响应")
+		fmt.Println("无响应（HTTP 200 但没有 choices，检查模型名与请求体）")
 		return
 	}
 
@@ -450,12 +484,21 @@ func sendRequest(messages []Message, tools []Tool) ChatResponse {
 	}
 	defer resp.Body.Close()
 
+	// 先看状态码再解析：模型没 pull（404 not found）、服务没起来（连接失败）
+	// 都会在这一步暴露。若跳过它，下面的 json.Unmarshal 会因为 Ollama 的
+	// 错误响应本身是合法 JSON 而"成功"，最终只打印一句"无响应"，
+	// 让新手误以为模型没装好——所以这里把状态码和原始 body 一起打出来
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		panic(fmt.Errorf("Ollama 返回 %d：%s\n排查：模型是否已 pull（ollama list）？服务是否在跑（systemctl status ollama）？", resp.StatusCode, string(b)))
+	}
+
 	// 读取响应
 	body, _ := io.ReadAll(resp.Body)
 
 	// 解析 JSON 响应
-	// 注意：Ollama 报错时返回的不是标准结构，直接解析会得到空响应，
-	// 静默输出"无响应"会让新手误以为模型没装好，因此失败时打印原始内容
+	// 注意：走到这里说明状态码已是 200，但 body 仍可能是非预期结构
+	// （例如被代理换成了 HTML），所以解析失败时把原始内容打出来
 	var result ChatResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		fmt.Printf("解析失败，原始响应: %s\n", string(body))
@@ -467,6 +510,20 @@ func sendRequest(messages []Message, tools []Tool) ChatResponse {
 
 </details>
 
+> **关于 `omitempty`（实测结论，容易混）**：结构体里 `Content` 带了 `omitempty`，它**只影响发送**——字段为空值时会被省略。但上游对"省略 `content`"的容忍度按角色不同：
+>
+> - `role="tool"` 的消息**必须带 `content` 字段**：省略 → **HTTP 400** `invalid message content type: <nil>`；显式写 `content: ""` → 200。
+> - `role="assistant"` 带 `tool_calls` 时，`content` 省略或为空都可以 → 200（本系列代码一直这么发，所以没暴露）。
+>
+> 也就是"**无工具时省略 `tools` 字段**"是铁律，但"**工具结果为空就省略 `content`**"会直接失败。自测：
+>
+> ```bash
+> # 少 content：400 invalid message content type: <nil>
+> curl -s http://localhost:11434/v1/chat/completions -H "Content-Type: application/json" \
+>   -d '{"model":"llama3.1:8b","messages":[{"role":"user","content":"现在几点了？"},{"role":"assistant","tool_calls":[{"id":"c1","type":"function","function":{"name":"get_current_time","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1"}],"stream":false}' | head -c 120
+> # 带上 content（哪怕是空串）：200
+> ```
+
 ### 代码讲解
 
 代码由三部分组成，理解它们的职责即可：
@@ -477,6 +534,8 @@ func sendRequest(messages []Message, tools []Tool) ChatResponse {
 
 - `role="assistant"` 的消息里带 `tool_calls`（AI 想调什么工具）
 - `role="tool"` 的消息里带 `tool_call_id`（工具执行结果，回传给 AI）
+
+> 顺手点一个协议自带的命名陷阱：JSON 里两处都叫 `function`——`tools[].function` 是**工具定义**（`name`/`description`/`parameters`），`tool_calls[].function` 是**一次调用**（`name`/`arguments`）。Go 侧用 `FunctionDef` 与 `FunctionCall` 两个类型名把它们分开，两个字段名都保持 `json:"function"`。
 
 #### 2. 工具定义与注册表
 
@@ -516,25 +575,17 @@ var toolMap = map[string]func(json.RawMessage) string{
 - 请求发到 OpenAI 兼容接口 `POST http://localhost:11434/v1/chat/completions`
 - 响应解析后返回 `ChatResponse`，`main()` 从 `Choices[0].Message` 取 AI 回复
 
-### 生产化起步：四个小改造（从 200 行到工程的过渡态）
+### 生产化起步：五个小改造（从 200 行到工程的过渡态）
 
-上面表格只给了方向，这里直接给最小的改造示例；更完整的演进按第 3、4 篇逐步展开。
+上面表格只给了方向，这里直接给最小的改造示例（第 ④ 条是本轮新增：`omitempty` 导致的空结果 400）；更完整的演进按第 3、4 篇逐步展开。
 
-**① 固定 30s 超时 → 可配置超时预算**
+#### ① 固定 30s 超时 → 可配置超时预算
 
-最小版已经用带 30s 超时的 `http.Client` 发请求（见上方完整代码里的 `sendRequest`），这一步是把超时改成可按场景调整的预算：
-
-```go
-// 改造前（最小版：固定 30 秒）
-client := &http.Client{Timeout: 30 * time.Second}
-
-// 改造后（长上下文 / 云端慢推理要留足余量）
-client := &http.Client{Timeout: 5 * time.Minute}
-```
+最小版已经用带 30s 超时的 `http.Client`（见上方完整代码里的 `sendRequest`）——这里要改的不是写法，而是**这个数值从哪来**：把超时当成按场景调整的预算，本地短请求 30s 够用，长上下文或云端慢推理要留足余量（例如 `5 * time.Minute`）。
 
 > 重点不是数值，而是给上游请求一个**明确的超时预算**：没有它，Ollama 卡住时请求会无限挂起。
 
-**② `panic` → 返回 `error`**
+#### ② `panic` → 返回 `error`
 
 ```go
 // 改造前
@@ -544,9 +595,11 @@ func sendRequest(...) ChatResponse { ...; panic(err) }
 func sendRequest(...) (ChatResponse, error) { ...; return ChatResponse{}, fmt.Errorf("请求失败: %w", err) }
 ```
 
+> `%w` 是 Go 的错误包装写法：把原始错误包进新错误里，之后可以用 `errors.Is` / `errors.As` 判断具体原因（用 `%v` 只是拼字符串，判断不了）。
+
 主流程随之从"崩掉"变成"打日志并优雅降级"。
 
-**③ 硬编码模型名 → 环境变量**
+#### ③ 硬编码模型名 → 环境变量
 
 ```go
 model := os.Getenv("OLLAMA_MODEL")
@@ -555,11 +608,21 @@ if model == "" {
 }
 ```
 
-**④ 单轮 → 循环（下一步就是第 3 篇）**
+#### ④ 工具返回空串 → 必须兜底（否则上游 400）
+
+现在的工具都返回非空字符串，所以上方的 `omitempty` 问题没暴露；一旦工具会返回空（查不到、静默成功、空文件），就会撞上 400。第 3、5 篇的循环里都加了这行兜底：
+
+```go
+if result == "" {
+    result = "(工具无输出)" // 空结果也要给模型一条能读的消息
+}
+```
+
+#### ⑤ 单轮 → 循环（下一步就是第 3 篇）
 
 把"收到 `tool_calls` → 执行 → 回传"包进 `for`，直到响应里不再有 `tool_calls` 才收尾——这就是第 3 篇的主题；多工具注册、参数解析、错误回喂也都在那里补上。
 
-> 小结：上面四点 + 第 3 篇的循环/多工具/错误处理 + 第 4 篇的服务化/超时/并发，合起来就是"刻意简化 vs 生产做法"右列的落地路径——每篇只往前走一小步，不必一步到位写"生产级"。
+> 小结：上面五点 + 第 3 篇的循环/多工具/错误处理 + 第 4 篇的服务化/超时/并发，合起来就是"刻意简化 vs 生产做法"右列的落地路径——每篇只往前走一小步，不必一步到位写"生产级"。
 
 ---
 
@@ -569,12 +632,12 @@ if model == "" {
 go run main.go
 ```
 
-成功输出：
+成功输出（2026-09-19 实测；本篇最小版没有固定 `temperature`，而且**工具结果里带着实时时间戳**——两者都会让最终措辞随运行变化，但下面三行的结构与来源不变）：
 
 ```
 🔧 模型决定调用工具: get_current_time
-✅ 工具结果: 2026-09-07 19:58:44
-💬 最终回答: 当前时间是 2026年09月07日 19:58:44
+✅ 工具结果: 2026-09-19 14:57:56
+💬 最终回答: 目前的时间是 2026 年 9 月 19 日 14:57:56。
 ```
 
 Agent 真的执行了我的 Go 函数，拿到真实时间，而不是编一个答案。
@@ -593,11 +656,13 @@ Agent 真的执行了我的 Go 函数，拿到真实时间，而不是编一个�
 
 ## FAQ：常见问题速查（代码篇）
 
-| 问题                                | 原因                                                                               | 解决                                                                |
-| ----------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 代码报 404 / 400                    | Ollama 版本过旧，`/v1/chat/completions` 接口未开启                                 | 升级到 >= 0.3.0（见第 1 篇安装）                                    |
-| 模型回答里出现 `{"name": ...}` 字样 | 模板未带工具格式，或模型遵循度不足（qwen2.5-coder 在 0.33.3 下官方模板正确仍复现） | 换 `llama3.1:8b`；留用 Qwen 的实录与自查见第 1 篇附录 A             |
-| 切到 OpenAI / 云服务后行为不一致    | `/v1` 只是近似兼容，字段细节有差异                                                 | 按本篇第 1 节清单自测（空 `tools`、content 空串、`tool_choice` 等） |
+| 问题                                                           | 原因                                                                                            | 解决                                                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `panic: Ollama 返回 404`，body 含 `not found`                  | 模型未拉取（0.33.3 实测：缺模型返回 404，不是 400）                                             | `ollama pull llama3.1:8b`，用 `ollama list` 确认                                                       |
+| `panic: Ollama 返回 404`，body 不含 `not found`                | `/v1/chat/completions` 未开启，Ollama 版本过旧                                                  | 升级到 >= 0.3.0（见第 1 篇安装）                                                                       |
+| `panic: dial tcp 127.0.0.1:11434: connect: connection refused` | Ollama 服务未启动                                                                               | `systemctl start ollama`（WSL/容器见第 1 篇第 5.6 节）                                                 |
+| 模型回答里出现 `{"name": ...}` 字样                            | 模板未带工具格式，或模型遵循度不足（qwen2.5-coder 在 0.33.3 下官方模板正确仍复现）              | 换 `llama3.1:8b`；留用 Qwen 的实录与自查见第 1 篇附录 A                                                |
+| 设了 `options.num_predict` 却不生效                            | `/v1` 忽略 `options`（那是原生 `/api/chat` 的参数）；`tool_choice: "none"` 在 0.33.3 同样不生效 | 额度改用 `max_tokens`（实测 `max_tokens: 8` 会正确截断为 8 个 token 并返回 `finish_reason: "length"`） |
 
 ---
 

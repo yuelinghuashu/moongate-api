@@ -12,9 +12,23 @@ tags:
 
 第 3 篇的多轮循环让 Agent 会干活了，但它每次启动都是“失忆”的。本篇补上两类记忆：**跨会话事实**（remember/recall 键值记忆，落盘 JSON）与**资料检索**（对本地笔记做向量检索的轻量 RAG）。
 
-- 前置：第 3 篇的多轮循环已跑通
+- 前置：第 1 篇文末环境自检清单全绿 + 第 3 篇的多轮循环已跑通
 - 准备：`ollama pull nomic-embed-text`（约 274MB；没有此模型时示例会自动降级为关键词检索）
-- 形态说明：本篇沿用第 3 篇的**命令行一次性运行**（三个会话在同一个进程内顺序演示「会话隔离」），不扩展第 4 篇的 SSE 服务；要把记忆接入服务，把这里的工具表与循环搬进服务端即可
+- 形态说明：本篇沿用第 3 篇的**命令行一次性运行**（三个会话在同一个进程内顺序演示「会话隔离」；`go run main.go recall` 可另起一个进程单独验证跨进程持久化），不扩展第 4 篇的 SSE 服务；要把记忆接入服务，把这里的工具表与循环搬进服务端即可
+
+**本篇相对第 3 篇改了什么（读代码前先看这张表）：**
+
+| 改动                                                                 | 落在哪里                               | 为什么                                                         |
+| -------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------- |
+| 工具整体换掉：`remember` / `recall` / `list_memory` / `search_notes` | `tools`                                | 两类记忆各一套工具：键值事实 + 资料检索（§1、§2）              |
+| 新增 `memoryStore`，读写本地 `memory.json`                           | `loadMemory` / `set`                   | 跨会话、跨进程的事实记忆（进程退出也不丢）                     |
+| 新增 `retriever` 接口与两种实现                                      | `vectorRetriever` / `keywordRetriever` | 有 embedding 模型走向量检索，没有则自动降级关键词              |
+| 新增 `tokenize` / `top` / `cosine` / `embedTexts`                    | 检索零件                               | 轻量 RAG 的全部实现，约 60 行（§3）                            |
+| `runAgent(userPrompt)` → `runAgent(messages)`，另加三个会话函数      | `main` / `runSessionA-C`               | 一次运行内演示「会话隔离」；`go run main.go recall` 演示跨进程 |
+| 固定 `temperature=0`                                                 | `chat()`                               | 演示输出稳定可复现                                             |
+| 移除 `trimHistory` 与 `usage` 统计                                   | —                                      | 本篇聚焦记忆与检索；历史增长问题仍见第 3 篇 §4                 |
+
+> 与第 3 篇相同、本篇**没有**改的部分：`Message`/`ToolCall`/`Tool` 等结构体、循环骨架、`role="tool"` 回喂与"`tool_calls` 非空"判据、`toolEntry` 注册表形态。
 
 ## 1. 记忆分三种，别混为一谈
 
@@ -24,7 +38,7 @@ tags:
 | 长期记忆   | 跨会话的事实（用户名、偏好） | 外部存储               | 键值对写入本地 JSON 文件  |
 | 资料记忆   | 本地文档/笔记，可检索        | 文档库 + 索引          | 向量检索 topK（轻量 RAG） |
 
-前几篇的 Agent 每次启动都是"失忆"的：messages 清空就什么都不记得。本篇用两套工具补上后两类记忆：`remember`/`recall`/`list_memory`（长期事实）+ `search_notes`（资料检索）。（本篇说的"会话隔离"就是：每个会话各自持有自己的 `messages` 切片，A 的对话历史不会出现在 B 里；能跨会话共享的只有落盘的 `memory.json`。）
+本篇用两套工具补上后两类记忆（前几篇的 Agent 每次启动都是"失忆"的：`messages` 一清空就什么都不记得）：`remember`/`recall`/`list_memory`（长期事实）+ `search_notes`（资料检索）。（本篇说的"会话隔离"就是：每个会话各自持有自己的 `messages` 切片，A 的对话历史不会出现在 B 里；能跨会话共享的只有落盘的 `memory.json`。）
 
 ## 2. 长期记忆：键值事实 + 枚举能力
 
@@ -38,7 +52,7 @@ tags:
 
 先说一句白话：**向量化（embedding）就是把一段文本交给模型换成一串数字（向量）**——语义越近的文本，向量方向越接近，于是"像不像"这件事可以直接用余弦相似度算出来。
 
-`search_notes` 的实现思路就是最小 RAG：
+`search_notes` 的实现思路就是最小 **RAG**（Retrieval-Augmented Generation，检索增强生成：先把资料检索出来，再让模型"照着资料"作答，而不是靠它自己的记忆）：
 
 ```
 把问题(query) 和 每条笔记 分别向量化
@@ -46,6 +60,26 @@ tags:
 → 取相似度 >= 0.35 的 topK 片段
 → 把片段拼进工具结果，让模型"依据笔记作答"
 ```
+
+一次 `search_notes` 调用里发生了什么：
+
+```
+模型给出 query
+      │
+      ▼
+包装成向量输入：查询加 "search_query: "、每条笔记加 "search_document: "
+      │   （前缀是 nomic-embed-text 自己的约定，遵守但不指望它单独救场）
+      ▼
+POST /api/embed（一次请求带上全部文本）──▶ [向量…]
+      ▼
+逐条算余弦相似度 ──▶ 阈值 0.35 粗筛 ──▶ 排序取 topK=3
+      ▼
+拼成工具结果：开头写死"只依据这些片段回答，不要编造" + [片段N 相似度X.XX] 片段正文
+      ▼
+作为 role="tool" 回喂 ──▶ 模型基于片段作答（§5 会话 C 的实测输出）
+```
+
+> 降级路径：没有 `nomic-embed-text` 时同一张接口换成关键词打分（命中词数），流程与上面完全一致，只是"相似度"那一栏变成"命中词数"——两种分数不可比，所以不能共用一个标签。
 
 后面两件事**和常见直觉不一样**，先给本机实测（Ollama 0.33.3 + `nomic-embed-text`，语料就是上面的 6 条笔记，数值为余弦相似度）：
 
@@ -63,16 +97,13 @@ tags:
 <summary>main.go 全文（点击展开）</summary>
 
 ```go
-// 第 5 篇演示：记忆与轻量 RAG
+// 第 5 篇演示：记忆与轻量 RAG。
+// 与第 3 篇的差异见正文改动清单表；核心是 memoryStore（落盘 JSON）、
+// retriever（向量检索 + 关键词降级）与四个新工具。
 //
-// 本篇把前几篇的 Agent 循环升级成"有记忆"的形态：
-//  1. 跨会话长期记忆：remember/recall 工具，事实写入本地 JSON 文件，
-//     换个会话（甚至重启进程）后依然能想起来；
-//  2. 轻量 RAG：search_notes 工具对内置的"运维笔记"做检索——
-//     有 nomic-embed-text 时用向量余弦相似度，没有则自动降级关键词打分；
-//  3. 会话隔离：每个会话独立维护自己的 messages 历史，互不污染。
+// 运行：go run main.go         —— 顺序跑会话 A / B / C
 //
-// 运行：go run main.go（在本文件所在目录执行）
+//	go run main.go recall    —— 只跑会话 B（用于演示"跨进程"仍记得，见第 5 节）
 package main
 
 import (
@@ -83,6 +114,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -99,21 +131,26 @@ type Message struct {
 }
 
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 type Tool struct {
-	Type     string `json:"type"`
-	Function struct {
-		Name        string         `json:"name"`
-		Description string         `json:"description"`
-		Parameters  map[string]any `json:"parameters"`
-	} `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
+}
+
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// FunctionCall 的含义见第 2 篇 §3（tool_calls[].function）
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type ChatRequest struct {
@@ -170,8 +207,11 @@ var notes = []string{
 }
 
 // retriever 负责给 query 找最相关的笔记片段。
+// metric() 返回 score 的含义：向量检索是余弦相似度，关键词降级是命中词数——
+// 两者量纲不同，打印时不能共用"相似度"这个标签。
 type retriever interface {
 	search(query string, topK int) []searchHit
+	metric() string
 }
 
 type searchHit struct {
@@ -184,6 +224,7 @@ type searchHit struct {
 // 查询加 "search_query:"（这是 embedding 模型自己的约定）。
 type vectorRetriever struct{}
 
+func (vectorRetriever) metric() string { return "相似度" }
 func (vectorRetriever) search(query string, topK int) []searchHit {
 	texts := make([]string, 0, len(notes)+1)
 	texts = append(texts, "search_query: "+query)
@@ -212,6 +253,8 @@ func (vectorRetriever) search(query string, topK int) []searchHit {
 
 // keywordRetriever 无 embedding 模型时的降级：按命中的词数打分。
 type keywordRetriever struct{}
+
+func (keywordRetriever) metric() string { return "命中词数" }
 
 func (keywordRetriever) search(query string, topK int) []searchHit {
 	words := tokenize(query)
@@ -262,6 +305,9 @@ func top(hits []searchHit, k int) []searchHit {
 }
 
 func cosine(a, b []float64) float64 {
+	if len(a) != len(b) { // 维度不一致时直接判 0，避免越界 panic
+		return 0
+	}
 	var dot, na, nb float64
 	for i := range a {
 		dot += a[i] * b[i]
@@ -278,7 +324,7 @@ func cosine(a, b []float64) float64 {
 // 工具注册
 // ===========================================
 
-type tool struct {
+type toolEntry struct {
 	description string
 	parameters  map[string]any
 	run         func(args json.RawMessage) (string, error)
@@ -290,8 +336,11 @@ var (
 )
 
 func newRetriever() retriever {
-	// 探测 /api/tags 里有没有 embedding 模型；有则用向量，没有降级关键词
-	resp, err := http.Get("http://localhost:11434/api/tags")
+	// 探测 /api/tags 里有没有 embedding 模型；有则用向量，没有降级关键词。
+	// 这是启动路径上的一次 HTTP 调用，必须带超时：Ollama 卡住时不能拖住启动
+	// （第 2 篇「给上游一个明确的超时预算」在这里同样适用）。
+	probe := &http.Client{Timeout: 3 * time.Second}
+	resp, err := probe.Get("http://localhost:11434/api/tags")
 	if err == nil {
 		defer resp.Body.Close()
 		var tags struct {
@@ -312,7 +361,7 @@ func newRetriever() retriever {
 	return keywordRetriever{}
 }
 
-var tools = map[string]*tool{
+var tools = map[string]*toolEntry{
 	"remember": {
 		description: "把一条事实写入长期记忆（跨会话保留）。key 用命名空间风格，如 用户:名字、项目:目标",
 		parameters: map[string]any{"type": "object", "properties": map[string]any{
@@ -358,9 +407,17 @@ var tools = map[string]*tool{
 			if len(mem.data) == 0 {
 				return "长期记忆为空", nil
 			}
+			// 排序输出：Go 的 map 遍历顺序随机，不排序则每次运行的键序都可能不同
+			// （与 toolDefs 同一个理由：输出稳定才便于复现与比对）
+			keys := make([]string, 0, len(mem.data))
+			for k := range mem.data {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
 			var sb strings.Builder
-			for k, v := range mem.data {
-				fmt.Fprintf(&sb, "%s = %s\n", k, v)
+			for _, k := range keys {
+				fmt.Fprintf(&sb, "%s = %s\n", k, mem.data[k])
 			}
 			return strings.TrimSpace(sb.String()), nil
 		},
@@ -384,16 +441,24 @@ var tools = map[string]*tool{
 			var sb strings.Builder
 			sb.WriteString("（以下是检索到的笔记片段，请严格只依据这些内容回答，不要编造笔记里没有的细节）\n")
 			for i, h := range hits {
-				fmt.Fprintf(&sb, "[片段%d 相似度%.2f] %s\n", i+1, h.score, h.text)
+				fmt.Fprintf(&sb, "[片段%d %s%.2f] %s\n", i+1, retrieve.metric(), h.score, h.text)
 			}
 			return strings.TrimSpace(sb.String()), nil
 		},
 	},
 }
 
+// toolDefs 与第 3 篇相同（按名字排序，保证请求体稳定，理由见第 3 篇 §2）。
 func toolDefs() []Tool {
-	var out []Tool
-	for name, t := range tools {
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]Tool, 0, len(names))
+	for _, name := range names {
+		t := tools[name]
 		var td Tool
 		td.Type = "function"
 		td.Function.Name = name
@@ -409,6 +474,14 @@ func toolDefs() []Tool {
 // ===========================================
 
 func main() {
+	// 跨进程持久化演示：先 go run main.go 写入记忆（进程退出），
+	// 再 go run main.go recall 只跑会话 B——历史完全不共享，靠 memory.json 答出来。
+	if len(os.Args) > 1 && os.Args[1] == "recall" {
+		fmt.Println("===== 会话 B（新进程）：换一个全新会话（历史不共享），问它记得我吗 =====")
+		runSessionB()
+		return
+	}
+
 	fmt.Println("===== 会话 A：让 Agent 记住一些事实 =====")
 	runSessionA()
 	fmt.Println()
@@ -432,7 +505,7 @@ func runSessionC() {
 }
 
 func runAgent(messages []Message) {
-	const maxRounds = 6
+	const maxRounds = 8 // 保险丝：与第 3/4 篇一致，防止模型陷入死循环
 	for round := 1; round <= maxRounds; round++ {
 		resp, err := chat(messages)
 		if err != nil {
@@ -446,10 +519,14 @@ func runAgent(messages []Message) {
 		msg := resp.Choices[0].Message
 		finish := resp.Choices[0].FinishReason
 		messages = append(messages, msg)
-		// 与第 2/3 篇一致：以 tool_calls 非空 + finish_reason=="tool_calls" 为准
-		if len(msg.ToolCalls) == 0 || finish != "tool_calls" {
+		// 与第 2/3 篇一致：以 tool_calls 非空为准（finish_reason 只作校验，
+		// 部分上游调用工具时仍返回 "stop"，不能拿它当唯一判据）
+		if len(msg.ToolCalls) == 0 {
 			fmt.Println("🤖", msg.Content)
 			return
+		}
+		if finish != "tool_calls" {
+			fmt.Printf("   ⚠️ finish_reason=%q 但本轮有 tool_calls，按 tool_calls 继续执行\n", finish)
 		}
 		fmt.Printf("🔧 第 %d 轮模型请求 %d 个工具\n", round, len(msg.ToolCalls))
 		for _, tc := range msg.ToolCalls {
@@ -462,6 +539,9 @@ func runAgent(messages []Message) {
 				if err != nil {
 					result = fmt.Sprintf("工具执行出错：%v。请修正参数后重试，或放弃这一步。", err)
 				}
+			}
+			if result == "" {
+				result = "(工具无输出)" // 同第 3 篇：role="tool" 消息必须带 content（见第 2 篇 §3）
 			}
 			fmt.Printf("   - %s(%s)\n     => %s\n", tc.Function.Name, tc.Function.Arguments, result)
 			messages = append(messages, Message{Role: "tool", ToolCallID: tc.ID, Content: result})
@@ -526,11 +606,14 @@ func embedTexts(texts []string) ([][]float64, error) {
 
 ## 5. 运行结果（本机实测）
 
+> ⚠️ **运行前先清掉旧记忆**：`rm -f memory.json`——否则会带着上次运行写入的事实跑，会话 A 的"记住"看起来就像没生效。
+
 ```bash
+rm -f memory.json   # 干净复现：不要带上历史记忆
 go run main.go
 ```
 
-真实输出（Ollama 0.33.3 + llama3.1:8b + nomic-embed-text，`temperature=0` 保证可复现）：
+真实输出（Ollama 0.33.3 + llama3.1:8b + nomic-embed-text，2026-09-19 实测；`temperature=0`，且本篇的 prompt 不含时间戳这类动态内容，所以可以逐字复现）：
 
 ```
 📚 检测到 nomic-embed-text，启用向量检索
@@ -543,16 +626,13 @@ go run main.go
 🤖 这两次调用成功记住了用户的名字和语言。
 
 ===== 会话 B：换一个全新会话（历史不共享），问它记得我吗 =====
-🔧 第 1 轮模型请求 1 个工具
+🔧 第 1 轮模型请求 2 个工具
    - list_memory({})
      => 用户:名字 = 小明
 用户:语言 = Go
-🤖 根据列出的内容，我记得关于你的信息如下：
-
-* 名字：小明
-* 语言：Go
-
-所以，我知道你是叫小明，且你使用Go语言。
+   - recall({"key":"用户:名字"})
+     => 小明
+🤖 你记得关于我的名字是“小明”，语言是Go。
 
 ===== 会话 C：查笔记回答问题（轻量 RAG）=====
 🔧 第 1 轮模型请求 1 个工具
@@ -580,10 +660,32 @@ journalctl -u ollama --no-pager | grep 'inference compute'
 三个会话各演示一件事：
 
 1. **A（写入）**：两个 `remember` 把事实写入 `memory.json`；
-2. **B（跨会话读取）**：全新会话、历史完全不共享，靠 `list_memory` 枚举后正确回答——这就是"记忆"与"上下文"的区别；
+2. **B（跨会话读取）**：全新会话、历史完全不共享，靠 `list_memory` 枚举键名、再用 `recall` 取具体值，然后正确回答——这就是"记忆"与"上下文"的区别。想验证"跨进程"而不只是"跨会话"，跑两条命令即可（第二条是**另一个进程**，进程内的 messages 一定是空的）：
+
+   ```bash
+   go run main.go          # 会话 A 写入 memory.json 后进程退出
+   go run main.go recall   # 新进程只跑会话 B：仍然答得出"小明 / Go"
+   ```
+
+   第二条命令的实测输出（同一份 `memory.json`，新进程、无任何对话历史）：
+
+   ```
+   📚 检测到 nomic-embed-text，启用向量检索
+   ===== 会话 B（新进程）：换一个全新会话（历史不共享），问它记得我吗 =====
+   🔧 第 1 轮模型请求 2 个工具
+      - list_memory({})
+        => 用户:名字 = 小明
+   用户:语言 = Go
+      - recall({"key":"用户:名字"})
+        => 小明
+   🤖 你记得关于我的名字是“小明”，语言是Go。
+   ```
+
+   > 这正是"记忆 = 外部状态 + 工具"的实证：模型自己不记得任何东西，它只是**又一次调用了工具**。
+
 3. **C（RAG）**：检索命中"设置 `OLLAMA_VULKAN=true`"这条笔记（相似度 0.78），回答严格围绕检索片段，包括验证命令。
 
-> 想复现干净结果请先删掉旧的 `memory.json`（`rm -f memory.json`），否则会带着上次运行的记忆跑。
+
 
 ## 6. 坑与对照（实测验证）
 
@@ -593,26 +695,39 @@ journalctl -u ollama --no-pager | grep 'inference compute'
 | 新会话里 `recall` 猜不到键     | 键值记忆需要"知道键名"，而键对模型是不可见的                                      | 提供 `list_memory` 枚举工具——枚举是"想起来"的前提（本篇实测此法稳定）                    |
 | 检索结果不够准、捞到无关片段   | 短文本同主题时余弦分数被压在 0.5~0.8 窄带，固定阈值几乎不过滤；前缀的影响也被高估 | 按语料标定阈值；先用 `topK` 收敛，再靠"只依据片段作答"的指令兜底；前缀按模型约定加上即可 |
 | 检索对了但模型自己加料         | 模型不保证"照抄片段"                                                              | 工具结果开头显式要求"严格只依据这些内容"；生产可加引用校验                               |
-| 输出每次都不一样、难复现       | 默认采样有随机性                                                                  | 演示/测试用 `temperature=0`，聊天场景再调回                                              |
+| 输出每次都不一样、难复现       | 默认采样有随机性；或 prompt 里含动态内容（时间戳、检索结果变动）                  | 演示/测试用 `temperature=0`；prompt 里若有动态内容，还得先把它固定住（见第 3 篇 §6）     |
 | 检索与对话模型互相换入换出     | Ollama 默认每 GPU 驻留模型数有限                                                  | 显存够可设 `OLLAMA_MAX_LOADED_MODELS=2`（见第 1 篇第 5.3 节）                            |
 
 ## 7. 刻意简化 vs 生产做法
 
-| 刻意简化的地方         | 生产环境的做法                                           |
-| ---------------------- | -------------------------------------------------------- |
-| 记忆存本地 JSON 文件   | 数据库 + 用户维度隔离 + 过期策略                         |
-| 6 条固定笔记全量向量化 | 真实文档分块/重叠切分 + 向量库（pgvector/sqlite-vec 等） |
-| 纯向量检索             | 混合检索（关键词 + 向量）与重排                          |
-| 阈值写死 0.35          | 按 embedding 模型与语料调参/评测                         |
-| 事实记忆是"死键值"     | 摘要式长期记忆（把旧对话压成摘要再存）                   |
+| 刻意简化的地方         | 生产环境的做法                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 记忆存本地 JSON 文件   | 数据库 + 用户维度隔离 + 过期策略                                                                                     |
+| 6 条固定笔记全量向量化 | 真实文档**分块**（chunking：切成小片段，相邻片段留一点**重叠**以免从中间截断语义）+ 向量库（pgvector/sqlite-vec 等） |
+| 纯向量检索             | 混合检索（关键词 + 向量）与重排                                                                                      |
+| 阈值写死 0.35          | 按 embedding 模型与语料调参/评测                                                                                     |
+| 事实记忆是"死键值"     | 摘要式长期记忆（把旧对话压成摘要再存）                                                                               |
+| 记忆是全局的（单用户） | 按用户/会话维度隔离（`用户:<id>:名字`）+ 数据库 + 过期策略                                                           |
+
+
+### 怎么把记忆接进第 4 篇的服务（三步，不必改本篇代码）
+
+第 4 篇的结论说"服务目前仍无记忆"，本篇又回到命令行演示——两者合体只需要三步：
+
+1. **换工具表**：把第 4 篇的 `tools`（时间/加减乘除）整体替换成本篇的 `remember`/`recall`/`list_memory`/`search_notes`（复制 `tools` 变量即可，循环代码不用动）。
+2. **给会话一个容器**：`handleChat` 里已经有 `history []Message`。无状态方案是让客户端每次带上历史；要在服务端记会话，就加 `map[string][]Message` 按 `session_id` 存——**记得加 `sync.Mutex`**，Go 的 HTTP handler 是并发的，这一点在命令行版里不用考虑。
+3. **给记忆加维度**：`mem`（`memory.json`）与 `retrieve` 在服务端是**包级共享变量**，多用户会互相看到记忆。上线前至少要把键改成 `用户:<id>:名字` 这类带维度的形式（或每个用户一份文件/一层数据库）。
+
+> 顺带一句并发：Ollama 默认并非无限并行（`OLLAMA_NUM_PARALLEL`、`OLLAMA_MAX_QUEUE`，见第 1 篇 §5.3）。服务化之后同时来了 10 个请求，超出的会排队或直接被拒——这也是"演示"与"上线"之间的一道坎。
 
 ## FAQ
 
-| 问题                      | 解决                                                                 |
-| ------------------------- | -------------------------------------------------------------------- |
-| 没有 embedding 模型能跑吗 | 能：代码自动降级为关键词检索（启动时探测 `/api/tags`），只是效果差些 |
-| `memory.json` 越写越大    | 键值设计 + 定期清理；真实场景换数据库                                |
-| 笔记很多时全量算余弦太慢  | 向量库索引；先按标签/目录粗筛再精排                                  |
+| 问题                                      | 解决                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| 没有 embedding 模型能跑吗                 | 能：代码自动降级为关键词检索（启动时探测 `/api/tags`），只是效果差些 |
+| `ollama pull` 了 embedding 模型仍走关键词 | 探测只在**进程启动时做一次**；拉到模型后要重启进程才会切到向量检索   |
+| `memory.json` 越写越大                    | 键值设计 + 定期清理；真实场景换数据库                                |
+| 笔记很多时全量算余弦太慢                  | 向量库索引；先按标签/目录粗筛再精排                                  |
 
 ## 结论
 
