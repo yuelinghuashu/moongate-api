@@ -5,29 +5,27 @@ import (
 	"time"
 )
 
-// Doc 文档实体（包含所有字段）
-type Doc struct {
+// Frontmatter 是 Markdown 文件 frontmatter 的解析结果。
+//
+// 它只回答"文件里写了什么"，不关心"如何返回给客户端"：
+// 语言回退、是否命中译文等请求期状态属于响应视图（见 dto.go），
+// 解析产物因此可以在多个并发请求之间安全共享。
+type Frontmatter struct {
 	Title       string    `yaml:"title" json:"title"`             // 文章标题
 	Description string    `yaml:"description" json:"description"` // 简短摘要
-	Date        time.Time `yaml:"date" json:"date"`           // 发布日期 (YYYY-MM-DD HH:MM:SS)
-	Slug        string    `yaml:"slug,omitempty" json:"slug"` // URL 友好标识符
+	Date        time.Time `yaml:"date" json:"date"`               // 发布日期 (YYYY-MM-DD HH:MM:SS)
 	Series      *string   `yaml:"series" json:"series"`           // 所属系列，nil 表示无系列
 	Order       *int      `yaml:"order,omitempty" json:"order"`   // 系列内阅读顺序（可选），nil 表示未指定
 	Tags        []string  `yaml:"tags" json:"tags"`               // 标签列表，用于分类
-	Content     string    `json:"content"`                        // 正文 HTML（来自 Markdown 转换）
-
-	// 以下字段为 API 响应时按请求语言填充（不参与 YAML frontmatter 解析）
-	Lang           string `json:"lang"`           // 实际返回内容的语言：zh | en
-	IsFallback     bool   `json:"isFallback"`     // 请求语言无译文时回退到中文（或反向兜底）
-	HasTranslation bool   `json:"hasTranslation"` // 该 slug 是否存在英文译文
 }
 
-func (d *Doc) SetSlug(slug string) {
-	d.Slug = slug
-}
-
-func (d *Doc) SetContent(content string) {
-	d.Content = content
+// Doc 一篇已解析的文档：embedding 让 frontmatter 字段直接可用
+// （doc.Title、domain.Doc{Title: ...} 的写法保持不变），
+// 另外补上由文件名推导的 Slug 与 Markdown 转换后的正文 HTML。
+type Doc struct {
+	Frontmatter
+	Slug    string `json:"slug"`    // URL 友好标识符（由文件名生成）
+	Content string `json:"content"` // 正文 HTML
 }
 
 // ContainsAllTags 检查文档是否包含所有目标标签（不区分大小写）
@@ -59,24 +57,4 @@ func (d *Doc) ContainsAllTags(targetTags []string) bool {
 
 	// 如果所有目标标签都在文档标签集合中，返回 true
 	return true
-}
-
-// DocSummary 文档摘要（用于列表页）
-type DocSummary struct {
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Date        time.Time `json:"date"`
-	Slug        string    `json:"slug"`
-	Series      *string   `json:"series"`
-	Order       *int      `json:"order"`   // 系列内阅读顺序（可选），nil 表示未指定
-	Tags        []string  `json:"tags"`
-	Lang        string    `json:"lang"`           // 实际返回内容的语言：zh | en
-	IsFallback  bool      `json:"isFallback"`     // 请求语言无译文时回退到中文
-	HasTranslation bool   `json:"hasTranslation"` // 该 slug 是否存在英文译文
-}
-
-// SeriesGroup 系列分组（用于 API 响应）
-type SeriesGroup struct {
-	Slug string       `json:"slug"`
-	Docs []DocSummary `json:"docs"`
 }

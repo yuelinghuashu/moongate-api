@@ -1,0 +1,6 @@
+{
+  "code": 400,
+  "body": {
+    "error": "searchMode 参数只能是 all、title 或 description"
+  }
+}

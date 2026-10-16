@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "body": {
+    "title": "Nuxt 中 URL 与状态双向绑定指南：从原理到实践",
+    "description": "<text>",
+    "date": "2026-02-19T00:00:00Z",
+    "slug": "nuxt-url-state-guide",
+    "series": "url-state",
+    "order": 1,
+    "tags": [
+      "Nuxt",
+      "Vue",
+      "State Management"
+    ],
+    "content": "<text>",
+    "lang": "zh",
+    "isFallback": true,
+    "hasTranslation": false
+  }
+}

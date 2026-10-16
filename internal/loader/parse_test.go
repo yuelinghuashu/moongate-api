@@ -1,7 +1,6 @@
 package loader
 
 import (
-	"moongate-api/internal/domain"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,7 @@ func createTempFile(t *testing.T, content string) string {
 	return path
 }
 
-func TestParseMarkdown_ValidDoc(t *testing.T) {
+func TestParseDoc_ValidDoc(t *testing.T) {
 	content := `---
 title: "Go 测试"
 description: "测试解析功能的文章"
@@ -36,29 +35,32 @@ This is a **test** body.
 `
 
 	path := createTempFile(t, content)
-	doc, err := ParseMarkdown[domain.Doc](path)
+	fm, slug, _, err := parseDoc(path)
 	if err != nil {
-		t.Fatalf("ParseMarkdown() error = %v", err)
+		t.Fatalf("parseDoc() error = %v", err)
 	}
 
-	if doc.Title != "Go 测试" {
-		t.Errorf("Title = %q, want %q", doc.Title, "Go 测试")
+	if slug != "test-article" {
+		t.Errorf("Slug = %q, want %q", slug, "test-article")
 	}
-	if doc.Description != "测试解析功能的文章" {
-		t.Errorf("Description = %q, want %q", doc.Description, "测试解析功能的文章")
+	if fm.Title != "Go 测试" {
+		t.Errorf("Title = %q, want %q", fm.Title, "Go 测试")
 	}
-	if len(doc.Tags) != 2 || doc.Tags[0] != "Go" || doc.Tags[1] != "Testing" {
-		t.Errorf("Tags = %v, want [Go Testing]", doc.Tags)
+	if fm.Description != "测试解析功能的文章" {
+		t.Errorf("Description = %q, want %q", fm.Description, "测试解析功能的文章")
+	}
+	if len(fm.Tags) != 2 || fm.Tags[0] != "Go" || fm.Tags[1] != "Testing" {
+		t.Errorf("Tags = %v, want [Go Testing]", fm.Tags)
 	}
 
 	// 验证日期解析
 	expectedDate := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
-	if !doc.Date.Equal(expectedDate) {
-		t.Errorf("Date = %v, want %v", doc.Date, expectedDate)
+	if !fm.Date.Equal(expectedDate) {
+		t.Errorf("Date = %v, want %v", fm.Date, expectedDate)
 	}
 }
 
-func TestParseMarkdown_SlugFromFilename(t *testing.T) {
+func TestParseDoc_SlugFromFilename(t *testing.T) {
 	content := `---
 title: "Test"
 description: "desc"
@@ -69,17 +71,17 @@ Body text here.
 `
 
 	path := createTempFile(t, content)
-	doc, err := ParseMarkdown[domain.Doc](path)
+	_, slug, _, err := parseDoc(path)
 	if err != nil {
-		t.Fatalf("ParseMarkdown() error = %v", err)
+		t.Fatalf("parseDoc() error = %v", err)
 	}
 
-	if doc.Slug != "test-article" {
-		t.Errorf("Slug = %q, want %q", doc.Slug, "test-article")
+	if slug != "test-article" {
+		t.Errorf("Slug = %q, want %q", slug, "test-article")
 	}
 }
 
-func TestParseMarkdown_HTMLContent(t *testing.T) {
+func TestParseDoc_HTMLContent(t *testing.T) {
 	content := `---
 title: "Test HTML"
 description: "desc"
@@ -92,35 +94,35 @@ Paragraph with **bold** text.
 `
 
 	path := createTempFile(t, content)
-	doc, err := ParseMarkdown[domain.Doc](path)
+	_, _, content, err := parseDoc(path)
 	if err != nil {
-		t.Fatalf("ParseMarkdown() error = %v", err)
+		t.Fatalf("parseDoc() error = %v", err)
 	}
 
 	// 验证 Markdown 转 HTML
-	if doc.Content == "" {
+	if content == "" {
 		t.Error("Content should not be empty after Markdown conversion")
 	}
-	if !strings.Contains(doc.Content, "<h1") {
-		t.Errorf("Content should contain heading, got: %s", doc.Content)
+	if !strings.Contains(content, "<h1") {
+		t.Errorf("Content should contain heading, got: %s", content)
 	}
-	if !strings.Contains(doc.Content, "<strong>") {
-		t.Errorf("Content should contain <strong> tag, got: %s", doc.Content)
+	if !strings.Contains(content, "<strong>") {
+		t.Errorf("Content should contain <strong> tag, got: %s", content)
 	}
 }
 
-func TestParseMarkdown_InvalidFrontmatter(t *testing.T) {
+func TestParseDoc_InvalidFrontmatter(t *testing.T) {
 	// 没有 frontmatter 分隔符
 	content := `just plain text without frontmatter`
 	path := createTempFile(t, content)
 
-	_, err := ParseMarkdown[domain.Doc](path)
+	_, _, _, err := parseDoc(path)
 	if err == nil {
-		t.Error("ParseMarkdown() should error for invalid frontmatter format")
+		t.Error("parseDoc() should error for invalid frontmatter format")
 	}
 }
 
-func TestParseMarkdown_InvalidYAML(t *testing.T) {
+func TestParseDoc_InvalidYAML(t *testing.T) {
 	content := `---
 title: [unclosed
 ---
@@ -128,20 +130,20 @@ body here
 `
 	path := createTempFile(t, content)
 
-	_, err := ParseMarkdown[domain.Doc](path)
+	_, _, _, err := parseDoc(path)
 	if err == nil {
-		t.Error("ParseMarkdown() should error for invalid YAML")
+		t.Error("parseDoc() should error for invalid YAML")
 	}
 }
 
-func TestParseMarkdown_FileNotFound(t *testing.T) {
-	_, err := ParseMarkdown[domain.Doc]("/nonexistent/file.md")
+func TestParseDoc_FileNotFound(t *testing.T) {
+	_, _, _, err := parseDoc("/nonexistent/file.md")
 	if err == nil {
-		t.Error("ParseMarkdown() should error when file does not exist")
+		t.Error("parseDoc() should error when file does not exist")
 	}
 }
 
-func TestParseMarkdown_EmptySeries(t *testing.T) {
+func TestParseDoc_EmptySeries(t *testing.T) {
 	content := `---
 title: "Series Test"
 description: "desc"
@@ -153,41 +155,13 @@ Body text.
 `
 
 	path := createTempFile(t, content)
-	doc, err := ParseMarkdown[domain.Doc](path)
+	fm, _, _, err := parseDoc(path)
 	if err != nil {
-		t.Fatalf("ParseMarkdown() error = %v", err)
+		t.Fatalf("parseDoc() error = %v", err)
 	}
 
 	// 解析后 series 可能是空字符串指针
-	if doc.Series != nil && *doc.Series == "" {
+	if fm.Series != nil && *fm.Series == "" {
 		t.Log("Series is empty string pointer (handled in loadDocs)")
 	}
 }
-
-func TestParseMarkdown_About(t *testing.T) {
-	content := `---
-title: "About Me"
-description: "My bio"
-date: 2025-01-01 00:00:00
----
-
-I am a developer.
-`
-
-	path := createTempFile(t, content)
-	about, err := ParseMarkdown[domain.About](path)
-	if err != nil {
-		t.Fatalf("ParseMarkdown() error = %v", err)
-	}
-
-	if about.Title != "About Me" {
-		t.Errorf("Title = %q, want %q", about.Title, "About Me")
-	}
-	if about.Slug != "test-article" {
-		t.Errorf("Slug = %q, want %q", about.Slug, "test-article")
-	}
-	if about.Content == "" {
-		t.Error("Content should not be empty")
-	}
-}
-

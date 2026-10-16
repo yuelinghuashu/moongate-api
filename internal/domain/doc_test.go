@@ -7,11 +7,10 @@ import (
 
 func TestContainsAllTags(t *testing.T) {
 	doc := &Doc{
-		Title: "test doc",
-		Tags:  []string{"Go", "Vue", "Docker"},
+		Frontmatter: Frontmatter{Title: "test doc", Tags: []string{"Go", "Vue", "Docker"}},
 	}
 
-	emptyDoc := &Doc{Title: "empty doc"}
+	emptyDoc := &Doc{Frontmatter: Frontmatter{Title: "empty doc"}}
 
 	tests := []struct {
 		name       string
@@ -74,29 +73,27 @@ func TestContainsAllTags(t *testing.T) {
 	}
 }
 
-func TestDocSetSlugAndContent(t *testing.T) {
-	doc := &Doc{}
-	doc.SetSlug("my-slug")
-	doc.SetContent("<p>hello</p>")
+// TestDocEmbeddedFrontmatter 验证内嵌 Frontmatter 的字段提升：
+// frontmatter 解析结果（Title/Tags/...）可通过 Doc 直接访问，
+// 同时 Doc 自己持有 Slug / Content（语言字段只存在于响应 DTO 上）。
+func TestDocEmbeddedFrontmatter(t *testing.T) {
+	doc := &Doc{
+		Frontmatter: Frontmatter{Title: "内嵌标题", Tags: []string{"Go"}},
+		Slug:        "my-slug",
+		Content:     "<p>hello</p>",
+	}
 
+	if doc.Title != "内嵌标题" {
+		t.Errorf("提升字段 Title = %q, want %q", doc.Title, "内嵌标题")
+	}
+	if doc.Frontmatter.Title != doc.Title {
+		t.Errorf("Frontmatter.Title = %q, 与提升字段不一致", doc.Frontmatter.Title)
+	}
 	if doc.Slug != "my-slug" {
-		t.Errorf("SetSlug() Slug = %q, want %q", doc.Slug, "my-slug")
+		t.Errorf("Slug = %q, want %q", doc.Slug, "my-slug")
 	}
 	if doc.Content != "<p>hello</p>" {
-		t.Errorf("SetContent() Content = %q, want %q", doc.Content, "<p>hello</p>")
-	}
-}
-
-func TestAboutSetSlugAndContent(t *testing.T) {
-	about := &About{}
-	about.SetSlug("about-slug")
-	about.SetContent("<p>about content</p>")
-
-	if about.Slug != "about-slug" {
-		t.Errorf("SetSlug() Slug = %q, want %q", about.Slug, "about-slug")
-	}
-	if about.Content != "<p>about content</p>" {
-		t.Errorf("SetContent() Content = %q, want %q", about.Content, "<p>about content</p>")
+		t.Errorf("Content = %q, want %q", doc.Content, "<p>hello</p>")
 	}
 }
 
@@ -124,9 +121,9 @@ func TestSearchModeIsValid(t *testing.T) {
 
 func TestDocSortingByDate(t *testing.T) {
 	docs := []Doc{
-		{Title: "older", Date: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{Title: "newer", Date: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{Title: "middle", Date: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)},
+		{Frontmatter: Frontmatter{Title: "older", Date: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}},
+		{Frontmatter: Frontmatter{Title: "newer", Date: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}},
+		{Frontmatter: Frontmatter{Title: "middle", Date: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)}},
 	}
 
 	// 验证 Date.After 方法的行为（用于排序逻辑）

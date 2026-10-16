@@ -20,33 +20,86 @@ var (
 
 // expandDetailsCodeFences 返回改写后的正文：仅处理 <details>…</details> 内的围栏，
 // 其余内容保持逐字节不变。
+//
+// 扫描时需要同时跟踪两种状态，否则会把代码文本当结构：
+//   - 顶层围栏：文章里作为示例出现的 <details> 可能落在围栏代码块内，那不是真区域；
+//   - 区域内的围栏：details 内嵌的代码示例本身可能包含 <details>/</details>
+//     （例如 Vue 代码示例里的折叠组件），把代码里的 </details> 当成区域结束，
+//     会让围栏被截断、整段代码原样透传成 HTML——页面会显示乱码而不是代码块。
 func expandDetailsCodeFences(body string) string {
 	lines := strings.Split(body, "\n")
 	out := make([]string, 0, len(lines))
 
 	i := 0
+	var topFenceChar byte
+	var topFenceLen int
+
 	for i < len(lines) {
+		trim := strings.TrimLeft(lines[i], " \t")
+
+		// 顶层围栏内部：原样复制，绝不在这里识别 details。
+		if topFenceChar != 0 {
+			out = append(out, lines[i])
+			if closingFence(trim, topFenceChar, topFenceLen) {
+				topFenceChar = 0
+			}
+			i++
+			continue
+		}
+		if c, n, _, ok := openingFence(trim); ok {
+			topFenceChar, topFenceLen = c, n
+			out = append(out, lines[i])
+			i++
+			continue
+		}
+
 		if !detailsOpenRe.MatchString(lines[i]) {
 			out = append(out, lines[i])
 			i++
 			continue
 		}
 
-		// 收集整个 details 区域（含开/闭标签行）
+		// 收集整个 details 区域（含开/闭标签行）：只有不在围栏内、
+		// 且嵌套深度归零的那个 </details> 才算区域结束。
 		region := []string{lines[i]}
+		depth := 1
+		var fenceChar byte
+		var fenceLen int
+		closed := false
+
 		j := i + 1
-		for j < len(lines) && !detailsCloseRe.MatchString(lines[j]) {
-			region = append(region, lines[j])
-			j++
-		}
-		closed := j < len(lines)
-		if closed {
+		for ; j < len(lines); j++ {
+			lineTrim := strings.TrimLeft(lines[j], " \t")
+
+			if fenceChar != 0 {
+				region = append(region, lines[j])
+				if closingFence(lineTrim, fenceChar, fenceLen) {
+					fenceChar = 0
+				}
+				continue
+			}
+			if c, n, _, ok := openingFence(lineTrim); ok {
+				fenceChar, fenceLen = c, n
+				region = append(region, lines[j])
+				continue
+			}
+			if detailsOpenRe.MatchString(lines[j]) {
+				depth++
+			} else if detailsCloseRe.MatchString(lines[j]) {
+				depth--
+				if depth == 0 {
+					region = append(region, lines[j])
+					closed = true
+					j++
+					break
+				}
+			}
 			region = append(region, lines[j])
 		}
 
 		out = append(out, convertRegionFences(region)...)
 		if closed {
-			i = j + 1
+			i = j
 		} else {
 			i = len(lines) // 未闭合：区域延伸到文档末尾
 		}
@@ -128,9 +181,12 @@ func closingFence(trim string, char byte, minLen int) bool {
 	return n >= minLen && strings.TrimSpace(trim[n:]) == ""
 }
 
-// fenceCodeEscaper 用"命名实体"转义代码内容：与前端 shikiProcessor 的
-// 反转义清单（&lt;/&gt;/&amp;/&quot;/&apos;）严格对应，避免 &#34; 之类
-// 数字实体无法被前端还原。顺序必须先 & 后其余。
+// fenceCodeEscaper 用"命名实体"转义代码内容。
+//
+// 转义本身是必须的：代码里的 <、& 若原样进入 HTML 会破坏结构。
+// 但"用哪种实体写法"不是跨仓契约——前端 app/utils/htmlEntities.ts 会按实体语法
+// 统一解码（命名 + 数字），因此渲染器或清洗器把 &quot; 规整成 &#34; 也不会
+// 让代码块显示成实体字面量。顺序必须先 & 后其余。
 var fenceCodeEscaper = strings.NewReplacer(
 	"&", "&amp;",
 	"<", "&lt;",

@@ -1,0 +1,27 @@
+{
+  "code": 200,
+  "body": {
+    "data": [
+      {
+        "title": "Nuxt 4 集成 Drizzle ORM (PostgreSQL) 完整教程",
+        "description": "<text>",
+        "date": "2026-02-16T00:00:00Z",
+        "slug": "nuxt-drizzle-postgresql",
+        "series": "backend",
+        "order": 2,
+        "tags": [
+          "Nuxt",
+          "PostgreSQL",
+          "ORM"
+        ],
+        "lang": "zh",
+        "isFallback": false,
+        "hasTranslation": false
+      }
+    ],
+    "limit": 5,
+    "page": 1,
+    "total": 1,
+    "totalPages": 1
+  }
+}

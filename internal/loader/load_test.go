@@ -6,18 +6,14 @@ import (
 	"testing"
 )
 
-// createTestContentDir 创建包含 docs 和 about 子目录的测试内容目录
+// createTestContentDir 创建包含 docs 子目录的测试内容目录
 func createTestContentDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
 	docsDir := filepath.Join(dir, "docs")
-	aboutDir := filepath.Join(dir, "about")
 	if err := os.MkdirAll(docsDir, 0755); err != nil {
 		t.Fatalf("Failed to create docs dir: %v", err)
-	}
-	if err := os.MkdirAll(aboutDir, 0755); err != nil {
-		t.Fatalf("Failed to create about dir: %v", err)
 	}
 
 	return dir
@@ -60,16 +56,6 @@ tags:
 Content two.
 `)
 
-	// 写入 about
-	writeTestMarkdown(t, filepath.Join(dir, "about"), "me.md", `---
-title: "About Me"
-description: "Bio"
-date: 2025-01-01 00:00:00
----
-
-About content.
-`)
-
 	store, err := LoadAll(dir)
 	if err != nil {
 		t.Fatalf("LoadAll() error = %v", err)
@@ -86,14 +72,6 @@ About content.
 	}
 	if _, ok := store.DocsBySlug["article2"]; !ok {
 		t.Error("DocsBySlug should contain slug article2")
-	}
-
-	// 验证 About 数量（按 slug 索引）
-	if len(store.AboutBySlug) != 1 {
-		t.Errorf("AboutBySlug count = %d, want 1", len(store.AboutBySlug))
-	}
-	if _, ok := store.AboutBySlug["me"]; !ok {
-		t.Error("AboutBySlug should contain slug me")
 	}
 }
 
@@ -224,8 +202,8 @@ Part 2 content.
 }
 
 func TestLoadAll_NonExistentDir(t *testing.T) {
-	// filepath.Glob 对不存在的目录不会返回错误，而是返回空列表。
-	// LoadAll 对空目录的处理是：正常返回空 store（无错误）。
+	// filepath.WalkDir 对不存在的目录会返回错误（该错误由 LoadAll 包装后向上返回）；
+	// 测试同时接受两种行为：返回错误，或返回空但非 nil 的 store。
 	store, err := LoadAll("/nonexistent/directory")
 	if err != nil {
 		t.Logf("LoadAll() returned error (acceptable behavior): %v", err)

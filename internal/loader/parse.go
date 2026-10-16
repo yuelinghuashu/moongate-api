@@ -10,27 +10,30 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-func ParseMarkdown[T any](filePath string) (T, error) {
-	var result T
+// parseDoc 解析一个 Markdown 文件，返回 frontmatter、由文件名推导的 slug 与正文 HTML。
+//
+// 返回三个值而不是"直接返回填好的 Doc"，是为了让"文件叫什么"（slug）与
+// "文件里写了什么"（frontmatter）由调用方显式组装，避免解析函数反过来改写领域对象。
+func parseDoc(filePath string) (domain.Frontmatter, string, string, error) {
+	var fm domain.Frontmatter
 
 	// 1. 读取文件
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return result, fmt.Errorf("读取文件失败: %w", err)
+		return fm, "", "", fmt.Errorf("读取文件失败: %w", err)
 	}
 
 	// 2. 分割 Frontmatter
 	parts := strings.SplitN(string(data), "---", 3)
 	if len(parts) != 3 {
-		return result, fmt.Errorf("无效的 frontmatter 格式: %s", filePath)
+		return fm, "", "", fmt.Errorf("无效的 frontmatter 格式: %s", filePath)
 	}
 	frontmatter := parts[1]
 	body := parts[2]
 
-	// 3. 解析 YAML 到目标结构体
-	err = yaml.Unmarshal([]byte(frontmatter), &result)
-	if err != nil {
-		return result, fmt.Errorf("解析 frontmatter 失败: %w", err)
+	// 3. 解析 YAML 到领域结构体
+	if err := yaml.Unmarshal([]byte(frontmatter), &fm); err != nil {
+		return fm, "", "", fmt.Errorf("解析 frontmatter 失败: %w", err)
 	}
 
 	// 4. 提取文件名作为 Slug（去掉扩展名）
@@ -40,13 +43,5 @@ func ParseMarkdown[T any](filePath string) (T, error) {
 	slug = strings.TrimSuffix(slug, ".en")
 
 	// 5. 转换 Markdown 到 HTML
-	htmlContent := mdToHTML(body)
-
-	// 6. 通过接口设置 Slug、Content 字段
-	if setter, ok := any(&result).(domain.ContentSetter); ok {
-		setter.SetSlug(slug)
-		setter.SetContent(htmlContent)
-	}
-
-	return result, nil
+	return fm, slug, mdToHTML(body), nil
 }

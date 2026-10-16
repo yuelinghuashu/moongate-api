@@ -1,0 +1,61 @@
+{
+  "code": 200,
+  "body": {
+    "data": [
+      {
+        "title": "GORM 工程化实战（二）：可靠性与生产化",
+        "description": "<text>",
+        "date": "2026-09-06T02:00:00Z",
+        "slug": "gorm-gin-engineering-reliability",
+        "series": "gin-gorm",
+        "order": 7,
+        "tags": [
+          "Go",
+          "PostgreSQL",
+          "ORM",
+          "Engineering"
+        ],
+        "lang": "zh",
+        "isFallback": false,
+        "hasTranslation": true
+      },
+      {
+        "title": "GORM 工程化实战（一）：分层、注入与可测性",
+        "description": "<text>",
+        "date": "2026-09-06T00:00:00Z",
+        "slug": "gorm-gin-engineering-layering",
+        "series": "gin-gorm",
+        "order": 6,
+        "tags": [
+          "Go",
+          "PostgreSQL",
+          "ORM",
+          "Engineering"
+        ],
+        "lang": "zh",
+        "isFallback": false,
+        "hasTranslation": true
+      },
+      {
+        "title": "GORM 多对多实战：书籍与标签",
+        "description": "<text>",
+        "date": "2026-09-05T00:00:00Z",
+        "slug": "gorm-gin-tags",
+        "series": "gin-gorm",
+        "order": 5,
+        "tags": [
+          "Go",
+          "PostgreSQL",
+          "ORM"
+        ],
+        "lang": "zh",
+        "isFallback": false,
+        "hasTranslation": true
+      }
+    ],
+    "limit": 3,
+    "page": 1,
+    "total": 8,
+    "totalPages": 3
+  }
+}

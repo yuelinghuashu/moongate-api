@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"moongate-api/internal/catalog"
 	"moongate-api/internal/domain"
 	"net/http"
 	"net/http/httptest"
@@ -13,61 +14,63 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// docOf 构造一个已解析的文档（frontmatter + slug + 正文）。
+// 注意：Doc 内嵌 Frontmatter，而 go.mod 的语言版本为 1.26，
+// 复合字面量不能使用提升字段，因此这里显式写 Frontmatter。
+func docOf(fm domain.Frontmatter, slug, content string) *domain.Doc {
+	return &domain.Doc{Frontmatter: fm, Slug: slug, Content: content}
+}
+
+// newTestHandler 组装"store → catalog → handler"整条链（与 main.go 一致）。
+func newTestHandler(zh, en map[string]*domain.Doc) *DocsHandler {
+	return NewDocsHandler(catalog.New(zh, en))
+}
+
 // setupDocsTestRouter 创建一个带有测试数据的 DocsHandler 路由
 func setupDocsTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
-	doc1 := &domain.Doc{
+	doc1 := docOf(domain.Frontmatter{
 		Title:       "Go Tutorial",
 		Description: "Learn Go programming",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
-		Slug:        "go-tutorial",
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Tutorial"},
-		Content:     "<p>Go tutorial content</p>",
-	}
+	}, "go-tutorial", "<p>Go tutorial content</p>")
 
-	doc2 := &domain.Doc{
+	doc2 := docOf(domain.Frontmatter{
 		Title:       "Vue Guide",
 		Description: "Vue.js framework guide",
 		Date:        time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
-		Slug:        "vue-guide",
 		Series:      stringPtr("vue-series"),
 		Tags:        []string{"Vue", "Frontend"},
-		Content:     "<p>Vue guide content</p>",
-	}
+	}, "vue-guide", "<p>Vue guide content</p>")
 
-	doc3 := &domain.Doc{
+	doc3 := docOf(domain.Frontmatter{
 		Title:       "Advanced Go",
 		Description: "Deep dive into Go concurrency",
 		Date:        time.Date(2025, 3, 20, 0, 0, 0, 0, time.UTC),
-		Slug:        "advanced-go",
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Advanced"},
-		Content:     "<p>Advanced Go content</p>",
-	}
+	}, "advanced-go", "<p>Advanced Go content</p>")
 
 	// 英文译文：go-tutorial 有英文版，vue-guide / advanced-go 无英文版
-	doc1En := &domain.Doc{
+	doc1En := docOf(domain.Frontmatter{
 		Title:       "Go Tutorial (EN)",
 		Description: "Learn Go programming (EN)",
 		Date:        time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC),
-		Slug:        "go-tutorial",
 		Series:      stringPtr("go-series"),
 		Tags:        []string{"Go", "Tutorial"},
-		Content:     "<p>Go tutorial content (EN)</p>",
-	}
+	}, "go-tutorial", "<p>Go tutorial content (EN)</p>")
 
 	// 仅英文存在的文档（无中文配对）：测试兜底逻辑
-	docEnOnly := &domain.Doc{
+	docEnOnly := docOf(domain.Frontmatter{
 		Title:       "English Only Doc",
 		Description: "No Chinese version",
 		Date:        time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
-		Slug:        "en-only",
 		Tags:        []string{"English"},
-		Content:     "<p>English only content</p>",
-	}
+	}, "en-only", "<p>English only content</p>")
 
 	storeBySlug := map[string]*domain.Doc{
 		doc1.Slug: doc1,
@@ -79,7 +82,7 @@ func setupDocsTestRouter() *gin.Engine {
 		docEnOnly.Slug: docEnOnly,
 	}
 
-	handler := NewDocsHandler(storeBySlug, storeEn)
+	handler := newTestHandler(storeBySlug, storeEn)
 	r.GET("/api/docs", handler.GetDocs)
 	r.GET("/api/docs/:slug", handler.GetDocBySlug)
 
@@ -179,14 +182,13 @@ func TestGetDocs_SameDateDeterministicOrder(t *testing.T) {
 	slugs := []string{"streaming-and-migration", "memory-rag", "agent-loop", "env-and-ops", "minimal-agent"}
 	storeBySlug := make(map[string]*domain.Doc, len(slugs))
 	for _, slug := range slugs {
-		storeBySlug[slug] = &domain.Doc{
+		storeBySlug[slug] = docOf(domain.Frontmatter{
 			Title: "Doc " + slug,
 			Date:  sameDate,
-			Slug:  slug,
 			Tags:  []string{"Go", "Agent", "LLM"},
-		}
+		}, slug, "")
 	}
-	handler := NewDocsHandler(storeBySlug, nil)
+	handler := newTestHandler(storeBySlug, nil)
 	r.GET("/api/docs", handler.GetDocs)
 
 	expectedOrder := append([]string(nil), slugs...)
@@ -241,16 +243,15 @@ func TestGetDocs_SameDateSameSeries_SortedByOrderDesc(t *testing.T) {
 	storeBySlug := make(map[string]*domain.Doc, len(items))
 	for _, it := range items {
 		order := it.order
-		storeBySlug[it.slug] = &domain.Doc{
+		storeBySlug[it.slug] = docOf(domain.Frontmatter{
 			Title:  "Doc " + it.slug,
 			Date:   sameDate,
-			Slug:   it.slug,
 			Series: &series,
 			Order:  &order,
 			Tags:   []string{"Go", "Agent", "LLM"},
-		}
+		}, it.slug, "")
 	}
-	handler := NewDocsHandler(storeBySlug, nil)
+	handler := newTestHandler(storeBySlug, nil)
 	r.GET("/api/docs", handler.GetDocs)
 
 	// 期望：order 降序 5..1（最大的在上），而不是 slug 字典序
@@ -311,7 +312,7 @@ func TestGetDocs_IncludeContent(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.Doc `json:"data"`
+		Data []domain.DocDetail `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
@@ -467,37 +468,33 @@ func TestGetDocs_SeriesGroup_Order(t *testing.T) {
 	// b：order=1 —— 应排第 1
 	// c：无 order、日期早于 d —— 应排第 3
 	// d：无 order、日期晚于 c —— 应排第 4
-	a := &domain.Doc{
-		Slug:   "a",
+	a := docOf(domain.Frontmatter{
 		Title:  "A",
 		Date:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		Series: stringPtr("order-series"),
 		Order:  intPtr(2),
-	}
-	b := &domain.Doc{
-		Slug:   "b",
+	}, "a", "")
+	b := docOf(domain.Frontmatter{
 		Title:  "B",
 		Date:   time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
 		Series: stringPtr("order-series"),
 		Order:  intPtr(1),
-	}
-	c := &domain.Doc{
-		Slug:   "c",
+	}, "b", "")
+	c := docOf(domain.Frontmatter{
 		Title:  "C",
 		Date:   time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC),
 		Series: stringPtr("order-series"),
-	}
-	d := &domain.Doc{
-		Slug:   "d",
+	}, "c", "")
+	d := docOf(domain.Frontmatter{
 		Title:  "D",
 		Date:   time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
 		Series: stringPtr("order-series"),
-	}
+	}, "d", "")
 
 	store := map[string]*domain.Doc{
 		"a": a, "b": b, "c": c, "d": d,
 	}
-	h := NewDocsHandler(store, nil)
+	h := newTestHandler(store, nil)
 	r.GET("/api/docs", h.GetDocs)
 
 	w := performRequest(r, "GET", "/api/docs?group=series")
@@ -534,7 +531,7 @@ func TestGetDocBySlug_Existing(t *testing.T) {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var doc domain.Doc
+	var doc domain.DocDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
@@ -566,7 +563,7 @@ func TestGetDocBySlug_LangEnglish(t *testing.T) {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var doc domain.Doc
+	var doc domain.DocDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
@@ -594,7 +591,7 @@ func TestGetDocBySlug_LangEnglishFallbackToChinese(t *testing.T) {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var doc domain.Doc
+	var doc domain.DocDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
@@ -622,7 +619,7 @@ func TestGetDocBySlug_DefaultLangHasTranslationFlag(t *testing.T) {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var doc domain.Doc
+	var doc domain.DocDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
@@ -650,7 +647,7 @@ func TestGetDocBySlug_EnglishOnlyFallback(t *testing.T) {
 		t.Fatalf("Status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var doc domain.Doc
+	var doc domain.DocDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
@@ -715,7 +712,7 @@ func TestGetDocsList_IncludeContentLangEnglish(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []domain.Doc `json:"data"`
+		Data []domain.DocDetail `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)

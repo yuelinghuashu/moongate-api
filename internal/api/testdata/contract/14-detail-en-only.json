@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "body": {
+    "title": "VS Code Theme: From Handwritten JSON to Publishing",
+    "description": "<text>",
+    "date": "2026-08-06T00:00:00Z",
+    "slug": "create-vscode-theme-basics",
+    "series": "design-system",
+    "order": 1,
+    "tags": [
+      "VSCode",
+      "Theme",
+      "Engineering"
+    ],
+    "content": "<text>",
+    "lang": "en",
+    "isFallback": false,
+    "hasTranslation": true
+  }
+}

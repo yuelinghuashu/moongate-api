@@ -26,7 +26,7 @@ tags:
 
 ### 前置要求
 
-- 已有一个 Nuxt 4 项目（`npm create nuxt@latest <project-name>`）
+- 已有一个 Nuxt 4 项目（`npm create nuxt@latest &lt;project-name&gt;`）
 - 本地已安装 PostgreSQL（或使用云数据库）
 - 了解 TypeScript 基础
 

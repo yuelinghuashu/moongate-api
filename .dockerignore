@@ -3,3 +3,8 @@
 .gitignore
 Dockerfile
 .dockerignore
+
+# 测试资产：契约快照（internal/api/testdata）不需要进构建上下文。
+# 运行镜像本身只 COPY 二进制与 content/（见 Dockerfile），这里额外排除是为了
+# 保持构建上下文最小，并避免以后有人把源码整目录拷进镜像时误带上测试数据。
+**/testdata
