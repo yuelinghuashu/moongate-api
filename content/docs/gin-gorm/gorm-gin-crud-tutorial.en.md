@@ -286,6 +286,8 @@ Response example (note the key casing):
 
 The code above validates nothing — `{"price":5990}` (no `title` / `author`) inserts fine. Put the validation tags on the **request struct**, not on `models.Book`:
 
+**Step one: declare the request struct (DTO).** Keep it in `handlers/book.go`, just above `CreateBook` (lowercase is fine within the package; export it as `CreateBookInput` only if another package will ever reference it):
+
 ```go
 // createBookInput: request-only DTO for creating a book; validation tags belong to it
 type createBookInput struct {
@@ -297,11 +299,50 @@ type createBookInput struct {
 
 **Why not put `binding:"required"` on `models.Book`?** The same model is reused by Part 7's update endpoint — updates are partial (only `{"price":6990}`), and `required` would turn them into 400s. So: **the model owns the schema and JSON naming; validation is an interface contract and belongs to the request struct (DTO)**. It lands for real in the [DTO article](./gorm-gin-dto-batch).
 
-With the binding target switched to this struct, requests with missing fields take the existing 400 branch:
+**Step two: make `CreateBook` actually bind it.** Declaring the DTO changes nothing on its own — if the binding target stays `models.Book`, requests missing `title` still insert fine. Replace the `CreateBook` from the top of Part 5 with this version:
+
+```go
+// CreateBook creates a book (POST /books): bind the DTO to validate, then translate into the model
+func CreateBook(c *gin.Context) {
+    // 1. Bind into the DTO — this is where the binding tags take effect, and missing fields 400 right here
+    var input createBookInput
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON (title and author are required, price must be >= 0)"})
+        return
+    }
+
+    // 2. DTO → model: copy only the fields a client is allowed to decide.
+    //    Fields like ID / CreatedAt / DeletedAt simply don't exist on the DTO, so they can't be smuggled in.
+    book := models.Book{
+        Title:  input.Title,
+        Author: input.Author,
+        Price:  input.Price,
+    }
+
+    // 3. Insert (note we pass book to Create, not input)
+    result := db.DB.WithContext(c.Request.Context()).Create(&book)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
+        return
+    }
+
+    // 4. Return the persisted model — same response shape as the top of Part 5, with ID/CreatedAt filled by GORM
+    c.JSON(http.StatusCreated, book)
+}
+```
+
+> **Why not just `Create(&input)`?** Because `input` is the DTO and `book` is the model: the model embeds `gorm.Model` (primary key, timestamps, soft delete) and will later grow columns the client has no say over, like `cover_path`. That DTO-to-model translation is a deliberate safety check — only fields you explicitly list inside `models.Book{...}` get persisted, while extra keys the client sends (say `"deletedAt"`) are dropped during binding. This is the "what you accept and what you store are two different things" rule the rest of the series keeps coming back to.
+
+Only now does a request with missing fields take the 400 branch:
 
 ```bash
-# Missing a required field → 400
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books -d '{"price":5990}'
+# Missing a required field → 400 (the original code returned 201 here)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books \
+  -H "Content-Type: application/json" -d '{"price":5990}'
+
+# Full payload → 201, same response as the example at the top of Part 5
+curl -s -X POST http://localhost:8080/books \
+  -H "Content-Type: application/json" -d '{"title":"Go in Action","author":"Zhang San","price":5990}'
 ```
 
 ### Going further: why you must carry the context

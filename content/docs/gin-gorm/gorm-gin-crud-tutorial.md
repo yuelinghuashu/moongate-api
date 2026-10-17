@@ -286,6 +286,8 @@ curl -X POST http://localhost:8080/books \
 
 上面的代码不校验请求内容，`{"price":5990}`（没有 `title` / `author`）也能插入成功。校验标签加在**收请求的结构**上，而不是 `models.Book` 上：
 
+**第一步：定义请求结构（DTO）。** 放在 `handlers/book.go` 里、`CreateBook` 上方即可（小写开头够用；若以后要跨包引用，改成导出的 `CreateBookInput`）：
+
 ```go
 // createBookInput：创建图书专用的请求结构（DTO），校验标签只属于它
 type createBookInput struct {
@@ -297,11 +299,50 @@ type createBookInput struct {
 
 **为什么不在 `models.Book` 上加 `binding:"required"`？** 同一个模型还被第七章的更新接口复用——更新是部分更新（只传 `{"price":6990}`），模型上有 `required` 会让它被 400 拦下。所以：**模型管数据库结构与 JSON 命名，校验是接口契约、属于请求结构（DTO）**；正式落地见[《数据工程实战》](./gorm-gin-dto-batch)。
 
-绑定目标换成这个结构后，缺字段的请求会自动走现有的 400 分支：
+**第二步：让 `CreateBook` 真的绑这个结构。** 只定义 DTO 不换绑定目标，代码一个字都不会变（缺字段照样插库成功）——把第五章开头那版 `CreateBook` 整体替换成下面这版：
+
+```go
+// CreateBook 创建图书（POST /books）——先绑 DTO 校验，再翻译成模型入库
+func CreateBook(c *gin.Context) {
+    // 1. 绑定到 DTO：binding 标签在这一层生效，缺字段当场 400
+    var input createBookInput
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON（title、author 必填，price 不能为负）"})
+        return
+    }
+
+    // 2. DTO → 模型：只搬「客户端可以决定」的字段
+    //    DeletedAt / ID / CreatedAt 这些不许客户端碰的字段，DTO 里根本没有，自然搬不过来
+    book := models.Book{
+        Title:  input.Title,
+        Author: input.Author,
+        Price:  input.Price,
+    }
+
+    // 3. 插入数据库（注意传给 Create 的是 book，不是 input）
+    result := db.DB.WithContext(c.Request.Context()).Create(&book)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+        return
+    }
+
+    // 4. 返回落库后的模型（响应形状和第五章开头完全一致，多出来的 ID/CreatedAt 由 GORM 填）
+    c.JSON(http.StatusCreated, book)
+}
+```
+
+> **为什么不直接 `Create(&input)`？** 因为 `input` 是 DTO、`book` 是模型：模型嵌了 `gorm.Model`（主键、时间戳、软删），将来还会加 `cover_path` 这类不归客户端管的列。DTO 到模型的这一段「翻译」是刻意的安全检查——只有你显式写进 `models.Book{...}` 的字段才会落库，客户端多传的键（比如 `"deletedAt"`）在绑定时就丢了。这就是后文反复提到的「收什么和存什么是两件事」。
+
+改完之后，缺字段的请求才真的会走 400 分支：
 
 ```bash
-# 缺少必填字段 → 400
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books -d '{"price":5990}'
+# 缺少必填字段 → 400（原代码这里是 201）
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books \
+  -H "Content-Type: application/json" -d '{"price":5990}'
+
+# 完整字段 → 201，响应与第五章开头的示例一致
+curl -s -X POST http://localhost:8080/books \
+  -H "Content-Type: application/json" -d '{"title":"Go语言实战","author":"张三","price":5990}'
 ```
 
 ### 为什么必须带 Context
