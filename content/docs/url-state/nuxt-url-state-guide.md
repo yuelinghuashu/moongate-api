@@ -275,7 +275,7 @@ const props = defineProps(["isDesktop"])
 </script>
 ```
 
-这样可以保证服务端和客户端对 `isDesktop` 的判断一致，避免水合失败。
+这样可以保证服务端和客户端对 `isDesktop` 的判断一致，避免水合失败。`TagFilter` 的完整组件（含移动端多选开关）见第 2 篇 §6.2。
 
 ---
 
@@ -295,6 +295,8 @@ useEventListener("keydown", (e) => {
 })
 ```
 
+带 ESC 失焦、输入框聚焦判断的完整版见第 2 篇 §九。
+
 ### 6.2 移动端无限滚动
 
 ```ts
@@ -305,84 +307,29 @@ useSwipe({
 })
 ```
 
-这些交互只需修改 `page`、`tags` 等 ref，URL 和数据会自动同步，无需额外代码。
+`useSwipe` 的实现见第 2 篇 §7.1（基于 `useEventListener` 判断上滑/下滑）。这些交互只需修改 `page`、`tags` 等 ref，URL 和数据会自动同步，无需额外代码。
 
 ---
 
 ## 七、方案对比与选型建议
 
-| 方案            | 代码量 | 可维护性 | SSR 安全 | 适用场景                   |
-| --------------- | ------ | -------- | -------- | -------------------------- |
-| 手写 watch      | 中等   | 高       | ✅ 安全  | 单页面，追求绝对控制       |
-| Pinia 封装      | 较多   | 最高     | ✅ 安全  | 多页面复用，工程化项目     |
-| `useRouteQuery` | 最少   | 一般     | ⚠️需验证 | **简单场景，但建议先测试** |
+| 方案                 | 代码量 | 可维护性 | SSR 安全       | 适用场景                  |
+| -------------------- | ------ | -------- | -------------- | ------------------------- |
+| 手写 watch           | 中等   | 高       | ✅ 安全        | 单页面，追求绝对控制      |
+| Pinia 封装           | 较多   | 最高     | ✅ 安全        | 多页面复用，工程化项目    |
+| 官方 `useRouteQuery` | 最少   | 一般     | ⚠️ 有 SSR 隐患 | 不建议直接用（见第 3 篇） |
 
-### Pinia 封装示例（可折叠）
+> 上表是"选型视角"；第 3 篇把手写方案提炼成了 `useRouteQueryString/Number/Array`，那才是本系列推荐落地的形态（实现与对比见[《手写一个更适合 Nuxt 的 useRouteQuery》](./nuxt-use-route-query-composables)）。
 
-<details>
-<summary>点击展开 Pinia 方案代码</summary>
+### Pinia 封装示例
 
-```ts
-// stores/urlQuery.ts
-import { defineStore } from "pinia"
+Pinia 版和 §2.2 是**同一套逻辑换容器**，代码不再重复贴：
 
-export const useUrlQueryStore = defineStore("urlQuery", () => {
-  const route = useRoute()
-  const router = useRouter()
+- store 里定义 7 个 ref，初始化方式同 §2.2 第 1 段；
+- `parseTags`、`watch(route.query)`、`pushQuery`、`watch([...refs], pushQuery)` 原样搬进 store；
+- 组件里用 `storeToRefs(useUrlQueryStore())` 取 ref，双向同步由 store 内部完成。
 
-  const search = ref(route.query.search?.toString() || "")
-  const option = ref(Number(route.query.option) || 1)
-  const page = ref(Number(route.query.page) || 1)
-  const size = ref(Number(route.query.size) || 10)
-  const level = ref(route.query.level?.toString() || "")
-  const viewMode = ref(Number(route.query.viewMode) || 1)
-  const tags = ref<string[]>([])
-
-  const parseTags = () => {
-    const tagParam = route.query.tag
-    tags.value = tagParam
-      ? Array.isArray(tagParam)
-        ? tagParam
-        : tagParam.split(",")
-      : []
-  }
-  parseTags()
-
-  watch(
-    () => route.query,
-    (q) => {
-      search.value = q.search?.toString() || ""
-      option.value = Number(q.option) || 1
-      page.value = Number(q.page) || 1
-      size.value = Number(q.size) || 10
-      level.value = q.level?.toString() || ""
-      viewMode.value = Number(q.viewMode) || 1
-      parseTags()
-    },
-  )
-
-  const pushQuery = () => {
-    const query: Record<string, string> = {}
-    if (search.value) query.search = search.value
-    if (option.value !== 1) query.option = String(option.value)
-    if (page.value !== 1) query.page = String(page.value)
-    if (size.value !== 10) query.size = String(size.value)
-    if (level.value) query.level = level.value
-    if (viewMode.value !== 1) query.viewMode = String(viewMode.value)
-    if (tags.value.length) query.tag = tags.value.join(",")
-
-    if (JSON.stringify(route.query) !== JSON.stringify(query)) {
-      router.push({ query })
-    }
-  }
-
-  watch([search, option, page, size, level, viewMode, tags], () => pushQuery())
-
-  return { search, option, page, size, level, viewMode, tags }
-})
-```
-
-</details>
+好处是多页面共享同一份状态；代价是 store 是全局单例，SSR 下要确保按请求隔离（Nuxt 的 store 默认按请求创建，别把状态提到模块顶层）。
 
 ---
 

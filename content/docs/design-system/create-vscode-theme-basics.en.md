@@ -1,5 +1,5 @@
 ---
-title: 'VS Code Theme: From Handwritten JSON to Publishing'
+title: "VS Code Theme: From Handwritten JSON to Publishing"
 description: Learn how to create, configure, and publish your own VS Code theme from scratch, without any scaffolding.
 date: 2026-08-06 00:00:00
 series: design-system
@@ -362,5 +362,6 @@ These problems are not your fault. They are the **limits of handwritten JSON as 
 > **📎 Implementation Reference**
 >
 > This series is built upon the Moongate Theme project. You can explore the complete source code and install it directly:
+>
 > - **Code**: [github.com/yuelinghuashu/moongate-theme](https://github.com/yuelinghuashu/moongate-theme)
 > - **Install**: [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yuelinghuashu.moongate-theme)

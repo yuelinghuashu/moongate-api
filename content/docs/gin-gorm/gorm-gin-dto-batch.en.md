@@ -1,6 +1,6 @@
 ---
 title: "GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation"
-description: "Part 4: batch-import from a data file (CreateInBatches), separates request DTOs from models with parameterized validation rules, and translates validator errors into clear client messages. Ends with the series overview, the full route table, and what comes next."
+description: "Part 4: batch-import from a data file (CreateInBatches), separates request DTOs from models with parameterized validation rules, and translates validator errors into clear client messages. Ends with a route quick reference and what comes next."
 date: 2026-09-04
 series: gin-gorm
 order: 4
@@ -8,12 +8,6 @@ tags:
   - Go
   - PostgreSQL
   - ORM
----
-
-> **Prerequisites:** finish the [crash course](./gorm-gin-crud-tutorial), the [relations part](./gorm-gin-relations), and the [media & query part](./gorm-gin-media-query) — the project with `books` + `comments` + cover images + pagination/search. Code conventions are the same as the crash course (`WithContext` / `errors.Is` for 404 / the 400 · 404 · 201 semantics).
-
-This is Part 4 of the series. The first three parts completed the "API features": CRUD, relations, uploads and pagination; this part turns to **engineering method**: where the data comes from (batch import), where the API boundary closes (request DTOs), and how a failed validation becomes something a client can understand (error translation).
-
 ---
 
 ## 1. Batch Import: From Data File to Database
@@ -88,6 +82,8 @@ func SeedBooksFromFile(c *gin.Context) {
 r.POST("/books/bulk", handlers.SeedBooksFromFile)
 ```
 
+> After the layering refactor this handler is called `Seed` (file reading moved into the Service) — see [Engineering (Part 1)](./gorm-gin-engineering-layering).
+
 **Testing:**
 
 ```bash
@@ -129,7 +125,7 @@ book := models.Book{Title: input.Title, Author: input.Author, Price: *input.Pric
 - `binding:"required,gte=0,lte=1000000"`: price is required and `0 <= price <= 1000000` (i.e. 0–10000 yuan, in cents) — out of range is a straight 400. **Why is `Price` a `*int`?** `required` treats the int zero value `0` as "field missing" too, so `{"price":0}` would be blocked with a 400; switching to `*int`, "not sent" is `nil` (400) while "sent 0" is `&0` (passes) — exactly the pointer semantics the crash course explained: **`nil` means "this field never appeared"**;
 - The DTO's second benefit: a negative `price` or an `"abc"` never gets into the model — **the API boundary closes at the DTO layer, not at the model layer**;
 - Why didn't the crash course do this? Because at the single-table entry level "what you accept = what you store" — learn GORM itself first. Only now, at the multi-table + validation stage, does the explicit separation become necessary (this is the series' recurring "teaching gradient": each hard topic is spread across parts, one rung per part — the earlier text wasn't wrong, the gap was deliberate);
-- **Behavior-change note:** the crash course's advanced version, `Price int` + `binding:"gte=0"`, let a missing price pass through (created as 0); this part tightens it to `*int` + `required` — old requests that omit `price` (only `title` / `author`) got 201 in the crash course and now get 400. The same endpoint, different semantics per stage: the tutorial deliberately turns "missing means success" into "explicitly required" — not a typo.
+- **Behavior-change note:** the crash course's advanced version used `Price int` (a missing price was created as 0, 201); this part tightens it to `*int` + `required`, so old requests that omit `price` now get 400. A deliberate tightening, not a typo.
 
 **Testing:**
 
@@ -224,17 +220,9 @@ curl -X POST http://localhost:8080/books \
 
 ---
 
-## 3. Series Overview
+## 3. Route Quick Reference
 
-| Part        | File                         | Topic                                | New routes                                                        |
-| ----------- | ---------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
-| 1           | `gorm-gin-crud-tutorial.md`  | single-table CRUD, soft delete, the zero-value trap | the five `/books` routes + `/books/:id/permanent` (optional)     |
-| 2           | `gorm-gin-relations.md`      | relations: comments + Preload        | `/books/:id/comments`, `/books/:id/comments/:cid`                |
-| 3           | `gorm-gin-media-query.md`    | uploads / pagination / search / aggregation | `/books/:id/cover`, `/uploads/*` static                    |
-| 4 (this part) | `gorm-gin-dto-batch.md`    | batch import / DTO / validation translation | `/books/bulk`                                             |
-| 5           | `gorm-gin-tags.md`           | many-to-many: tags + join table      | `/books/:id/tags`, `/tags/:name/books`                           |
-
-Complete route list (in registration order):
+Every route registered across the series, in registration order (the last column is the part that introduced it):
 
 | Method | Path                       | Handler                                | Part            |
 | ------ | -------------------------- | -------------------------------------- | --------------- |
@@ -256,10 +244,4 @@ Complete route list (in registration order):
 
 ## 4. Engineering Checklist: Landed in the Engineering Parts
 
-The items below were foreshadowed at various points earlier in the series, and have now landed respectively in [GORM Engineering in Practice (Part 1): Layering, Dependency Injection & Testability](./gorm-gin-engineering-layering) and [GORM Engineering in Practice (Part 2): Reliability & Production Readiness](./gorm-gin-engineering-reliability):
-
-- **Layering & testing:** a `BookRepository` interface + a Service layer + `httptest` table-driven tests (Engineering Part 1, Sections 1 & 2);
-- **Productivity wrapper:** the generic `GetPaginated[T]` centralizes pagination and error aggregation (Engineering Part 1, Section 3);
-- **Stronger file validation:** header sniffing with `http.DetectContentType` guards against forged file extensions (Engineering Part 2, Section 2);
-- **Sort whitelist:** external sort fields are whitelisted to shut down ORDER injection (Engineering Part 2, Section 2);
-- **Object storage:** an `Uploader` interface abstraction, switchable between Disk / S3, with the key stored in the database (Engineering Part 2, Section 3).
+Everything foreshadowed earlier in the series landed in [Engineering (Part 1)](./gorm-gin-engineering-layering) (layering, injection, tests, generic pagination) and [Engineering (Part 2)](./gorm-gin-engineering-reliability) (error middleware, sort whitelist, file-header sniffing, object storage, connection pool). The item-by-item reconciliation table is in [Engineering (Part 2) §4.2](./gorm-gin-engineering-reliability).

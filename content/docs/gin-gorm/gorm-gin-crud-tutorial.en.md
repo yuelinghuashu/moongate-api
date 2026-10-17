@@ -1,6 +1,6 @@
 ---
 title: "GORM Crash Course: Building a Book Management API with Gin + GORM"
-description: "Build a complete book-management API from scratch — GORM CRUD, soft delete, the zero-value trap, request contexts, and error handling — with the full project code and test commands."
+description: "Build a complete book-management API from scratch: environment, models, and the CRUD mainline in one pass — with soft delete, the zero-value trap, and error checks explained along the way."
 date: 2026-09-01
 series: gin-gorm
 order: 1
@@ -10,24 +10,17 @@ tags:
   - ORM
 ---
 
-## Who This Is For
+## Before You Start
 
-- You already know Go basics
-- You want to learn GORM but don't know where to start
-- You want a complete, runnable project to follow along
-- Experience in another web stack (Java/Python/Node) helps — this post compares common framework conventions as we go
+For readers who know basic Go syntax and want to get a GORM project running from scratch. Three things to confirm first:
 
-## Environment Setup
+- **Go 1.22+** (this tutorial uses `errors.Is`; 1.24+ recommended)
+- **A local PostgreSQL** (or Docker: `docker run --name pg -e POSTGRES_PASSWORD=123456 -p 5432:5432 -d postgres:16`)
+- **Create the database by hand**: `CREATE DATABASE library;` — `AutoMigrate` can create tables, not databases
 
-Three things to check before you start:
+MySQL / SQLite work too: the code is portable, only the driver and DSN change (see Part 1). Note that **from Part 2 on the series uses PostgreSQL-specific features** (`ILIKE`, functional dependency when grouping by primary key, partial unique indexes); differences are flagged where they appear.
 
-- **Go 1.22+** (this post uses `errors.Is`; generics appear only in the series' engineering articles — anything 1.21+ works, 1.24+ recommended);
-- **A local PostgreSQL** (no install? use Docker: `docker run --name pg -e POSTGRES_PASSWORD=123456 -p 5432:5432 -d postgres:16`);
-- **Create the database manually**: `CREATE DATABASE library;` — GORM's `AutoMigrate` only creates tables, never databases (see the note in Part 2).
-
-MySQL / SQLite work too — see the driver table at the end of Part 1.
-
-## Project Layout
+The project layout starts flat and evolves later (see Part 6):
 
 ```text
 gin-demo/
@@ -41,60 +34,34 @@ gin-demo/
 └── go.mod
 ```
 
-> **Learning-grade structure:** a flat `db` / `models` / `handlers` layout is fine for small projects and for learning. As the business grows, evolve it by responsibility — use a Go `internal/` package to constrain visibility, extract a Service layer for business logic, and a Repository layer for data access. This post stays flat to keep the focus on GORM: get it running first, talk about layering later. When you want to unit-test handlers with a mocked database, collect data access behind an interface (e.g. `BookRepository`) and inject it (see Part 10, "Next Steps").
+> **Why flat?** Three packages (`db` / `models` / `handlers`) are enough to get running and easy to map chapter by chapter. Growing into `internal/` + a Service / Repository split is [Engineering (Part 1)](./gorm-gin-engineering-layering)'s job.
 
-## Build a Mental Model First: The Core Ideas of GORM
+## Build a Mental Model First
 
-Before writing any code, take thirty seconds to build the right **mental model** — understanding the way of thinking below matters more than copying code, because this is exactly where Gin + GORM differs most from other languages and frameworks (Java/Spring, Python/Django, Node/Express, and especially hand-written-SQL stacks like JDBC/MyBatis).
+GORM's odd one out isn't Spring/Django — it's the **hand-written SQL** camp (JDBC/MyBatis): there you assemble SQL and map result rows into objects by hand, and GORM is the opposite.
 
-### The One-Sentence Overview
-
-> Gin turns an **HTTP request** into a **Go function call**; GORM translates **Go structs** into **database SQL**. The entire post runs on one storyline: **request comes in → loaded into a struct → handed to GORM → results filled back into the struct → returned as JSON**.
+> **One sentence:** Gin turns an HTTP request into a Go function call; GORM translates a Go struct into database SQL. The whole article follows one line: **request in → fill the struct → hand it to GORM → fill the result back → return JSON**.
 
 ### You're Not Writing SQL — You're Operating on Structs
 
-With Java's JDBC/MyBatis or hand-written PHP PDO, you assemble SQL strings yourself and manually map result rows into objects. GORM flips that: you only describe your **intent** (`Create`, `Find`, `Updates`, `Delete`), and translating it to SQL is the framework's job:
-
-| GORM method (excerpt)            | Equivalent SQL                                          |
-| -------------------------------- | ------------------------------------------------------- |
-| `db.Create(&book)`               | `INSERT INTO books ...`                                 |
-| `db.Model(&book).Updates(input)` | `UPDATE books SET ...`                                  |
-| `db.Delete(&models.Book{}, id)`  | `UPDATE books SET deleted_at = NOW() ...` (soft delete) |
-
-Want to see the SQL GORM actually generates? Turn on GORM logging (see Part 10). Write with **intent**, don't try to hand-translate every query in your head; the complete method ↔ SQL map is in the Part 10 summary.
+You describe **intent** (`Create`, `Find`, `Updates`, `Delete`); translating it into SQL is the framework's job. Want to see what it generated? Turn on GORM logging.
 
 ### Four Mental Models You Must Build
 
-1. **A struct plays three roles at once.** The same struct is the database table definition (`gorm` tags), the request/response data carrier (`json` tags), and the argument to database operations (`&book`). The type is the contract — change it in one place and everything follows. This is nothing like Java's Entity/DTO split plus a separate XML mapping layer.
-2. **Querying is "filling in the blank", not "returning a value".** Go passes by value, so `Find(&books)` and `First(&book, id)` must receive a **pointer** to the destination variable — GORM fills it via reflection. Forget the `&` and you've filled a copy that no one outside the call can see. This is the most counter-intuitive spot for newcomers, because Java/Python object references are inherently shared.
-3. **Zero value means "not provided".** Go gives every variable a zero value (`0`, `""`, `false`). GORM's `Updates(struct)` uses exactly that to decide "should this field be updated" — which is why updating a field to `0` or `""` is silently skipped (no error, no update). The "zero-value trap" in Part 7 is rooted right here. Java's `null` and Python's `None` have no such "zero value participates in business logic" semantics — that's what makes GORM's behavior most surprising to newcomers.
-4. **Errors are part of the result.** Go has no exceptions. GORM packages the outcome of every operation into a `result`, and you check `result.Error` and `result.RowsAffected` yourself. You'll see this pattern over and over in this post — it's what replaces `try/catch` in other languages.
-
-### A Note: Why All the `&` and `*`?
-
-This trips newcomers up most — GORM and Gin code is full of `&` and `*`, and nobody explains why. Each has one job:
-
-- **`&x` (taking an address) = "this variable is yours to fill; bring the changes back"**. Go passes by value, so what goes down is a copy. GORM's `First(&book, id)`, `Find(&books)` and Gin's `c.ShouldBindJSON(&book)` need to **fill** data in; `Delete(&models.Book{}, id)` and `AutoMigrate(&models.Book{})` need the **object itself** — without `&`, nothing comes back out of the call (this is mental model #2 "filling in, not returning" generalised: it applies to binding, deletion, and migration, not just queries).
-- **`*gorm.DB` / `*gin.Context` (pointer type declarations) = "reference the one instance, don't copy it"**. These types are declared as pointers: `db.DB` is the database connection handle, `*gin.Context` is the request context — there is exactly one of each, and passing around the **address** avoids copies while guaranteeing you operate on the same instance.
-- **`*string` / `*int` (pointer fields in DTOs) = "may not have been sent"**. `nil` means "this field never appeared", distinct from empty string / zero — Part 7 itself uses a struct and a map; the full pointer-DTO rollout is in the series' DTO article and in the Next Steps section.
-
-One sentence: **`&` means "fill in here", `*` means "this is a reference / may be absent"** — not GORM magic, just Go's value-vs-reference semantics, the same in every framework.
+1. **A struct plays three roles at once.** The same struct is the table definition (`gorm` tags), the request/response carrier (`json` tags), and the argument to database operations (`&book`). The type is the contract — change it in one place and everything follows.
+2. **Querying is "filling in the blank", not "returning a value".** `Find(&books)` and `First(&book, id)` must receive a **pointer** to the destination; GORM fills it via reflection, and forgetting `&` fills a copy nobody can see. Same for `ShouldBindJSON(&x)`, `Delete(&models.Book{})`, `AutoMigrate(&models.Book{})` — to fill data in, or to act on the object itself, pass the address. Conversely, a **pointer type** like `*gorm.DB` / `*gin.Context` means "one shared instance, no copy", while `*string` / `*int` means "may not be sent" (`nil`).
+3. **Zero value means "not provided".** `Updates(struct)` decides what to update by zero values (`0`, `""`, `false`), so setting a field to `0` is **silently skipped**. Part 7's zero-value trap is rooted here.
+4. **Errors are part of the result.** There are no exceptions: every operation returns a `result`, and you check `result.Error` and `result.RowsAffected` yourself.
 
 ### Soft Delete: Another Example of GORM Rewriting SQL
 
-`Delete` in Part 8 doesn't really delete data — GORM rewrites it into a "soft delete", and deleted records stop showing up in queries. The detailed mechanics are left for Part 8. For now, remember: **don't assume `Delete` always generates a `DELETE` statement** (the "(soft delete)" hint in the table above is the foreshadowing).
+Part 8's `Delete` never removes the row — GORM rewrites it into a soft delete, and deleted rows stop appearing in queries. The mechanics wait until Part 8; just remember: **never assume `Delete` emits a `DELETE` statement**.
 
-### How the Chapters Fit Together
-
-- Parts 2–4 (connection, model, migration) — the "struct ↔ table" foundation;
-- Parts 5–8 (CRUD) — putting the four mental models into practice;
-- Parts 9–10 (routing, summary) — wiring it all together and looking back.
-
-Now go into Part 1 with this mindset, and verify as you type.
+This article stops at single-table CRUD. Comments and pagination, cover uploads, request DTOs, tag associations, layering, and reliability unfold in the following parts.
 
 ## Part 1: Project Setup
 
-### Goal: Create the project directory and install dependencies
+Create the directory and initialize the module:
 
 ```bash
 mkdir gin-demo
@@ -102,24 +69,19 @@ cd gin-demo
 go mod init gin-demo
 ```
 
-### Installing dependencies
+Install the dependencies:
 
 ```bash
-# Web framework
 go get github.com/gin-gonic/gin
-
-# ORM + PostgreSQL driver
 go get gorm.io/gorm
 go get gorm.io/driver/postgres
 ```
 
-> `go get` resolves the latest compatible version for your environment (same as `@latest`). This post avoids `go get -u` — the `-u` flag also upgrades every indirect dependency, which adds needless churn.
+> `go get` resolves the latest compatible version. The tutorial avoids `go get -u` — `-u` upgrades every indirect dependency too, adding uncertainty for no reason.
 
-### Database driver options
+Switching databases means switching the driver and DSN:
 
-This post uses PostgreSQL as the example database. Using something else? Swap in the matching driver:
-
-| Database   | Install command                  | DSN format                                                                    |
+| Database   | Driver                           | DSN                                                                           |
 | ---------- | -------------------------------- | ----------------------------------------------------------------------------- |
 | PostgreSQL | `go get gorm.io/driver/postgres` | `host=localhost user=postgres password=123456 dbname=library sslmode=disable` |
 | MySQL      | `go get gorm.io/driver/mysql`    | `user:pass@tcp(localhost:3306)/library?charset=utf8mb4&parseTime=True`        |
@@ -127,15 +89,9 @@ This post uses PostgreSQL as the example database. Using something else? Swap in
 
 ## Part 2: Connecting to the Database
 
-### Goal: Establish the database connection and initialize it at startup
+At startup call `db.InitDB()`: build the DSN, open the connection with `gorm.Open`, and hand back a `*gorm.DB` other packages can use; exit on failure.
 
-### Connection flow
-
-1. `main.go` calls `db.InitDB()` at startup
-2. `db.InitDB()` builds the DSN string and connects via `gorm.Open()`
-3. On success it returns a `*gorm.DB` instance; on failure the program exits
-
----
+A DSN is one line of `key=value` pairs: `host` / `port` / `user` / `password` / `dbname`, plus `sslmode=disable` for local development (enable SSL in production).
 
 Create `db/db.go`:
 
@@ -171,38 +127,13 @@ func InitDB() {
 }
 ```
 
-> ⚠️ In production, manage sensitive config with environment variables (`os.Getenv` or `godotenv`) — don't hardcode it.
+> ⚠️ In production, manage sensitive config with environment variables — don't hardcode it. The companion repo accepts `DATABASE_DSN` to override the whole DSN, which is how its verification runs point at a scratch database.
 
-### Code walkthrough
-
-| Code                                            | What it does                                               |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| `var DB *gorm.DB`                               | Declares the global DB handle for other packages           |
-| `gorm.Open(postgres.Open(dsn), &gorm.Config{})` | Opens the database connection                              |
-| `log.Fatal`                                     | Terminates the program on failure, so no further code runs |
-
-### DSN parameters
-
-| Parameter  | Example     | Meaning                   |
-| ---------- | ----------- | ------------------------- |
-| `host`     | `localhost` | Database host             |
-| `port`     | `5432`      | PostgreSQL default port   |
-| `user`     | `postgres`  | Database user             |
-| `password` | `123456`    | Database password         |
-| `dbname`   | `library`   | Database name             |
-| `sslmode`  | `disable`   | Disable SSL for local dev |
-
-> **Notes:**
->
-> - PostgreSQL requires **creating the database manually**: `CREATE DATABASE library;`
-> - GORM's `AutoMigrate` can create tables, but it **cannot create the database itself**
-> - `sslmode=disable` is for local development only — enable SSL in production
+> **Note:** PostgreSQL needs a **manually created database**; `AutoMigrate` creates tables but not databases; `sslmode=disable` is for local development only.
 
 ## Part 3: Defining the Data Model
 
-### Goal: Define the table structure with a Go struct
-
-Create `models/book.go`:
+Create `models/book.go` and describe the table with one struct:
 
 ```go
 package models
@@ -211,127 +142,80 @@ import "gorm.io/gorm"
 
 type Book struct {
     gorm.Model
-    Title  string  `json:"title" gorm:"not null"`
-    Author string  `json:"author" gorm:"not null"`
-    Price  int     `json:"price"` // cents — 5990 means 59.90
+    Title  string `json:"title" gorm:"not null"`
+    Author string `json:"author" gorm:"not null"`
+    Price  int    `json:"price" gorm:"not null;check:price >= 0"` // cents — 5990 means 59.90
 }
 ```
 
-### Field notes
-
 - `gorm.Model` embeds `ID`, `CreatedAt`, `UpdatedAt`, and `DeletedAt`
 - `gorm:"not null"` maps to the database's `NOT NULL` constraint
+- `gorm:"check:price >= 0"` adds a database-level CHECK — negative values are rejected outright (validation can't live only in the DTO)
 - `json:"title"` names the field in JSON serialization — the response body uses it too
 
-> **Three things newcomers most often miss:**
->
-> - **`gorm.Model` fields appear in JSON under their raw Go names.** `gorm.Model` carries no `json` tags, so responses contain `"ID"`, `"CreatedAt"`, and `"DeletedAt": null` — capitalised field names. To hide or rename them, declare your own fields instead of embedding `gorm.Model` (add `json:"-"` or lowercase tags), or use a dedicated DTO (data transfer object) as the response shape.
-> - **Money is an `int`, in cents.** Floating point has precision loss (`0.1 + 0.2 != 0.3`), so amounts are stored as integers in cents — in the API, `price: 5990` means 59.90. The frontend divides by 100 when it needs whole units (or you provide a custom `MarshalJSON`); reach for a `decimal` library only for rates / fees that need exact decimals (see Part 10, "Next Steps").
-> - **`binding:"required"` gives you automatic validation (on the DTO, not the model).** Add the tag to a request struct's fields and Gin validates during `ShouldBindJSON` — a missing required field returns 400 directly. You'll use it in Part 5, "Going further".
+**Three things newcomers most often miss:**
 
-### Naming conventions (important)
+- **`gorm.Model` fields appear in JSON under their raw Go names.** It carries no `json` tags, so responses contain `"ID"` and `"DeletedAt": null`. To unify the naming, declare your own fields or use a DTO (see Part 10, "Next Steps").
+- **Money is an `int`, in cents.** Floating point has precision loss (`0.1 + 0.2 != 0.3`), so `price: 5990` means 59.90; the frontend divides by 100 when it needs whole units.
+- **`binding:"required"` goes on the DTO, not the model.** The model is reused by the update endpoint, and `required` would turn partial updates into 400s (you'll use this once in Part 5).
 
-- **Struct type names are singular:** `Book`, not `Books`. That's the Go convention (think `http.Server`, `time.Time`), and it reads better — one struct instance is one record. Writing `Books` won't change the table name; it will just clash with singular function names like `CreateBook` and `GetBook`.
-- **GORM pluralizes the table name for you:** type `Book` maps to table `books` (handled by the inflection library); even `Books` maps to `books`. A plural type name buys you nothing at the database level.
-- **File names can be plural, type names must be singular:** both `book.go` and `books.go` are fine (plural file names are common when a file groups several related types); this post consistently uses `book.go`.
-- Want a custom table name? Use a `TableName()` method:
+**Naming conventions:**
 
-```go
-func (Book) TableName() string { return "my_books" }
-```
-
-**Three naming layers: Go field, DB column, and JSON each speak their own language**
-
-The same logical field has a different name in each layer — nothing conflicts, because GORM (DB columns) and `json:` tags (JSON keys) do the translating:
-
-| Layer       | Name                   | Decided by                                                                   |
-| ----------- | ---------------------- | ---------------------------------------------------------------------------- |
-| Go field    | `BookID` (PascalCase)  | Go identifier convention                                                     |
-| DB column   | `book_id` (snake_case) | GORM's `NamingStrategy`, derived automatically — usually no `column:` needed |
-| JSON output | `bookId` (camelCase)   | The `json:"bookId"` tag; serialization only                                  |
-
-Column names and JSON keys are independent: the database always sees `book_id`, the frontend always sees `bookId`. Want a different column name? Use `gorm:"column:..."`. Want a different JSON key? Use a `json:` tag — two switches, each in charge of its own layer.
-
-> **And when there is no `json:` tag?** The table above covers fields with tags. Tagless fields — like `gorm.Model`'s embedded `ID` and `CreatedAt` — are **serialized under their raw Go names**. That's why your first `curl` shows capitalised keys like `"ID"` and `"DeletedAt"` (see Part 3, "Three things newcomers most often miss").
+- Type names are singular (`Book`, the Go convention); GORM pluralizes the table name to `books` for you, so a plural type name buys nothing at the database level. File names are up to you — this tutorial uses `book.go`.
+- The same field has three names in three layers: Go field (PascalCase), database column (snake_case, converted by GORM), JSON key (camelCase, via the `json:` tag). Rename a column with `gorm:"column:..."`, rename the JSON key with `json:` — two independent switches.
+- To use a custom table name, add one line: `func (Book) TableName() string { return "my_books" }`.
 
 ## Part 4: Auto Migration
 
-### Goal: Create or update the schema automatically at startup
-
-Add this to `main.go`:
+Create the table from `main.go` (no routes yet):
 
 ```go
-package main
-
-import (
-    "log"
-    "gin-demo/db"
-    "gin-demo/models"
-    "github.com/gin-gonic/gin"
-)
-
 func main() {
-    // 1. Connect to the database
     db.InitDB()
 
-    // 2. Auto migrate (create tables)
     if err := db.DB.AutoMigrate(&models.Book{}); err != nil {
         log.Fatal("migration failed: ", err)
     }
 
-    // 3. Start the Gin server
-    r := gin.Default()
-    // ... routes
-    r.Run(":8080")
+    // ... server & routes in Part 9
 }
 ```
 
-> This `main.go` is the skeleton version — Part 9 will show the final, complete version with all routes registered.
-
-### Notes
-
-- `AutoMigrate` creates missing tables, columns, and indexes, but it will **not delete existing fields** (protecting your data)
-- When a field's `size`, `precision`, or nullability changes, GORM will **attempt to alter the existing column type**
-- Renaming a field does **not** rename the column: rename `Title` to `Name` and GORM adds a new column instead of renaming. Handle that with a manual migration or `db.Migrator().RenameColumn()`
+- **It only adds.** It never drops columns and **never removes existing constraints** — delete a `not null` tag and the column stays `NOT NULL`; change an association's `OnDelete` behaviour and the existing foreign key stays as it was. Constraint changes need an explicit migration (`db.Migrator().DropConstraint()` or hand-written SQL)
+- Changing a field's `size`, `precision`, or nullability makes GORM try to alter the column type
+- Renaming a field adds a new column; use `db.Migrator().RenameColumn()` to actually rename
 
 ## The Formula First: The Uniform CRUD Flow
 
-The five handlers in Parts 5–8 look different on the surface, but every one of them is an **instance of the same flow**. See the formula first, then the code — same as the mental model: get the map before entering the maze.
+The five handlers in Parts 5–8 are instances of one flow. The six-step skeleton:
 
-**The six-step skeleton:**
+1. **Grab parameters**: `id := c.Param("id")` or `c.Query("keyword")`
+2. **Bind the request**: `c.ShouldBindJSON(&xxx)`, failure means a straight 400
+3. **Check existence**: `db.DB.First(&xxx, id)`; no record (`errors.Is` hits `gorm.ErrRecordNotFound`) → 404
+4. **Do the operation**: `Create` / `Find` / `Updates` / `Delete` — each returns a `result`
+5. **Check the result**: a non-"not found" `result.Error` → 500; `RowsAffected == 0` → 404
+6. **Respond**: `c.JSON(200/201, ...)`
 
-1. **Read the parameter:** `id := c.Param("id")` or `c.Query("keyword")` — one of Gin's data entry points
-2. **Bind the body:** `c.ShouldBindJSON(&xxx)`, return 400 on failure
-3. **Check existence:** `db.DB.First(&xxx, id)`; if there's no record (`errors.Is` hits `gorm.ErrRecordNotFound`) → 404
-4. **Run the operation:** `Create` / `Find` / `Updates` / `Delete` — every operation returns a `result`
-5. **Check the result:** a `result.Error` that isn't "record not found" → 500; `RowsAffected == 0` → 404
-6. **Send the response:** `c.JSON(200/201, ...)`
+**Every part is an instance of the formula:**
 
-**Each chapter is one instance of the formula:**
+| Operation           | Params | Bind | Existence     | Operation | Result check                          | Status |
+| ------------------- | ------ | ---- | ------------- | --------- | ------------------------------------- | ------ |
+| `POST /books`       | –      | ✓    | –             | `Create`  | `Error` → 500                         | 201    |
+| `GET /books`        | –      | –    | –             | `Find`    | `Error` → 500                         | 200    |
+| `GET /books/:id`    | ✓      | –    | `First` → 404 | –         | `ErrRecordNotFound` → 404             | 200    |
+| `PUT /books/:id`    | ✓      | ✓    | `First` → 404 | `Updates` | `Error` → 500                         | 200    |
+| `DELETE /books/:id` | ✓      | –    | –             | `Delete`  | `Error` → 500; `RowsAffected`=0 → 404 | 200    |
 
-| Operation           | Read param | Bind body | Check exists  | Run op    | Check result                          | Status |
-| ------------------- | ---------- | --------- | ------------- | --------- | ------------------------------------- | ------ |
-| `POST /books`       | –          | ✓         | –             | `Create`  | `Error` → 500                         | 201    |
-| `GET /books`        | –          | –         | –             | `Find`    | `Error` → 500                         | 200    |
-| `GET /books/:id`    | ✓          | –         | `First` → 404 | –         | `ErrRecordNotFound` → 404             | 200    |
-| `PUT /books/:id`    | ✓          | ✓         | `First` → 404 | `Updates` | `Error` → 500                         | 200    |
-| `DELETE /books/:id` | ✓          | –         | –             | `Delete`  | `Error` → 500; `RowsAffected`=0 → 404 | 200    |
+Two things that differ most from other frameworks:
 
-**Gin + GORM specifics (where it differs most from other frameworks):**
+- **Gin has exactly one data entry point, `*gin.Context`**: path parameters, query parameters, and the request body all come from it — no controller classes, one function signature serves every request.
+- **Every GORM step returns the same `result`**: `*gorm.DB` is both the chain carrier and the holder of `Error` / `RowsAffected` — that is mental model 4 landing at the API layer.
 
-- **Gin has a single data entry point: `*gin.Context`.** Path parameters (`c.Param`), query parameters (`c.Query`), and the request body (`c.ShouldBindJSON`) all come from it — no controller classes, no dependency injection, one function signature for every request.
-- **Every GORM step returns the same `result`.** `*gorm.DB` is both the receiver for method chaining and the carrier of `Error` / `RowsAffected` — the "check the result" step is mental model #4 (errors are part of the result) in its API shape.
-- **The pointer divide:** to fill data into a variable you must pass `&` (`Create(&book)`, `First(&book, id)`); deletions don't need data filled in, so pass the type (`Delete(&models.Book{}, id)`).
-- **Status codes are a convention:** 400 parameter problem / 404 not found / 500 server error / 201 created — the whole post uses this mapping.
-- **Production convention: chain the request context onto every db call:** `db.WithContext(c.Request.Context()).Xxx(...)` — the mechanism and the timeout middleware are covered in Part 5, "Going further".
-
-Now on to Part 5 — watch how `CreateBook` instantiates steps 2, 4, 5, and 6 of the formula.
+Also, every DB call in this article carries the request context: `db.DB.WithContext(c.Request.Context()).Xxx(...)` (why: Part 5).
 
 ## Part 5: Creating a Book
 
-### Goal: Implement the `POST /books` endpoint — accept JSON and store it
-
-> **Note:** All CRUD functions in Parts 6–8 are appended to the same file, `handlers/book.go`. It starts with:
+Parts 6–8 append their CRUD functions to the same file, `handlers/book.go`, whose header is:
 
 ```go
 package handlers
@@ -347,7 +231,7 @@ import (
 )
 ```
 
-### Creating a book
+The first endpoint, creating a book:
 
 ```go
 // CreateBook creates a book (POST /books)
@@ -372,9 +256,9 @@ func CreateBook(c *gin.Context) {
 }
 ```
 
-> ⚠️ **When to test:** routes are registered only in Part 9 — the `main.go` you have right now is a skeleton (`// ... routes`). Jump ahead to Part 9, copy its final `main.go` and run the server, then come back and test the endpoints of Parts 5–8 (write the handler code in order as you go).
+> ⚠️ Routes are only registered in Part 9. Jump ahead, copy the `main.go` there, get the server running, then come back and test Parts 5–8 chapter by chapter.
 
-**Testing:**
+Testing:
 
 ```bash
 curl -X POST http://localhost:8080/books \
@@ -382,7 +266,7 @@ curl -X POST http://localhost:8080/books \
   -d '{"title":"Go in Action","author":"Alice","price":5990}'
 ```
 
-**Response example (note the key casing):**
+Response example (note the key casing):
 
 ```json
 {
@@ -396,45 +280,11 @@ curl -X POST http://localhost:8080/books \
 }
 ```
 
-> `ID` / `CreatedAt` / `DeletedAt` come out capitalised — `gorm.Model` carries no `json` tags, so the raw Go field names are used (see Part 3, "Three things newcomers most often miss"); `title` / `author` / `price` are lowercase because we tagged them ourselves. To make everything lowercase (`id`, `createdAt`), declare your own fields or use a DTO (see Part 10, "Next Steps" — slim responses).
-
-### Going further: why you must carry the context
-
-There's an easy-to-miss production detail in the code above: every database call chains `WithContext(c.Request.Context())`. Let's unpack what it is, why it's required, and how to configure a timeout.
-
-**What is `WithContext`?**
-
-`WithContext(ctx)` is one link in GORM's chainable API: it attaches Go's `context.Context` to the current query chain. When the SQL executes, that context flows through `database/sql` → the database driver (pgx under the hood for Postgres) and becomes the **source of cancel and timeout signals**. It's just a chain method like `Where` / `Order` — the query runs fine without it:
-
-```go
-// Without it: the query runs, but is blind to whether the request has ended
-db.DB.First(&book, id)
-
-// With it: cancel / timeout signals reach the driver layer
-db.DB.WithContext(c.Request.Context()).First(&book, id)
-```
-
-**Why you must carry it?**
-
-`c.Request.Context()` is tied to the request lifecycle: **when the client disconnects, it gets cancelled**. Carry it and the query is interrupted too — the connection returns to the pool instead of hanging. The bare form (e.g. `db.DB.Create(&book)`) also runs, but the query has no awareness of the request's lifecycle — which is why, from Part 5 on, the main code uniformly uses the context-carrying form (`Create` / `Find` / `Updates` / `Delete` alike).
-
-**The related config: a per-request timeout middleware**
-
-Client disconnects are cancelled automatically by the framework, but the server also needs protection against slow queries tying up connections — a middleware that attaches a timeout fallback to every request (the function lives in `main.go`; the full version in Part 9 registers it):
-
-```go
-// The full function and its registration live in Part 9's main.go; the core is four lines:
-ctx, cancel := context.WithTimeout(c.Request.Context(), d)
-defer cancel()                         // required: releases the timer, prevents leaks
-c.Request = c.Request.WithContext(ctx) // required: without writing it back, the downstream WithContext never sees the timeout
-c.Next()
-```
-
-On timeout, GORM returns `context.DeadlineExceeded`, which falls into the existing 500 branch (production can map it to 504 — see Part 10, "Next Steps").
+> `ID` / `CreatedAt` / `DeletedAt` come out capitalised because `gorm.Model` has no `json` tags (see Part 3); `title` / `author` / `price` are lowercase because we tagged them.
 
 ### Going further: adding validation
 
-The code above doesn't validate the request body — `{"price":5990}` (no `title` / `author`) inserts fine. Where do validation tags go? — **on the structure that accepts the request, not on `models.Book`**:
+The code above validates nothing — `{"price":5990}` (no `title` / `author`) inserts fine. Put the validation tags on the **request struct**, not on `models.Book`:
 
 ```go
 // createBookInput: request-only DTO for creating a book; validation tags belong to it
@@ -445,31 +295,26 @@ type createBookInput struct {
 }
 ```
 
-**Why not put `binding:"required"` on `models.Book`?** The same model is reused by the update endpoint in Part 7 — updates are partial (only `{"price":6990}`, see the zero-value trap), and `required` on the model would make that request fail with 400. So: **the model owns the database schema and JSON naming (`gorm` / `json` tags); validation is an interface contract and belongs to the request structure (DTO)** — the series' dedicated DTO article covers them properly.
+**Why not put `binding:"required"` on `models.Book`?** The same model is reused by Part 7's update endpoint — updates are partial (only `{"price":6990}`), and `required` would turn them into 400s. So: **the model owns the schema and JSON naming; validation is an interface contract and belongs to the request struct (DTO)**. It lands for real in the [DTO article](./gorm-gin-dto-batch).
 
-Point `CreateBook`'s binding target at this struct, then map it to the model:
-
-```go
-var input createBookInput
-if err := c.ShouldBindJSON(&input); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
-    return
-}
-book := models.Book{Title: input.Title, Author: input.Author, Price: input.Price}
-```
-
-With the validation in place, a body missing a required field fails `ShouldBindJSON` with a validation error, going straight to the existing 400 branch:
+With the binding target switched to this struct, requests with missing fields take the existing 400 branch:
 
 ```bash
 # Missing a required field → 400
-curl -X POST http://localhost:8080/books \
-  -H "Content-Type: application/json" \
-  -d '{"price":5990}'
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books -d '{"price":5990}'
 ```
+
+### Going further: why you must carry the context
+
+`WithContext(ctx)` hangs a Go `context.Context` on the query chain; when the query executes, it travels through `database/sql` → the driver and becomes the source of **cancellation and timeout signals**.
+
+`c.Request.Context()` is tied to the request lifecycle: **when the client disconnects, it is cancelled**. Carry it and the query is interrupted too, returning the connection to the pool instead of hanging; the bare form (`db.DB.Create(&book)`) also runs, but is blind to the request's lifecycle.
+
+That is why every DB call here is written as `db.DB.WithContext(c.Request.Context()).Xxx(...)`. The server-side timeout middleware that guards against slow queries lives in Part 9's `main.go`; when it expires, GORM returns `context.DeadlineExceeded`, which falls through to 500 — map it to 504 in production (see Part 7).
 
 ## Part 6: Querying Books
 
-### Goal: Implement the list and single-get endpoints
+The two read endpoints:
 
 ```go
 // GetBooks lists all books (GET /books)
@@ -502,30 +347,23 @@ func GetBook(c *gin.Context) {
 }
 ```
 
-**Testing:**
+Testing:
 
 ```bash
-# List all
 curl http://localhost:8080/books
-
-# Get one
 curl http://localhost:8080/books/1
 ```
 
-> **Note:** Why does `First` check errors in two layers? "Not found" surfaces as `gorm.ErrRecordNotFound`; only when `errors.Is` matches it do we return 404 ("book not found"). Any other error — like the database connection dropping — falls through to 500 instead of being misreported as "book not found". That's mental model #4 in action: an error is data too, and worth treating seriously with `errors.Is`.
->
-> (Why does `GetBooks` initialize `books := []models.Book{}` instead of `var books []models.Book`? When `Find` matches nothing it never allocates the slice, so a `var`-declared slice stays nil and serializes as JSON `null`. Initializing an empty slice is the standard move for list endpoints; the paginated lists in later articles keep that habit.)
+> **Why does `First` check errors in two layers?** "Not found" surfaces as `gorm.ErrRecordNotFound`; only when `errors.Is` matches it do we return 404, while errors like a dropped connection fall through to 500 instead of being misreported as "book not found". `GetBooks` uses `[]models.Book{}` rather than `var books []models.Book` because the latter serializes as `null` on an empty table — later parts' paginated lists keep that habit.
 
 ## Part 7: Updating a Book
-
-### Goal: Implement the `PUT /books/:id` endpoint
 
 ```go
 // UpdateBook updates a book (PUT /books/:id)
 func UpdateBook(c *gin.Context) {
     id := c.Param("id")
 
-    // 1. Check whether the book exists
+    // 1. Check whether the book exists (the same two-layer check as Part 6's GetBook — write it yourself this time)
     var book models.Book
     result := db.DB.WithContext(c.Request.Context()).First(&book, id)
     if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -558,40 +396,39 @@ func UpdateBook(c *gin.Context) {
 
 ### PUT or PATCH?
 
-Strictly speaking, REST's `PUT /books/:id` means "replace the whole resource"; partial updates should use `PATCH /books/:id`. The `Updates` in this chapter only touches the non-zero fields sent in — it's effectively a partial update (PATCH semantics). Using `PUT` is fine for an introductory example, but you should know the difference — if you want stricter semantics, switch the route to `r.PATCH("/books/:id", handlers.UpdateBook)` and the test command to `curl -X PATCH ...`.
+`PUT` strictly means "replace the whole resource"; partial updates belong to `PATCH`. `Updates` here only touches the non-zero fields sent in, so it is effectively PATCH semantics — `PUT` is fine for an introductory example; for stricter semantics, switch the route to `r.PATCH("/books/:id", handlers.UpdateBook)`.
 
-### The zero-value trap and going further
+### The zero-value trap
 
-When `Updates` receives a **struct**, GORM ignores zero-value fields by default (`0`, `""`, `false`, ...). That's by design and covers 90% of real business cases. But when you genuinely need to set a field to `0` or `""`, there are two approaches:
+When `Updates` receives a **struct**, GORM ignores zero-value fields (`0`, `""`, `false`), so `{"price":0}` is silently skipped. That is by design, but it makes "set the price to 0" impossible.
 
-#### Approach 1: Pin the field with `Select`
-
-```go
-db.DB.WithContext(c.Request.Context()).Model(&book).Select("Price").Updates(input)
-```
-
-#### Approach 2: Use `map[string]interface{}` (more general, recommended)
+The fix is a **pointer DTO**: `nil` means "not sent", `&0` means "sent as 0":
 
 ```go
-// The frontend sends only the fields to update; zero values update fine
-var inputMap map[string]interface{}
-if err := c.ShouldBindJSON(&inputMap); err != nil {
+type updateBookInput struct {
+    Title  *string `json:"title"`
+    Author *string `json:"author"`
+    Price  *int    `json:"price" binding:"omitempty,gte=0,lte=1000000"`
+}
+
+var in updateBookInput
+if err := c.ShouldBindJSON(&in); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
     return
 }
-db.DB.WithContext(c.Request.Context()).Model(&book).Updates(inputMap)
+// only fields that are non-nil go into the update
+fields := map[string]any{}
+if in.Title != nil { fields["title"] = *in.Title }
+if in.Author != nil { fields["author"] = *in.Author }
+if in.Price != nil { fields["price"] = *in.Price }
+db.DB.WithContext(c.Request.Context()).Model(book).Updates(fields)
 ```
 
-The advantage of approach 2: whatever the frontend sends gets updated, with no surprises from zero values — and it's more flexible when there are many fields.
-
-> **The cost of approach 2 (two gotchas):**
+> **⚠️ Don't use the model as the request body.** `var input models.Book` above hands the request straight to the model: JSON binding is case-insensitive, so `{"deletedAt":"2026-01-01T00:00:00Z"}` soft-deletes the book and `{"coverUrl":"/uploads/x.jpg"}` rewrites the cover without going through the upload endpoint — that is mass assignment. The fix is exactly the DTO above: **what you accept and what you store are two different things**. The main text keeps the model version so the zero-value trap stays visible; production code should use the pointer DTO (the [DTO article](./gorm-gin-dto-batch) lands it for real).
 >
-> - **JSON numbers become `float64`**: when `ShouldBindJSON` decodes into `map[string]interface{}`, every numeric value is `float64` (`{"price":6990}` → `float64(6990)`). Verified against pgx + PostgreSQL: a float64 can update an integer column — whole numbers are fine, but a non-integral value like `6990.5` does **not** error out; it is silently rounded to `6990` (data changes without a sound). The point: **values in the map have lost Go's type guarantees**, another reason for the whitelist below;
-> - **Every key in the request ends up in the UPDATE SET**: a key that happens to match a model field (`ID`, `DeletedAt`) is resolved by GORM to the `id` / `deleted_at` columns and genuinely lands in the SET clause — worst case, the WHERE matches and you **silently rewrite the primary key or the soft-delete timestamp**; only keys that resolve to no field (like `Comments`) go in raw and produce "column does not exist".
->
-> So pair the map approach with a key whitelist (it blocks both stray keys and the type/PK hazards above); the more type-safe alternative is a pointer-field DTO (`*string` / `*int`) — see "Request DTOs & pointer fields" in the Next Steps section and the series' DTO article.
+> You can also get away with `map[string]any` plus a key whitelist, but numbers inside a map become `float64` and every type guarantee is gone — not recommended.
 
-**Testing:**
+Testing:
 
 ```bash
 curl -X PUT http://localhost:8080/books/1 \
@@ -601,9 +438,7 @@ curl -X PUT http://localhost:8080/books/1 \
 
 ## Part 8: Deleting a Book
 
-### Goal: Implement the `DELETE /books/:id` endpoint
-
-Because `Book` embeds `gorm.Model`, GORM runs a **soft delete** by default. The record isn't actually removed — `deleted_at` is set to the current time and the record is filtered out of queries.
+Because `Book` embeds `gorm.Model`, GORM performs a **soft delete** by default: the row is never removed, only `deleted_at` is set, and queries filter it out from then on.
 
 ```go
 // DeleteBook soft-deletes a book (DELETE /books/:id)
@@ -627,30 +462,20 @@ func DeleteBook(c *gin.Context) {
 
 ### How soft delete behaves
 
-| Operation       | What GORM does                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------- |
-| First DELETE    | Sets `deleted_at = NOW()`; the record stops appearing in queries                               |
-| DELETE it again | Because `deleted_at IS NOT NULL`, GORM finds no record; `RowsAffected == 0` → "book not found" |
+What GORM actually runs is `UPDATE ... SET deleted_at=NOW() WHERE id=? AND deleted_at IS NULL`:
 
-Note: GORM executes `UPDATE ... SET deleted_at=NOW() WHERE id=? AND deleted_at IS NULL`; when the condition doesn't match, `RowsAffected` is 0 — it won't soft-delete twice.
+| Operation                   | GORM behaviour                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| First DELETE                | sets `deleted_at = NOW()`; the row stops appearing in queries                     |
+| Deleting the same row again | `deleted_at IS NOT NULL` means no match, `RowsAffected == 0`, so "book not found" |
 
-> **Note:** After a soft delete, the default `First` / `Find` queries automatically add `deleted_at IS NULL`, so soft-deleted records never show up in lists.
->
-> **⚠️ The unique-constraint trap:** if a field has a unique index (like `ISBN` — assuming you added that field and its index yourself; the `Book` in this post has only `Title` / `Author` / `Price`), a soft-deleted record still occupies the index — inserting the same ISBN again violates the constraint. The PostgreSQL fix is a **partial unique index**, so only non-deleted rows participate in uniqueness:
+After a soft delete, `First` / `Find` add `deleted_at IS NULL` automatically; to read deleted rows use `db.DB.WithContext(c.Request.Context()).Unscoped().First(&book, id)`.
 
-```sql
-CREATE UNIQUE INDEX idx_books_isbn ON books (isbn) WHERE deleted_at IS NULL;
-```
-
-### Querying soft-deleted records
-
-```go
-db.DB.WithContext(c.Request.Context()).Unscoped().First(&book, id)
-```
+> **⚠️ The unique-index trap**: soft-deleted rows still occupy a unique index — re-creating a field with a unique index (say ISBN) after a soft delete violates the constraint. PostgreSQL's answer is a **partial unique index**: `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`, so only live rows participate. Part 5 puts that to work on a real `tags.name`.
 
 ### Hard deletion (remove for real)
 
-> This function is **optional**. Part 9's final `main.go` registers it by default (marked "optional"); remove that line if you don't want to expose hard deletion.
+> This function is **optional**. Part 9's full `main.go` registers it; delete that line if you don't want to expose it.
 
 ```go
 // DeleteBookPermanently hard-deletes a book (DELETE /books/:id/permanent)
@@ -670,17 +495,34 @@ func DeleteBookPermanently(c *gin.Context) {
 }
 ```
 
-**Testing:**
+> **⚠️ It fails once child rows exist**: from Part 2 on, `Book` has a comments association, and the foreign key GORM creates defaults to `NO ACTION` — deleting a book that has comments is rejected by PostgreSQL (`violates foreign key constraint`). The fix is `constraint:OnDelete:CASCADE` on the association (Part 2's model already carries it), or delete the comments first in a transaction. Soft delete is unaffected.
 
-```bash
-curl -X DELETE http://localhost:8080/books/1
-```
+Testing: `curl -X DELETE http://localhost:8080/books/1`.
 
 ## Part 9: Registering Routes
 
-### Goal: Register every route on the Gin engine
+Wire everything together — the route section looks like this:
 
-Update `main.go`:
+```go
+r := gin.Default()
+r.Use(requestTimeout(5 * time.Second)) // per-request timeout: slow queries are interrupted by the context
+
+r.POST("/books", handlers.CreateBook)
+r.GET("/books", handlers.GetBooks)
+r.GET("/books/:id", handlers.GetBook)
+r.PUT("/books/:id", handlers.UpdateBook) // strict REST semantics would use PATCH for partial updates
+r.DELETE("/books/:id", handlers.DeleteBook)
+r.DELETE("/books/:id/permanent", handlers.DeleteBookPermanently) // optional
+
+r.Run(":8080")
+```
+
+`requestTimeout` is the "timeout fallback for every request" from Part 5: it derives a `context.WithTimeout` ctx and writes it back onto the request so downstream `WithContext` calls can see the deadline.
+
+Full `main.go` (imports, database init, migration, middleware, and the routes above):
+
+<details>
+<summary>Full main.go (click to expand)</summary>
 
 ```go
 package main
@@ -732,42 +574,29 @@ func main() {
 }
 ```
 
-### Testing (the hard-delete example)
+</details>
 
-```bash
-curl -X DELETE http://localhost:8080/books/1/permanent
-```
-
-> Once it's running, the hard-delete endpoint from Part 8 is reachable through the route above, alongside the curl tests.
+With the server up you can test every chapter with curl, including the hard delete: `curl -X DELETE http://localhost:8080/books/1/permanent`.
 
 ## Part 10: Summary
 
-### What You Learned
+| Operation    | GORM call                                  | SQL emitted                                 |
+| ------------ | ------------------------------------------ | ------------------------------------------- |
+| Create       | `db.Create(&book)`                         | `INSERT INTO ...`                           |
+| List all     | `db.Find(&books)`                          | `SELECT * FROM ...`                         |
+| Get one      | `db.First(&book, id)`                      | `SELECT * FROM ... WHERE id = ?`            |
+| Update       | `db.Model(&book).Updates(input)`           | `UPDATE ... SET ...`                        |
+| Soft delete  | `db.Delete(&models.Book{}, id)`            | `UPDATE ... SET deleted_at = NOW()`         |
+| Hard delete  | `db.Unscoped().Delete(&models.Book{}, id)` | `DELETE FROM ...`                           |
+| Read deleted | `db.Unscoped().First(&models.Book{}, id)`  | `SELECT * FROM ... WHERE id = ?` (unscoped) |
 
-| Operation     | GORM method                                | Equivalent SQL                                         |
-| ------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Create        | `db.Create(&book)`                         | `INSERT INTO ...`                                      |
-| List all      | `db.Find(&books)`                          | `SELECT * FROM ...`                                    |
-| Get one       | `db.First(&book, id)`                      | `SELECT * FROM ... WHERE id = ?`                       |
-| Update        | `db.Model(&book).Updates(input)`           | `UPDATE ... SET ...`                                   |
-| Soft delete   | `db.Delete(&models.Book{}, id)`            | `UPDATE ... SET deleted_at = NOW()`                    |
-| Hard delete   | `db.Unscoped().Delete(&models.Book{}, id)` | `DELETE FROM ...`                                      |
-| Query deleted | `db.Unscoped().First(&models.Book{}, id)`  | `SELECT * FROM ... WHERE id = ?` (ignores soft delete) |
-
-> Every handler in this post is an instance of the six-step skeleton from "The Formula First": parameter → bind → existence → operation → result → response; every db operation chains `WithContext(c.Request.Context())`, and queries use `errors.Is` to tell "record not found" (404) apart from other errors (500).
+> All five handlers are instances of the six-step skeleton from "The Formula First": parameters → binding → existence → operation → result → response; every DB call carries `WithContext(c.Request.Context())`, and queries use `errors.Is` to tell "not found" (404) from other errors (500).
 
 ### Next Steps
 
 - Transactions: `db.Transaction()`
-- Pagination & filtering: `Where` / `Order` / `Offset` / `Limit` are covered hands-on in [GORM Media & Query Enhancement](./gorm-gin-media-query)
 - Hooks: `BeforeCreate`, `AfterUpdate`
-- Request DTOs & pointer fields: replacing `map[string]interface{}` with `*string` / `*int` is implemented in [GORM Data Engineering](./gorm-gin-dto-batch) — `Price *int` is exactly this
-- Slim responses: `gorm.Model` fields carry no `json` tags, so responses show the capitalised Go names (`ID` / `CreatedAt` / `DeletedAt`); to unify the output style, declare your own fields (`json:"-"` / lowercase tags) or use a DTO as the unified response shape
-- Connection pool: `sqlDB, _ := db.DB.DB()` then configure with `SetMaxOpenConns()` / `SetConnMaxLifetime()`
-- Engineering pay-off (P4 optional): Repository/Service layering & tests (`BookRepository` + sqlmock) and a generic `GetPaginated[T]` wrapper — landed in [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) and [GORM Engineering in Practice (Part 2)](./gorm-gin-engineering-reliability)
-- Timeout mapping: return 504 on `errors.Is(err, context.DeadlineExceeded)` instead of a blanket 500
-- One-line timeout: to write less code you can plug in gin-contrib/timeout via `timeout.New(...)`, but it turns the ctx derivation / write-back mechanics into a black box — this post keeps the hand-written version so you can see the mechanism
-- SQL debugging: enable GORM logging with `&gorm.Config{Logger: logger.Default.LogMode(logger.Info)}` to inspect SQL
-- Unified error handling: use an error middleware / a unified response wrapper (ok/fail shape) to remove the repeated 500 boilerplate — the main code keeps the explicit checks so you can see how `errors.Is` distinguishes error types
-
-> **Advanced content lives in the series follow-ups:** relationships (`Preload`) and aggregate queries get their full treatment in the following series posts: [GORM Relations in Practice](./gorm-gin-relations) and [GORM Media & Query Enhancement](./gorm-gin-media-query); Repository / Service layering and testability land in [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) and [GORM Engineering in Practice (Part 2)](./gorm-gin-engineering-reliability) — this post stays flat and direct, focused on GORM itself.
+- Slimmer responses: how to unify `gorm.Model`'s capitalised keys — declare your own fields, or use a DTO as the response shape
+- Connection pool: grab the underlying `*sql.DB` with `sqlDB, _ := db.DB.DB()`, then tune `SetMaxOpenConns()` / `SetConnMaxLifetime()`
+- Timeout mapping: return 504 when `errors.Is(err, context.DeadlineExceeded)`, instead of a blanket 500
+- SQL debugging: `&gorm.Config{Logger: logger.Default.LogMode(logger.Info)}`

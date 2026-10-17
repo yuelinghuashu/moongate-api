@@ -1,6 +1,6 @@
 ---
 title: GORM 数据工程实战：批量导入、请求 DTO 与校验错误翻译
-description: 系列第 4 篇：从数据文件批量导入（CreateInBatches）、请求 DTO 与模型分离、参数化校验规则、validator 校验错误翻译；末尾附系列一览、路由总表与后续篇目预告。
+description: 系列第 4 篇：从数据文件批量导入（CreateInBatches）、请求 DTO 与模型分离、参数化校验规则、validator 校验错误翻译；末尾附路由速查与后续篇目预告。
 date: 2026-09-04
 series: gin-gorm
 order: 4
@@ -82,6 +82,8 @@ func SeedBooksFromFile(c *gin.Context) {
 r.POST("/books/bulk", handlers.SeedBooksFromFile)
 ```
 
+> 分层重构后这个 handler 叫 `Seed`（文件读取移进 Service）——见[《工程化（一）》](./gorm-gin-engineering-layering)。
+
 **测试：**
 
 ```bash
@@ -123,7 +125,7 @@ book := models.Book{Title: input.Title, Author: input.Author, Price: *input.Pric
 - `binding:"required,gte=0,lte=1000000"`：价格必填、`0 <= price <= 1000000`（即 0–10000 元，单位：分），越界直接 400。**为什么 `Price` 用 `*int`？** `required` 对 int 的零值 `0` 也会判"字段缺失"，`{"price":0}` 会被 400 拦下；改成 `*int` 后"没传"是 `nil`（400）、"传了 0" 是 `&0`（通过）——这正是入门篇讲过的指针语义：**`nil` 表示"这个字段没出现"**；
 - DTO 的第二个好处：`price` 传负数、传 `"abc"` 都进不了模型——**接口边界在 DTO 层收口，而不是模型层**；
 - 为什么入门篇不这么做？因为单表入门时"收什么=存什么"，先学 GORM 本体；现在进入多表 + 校验阶段，才需要显式分离（这就是本系列反复出现的"教学坡度"：难点按篇摊开、每篇只上一个台阶——不是前文错了，是刻意留白）。
-- **行为变更提示：** 入门篇进阶版的 `Price int` + `binding:"gte=0"` 让缺省 price 也能通过（按 0 创建）；本篇收紧为 `*int` + `required`——缺 `price` 的旧请求（只传 `title`/`author`）在入门篇是 201，到这里变成 400。同一接口、不同阶段语义不同，这是教程有意把"缺省即成功"改成"显式必填"，并非笔误。
+- **行为变更提示：** 入门篇进阶版是 `Price int`（缺省按 0 创建、201），本篇收紧为 `*int` + `required`：缺 `price` 的旧请求变成 400。这是刻意的语义收紧，不是笔误。
 
 **测试：**
 
@@ -218,17 +220,9 @@ curl -X POST http://localhost:8080/books \
 
 ---
 
-## 三、系列一览
+## 三、路由速查
 
-| 篇        | 文件                        | 主题                        | 新增路由                                          |
-| --------- | --------------------------- | --------------------------- | ------------------------------------------------- |
-| 1         | `gorm-gin-crud-tutorial.md` | 单表 CRUD、软删除、零值陷阱 | `/books` 五件套 + `/books/:id/permanent`（可选）  |
-| 2         | `gorm-gin-relations.md`     | 多表关联：评论 + Preload    | `/books/:id/comments`、`/books/:id/comments/:cid` |
-| 3         | `gorm-gin-media-query.md`   | 上传 / 分页 / 搜索 / 聚合   | `/books/:id/cover`、`/uploads/*` 静态             |
-| 4（本篇） | `gorm-gin-dto-batch.md`     | 批量导入 / DTO / 校验翻译   | `/books/bulk`                                     |
-| 5         | `gorm-gin-tags.md`          | 多对多：标签 + 连接表       | `/books/:id/tags`、`/tags/:name/books`            |
-
-完整路由清单（按注册顺序）：
+全系列注册过的路由，按注册顺序列出（最后一列是引入它的篇目）：
 
 | 方法   | 路径                       | handler                       | 所属篇     |
 | ------ | -------------------------- | ----------------------------- | ---------- |
@@ -250,10 +244,4 @@ curl -X POST http://localhost:8080/books \
 
 ## 四、工程化条目：已在工程化篇落地
 
-以下条目是前文各处的预告，已分别在[《工程化（一）·分层、注入与可测性》](./gorm-gin-engineering-layering)与[《工程化（二）·可靠性与生产化》](./gorm-gin-engineering-reliability)落地：
-
-- **分层与测试**：`BookRepository` 接口 + Service 层 + `httptest` 表驱动测试（工程化（一）一、二节）；
-- **提效封装**：泛型 `GetPaginated[T]` 收拢分页与错误聚合（工程化（一）第三节）；
-- **文件校验补强**：文件头嗅探 `http.DetectContentType`，防伪造扩展名（工程化（二）第二节）；
-- **排序白名单**：外部排序字段白名单化，杜绝 ORDER 注入（工程化（二）第二节）；
-- **对象存储**：`Uploader` 接口抽象，Disk / S3 可切换，数据库存 key（工程化（二）第三节）。
+前文各处的预告，已分别在[《工程化（一）》](./gorm-gin-engineering-layering)（分层、注入、测试、泛型分页）与[《工程化（二）》](./gorm-gin-engineering-reliability)（错误中间件、排序白名单、文件头嗅探、对象存储、连接池）落地；逐条对账表见[《工程化（二）》§4.2](./gorm-gin-engineering-reliability)。

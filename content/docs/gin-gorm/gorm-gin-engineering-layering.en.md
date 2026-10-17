@@ -11,18 +11,6 @@ tags:
   - Engineering
 ---
 
-> 🎓 **Engineering optional reading:** this part does not sit on the same track as the first five parts (the P2/P3 main line) — read it when you need layering, dependency injection, and testing skills beyond GORM itself; skipping it does not break the closed loop of the first five parts.
-
-> **Prerequisites:** finish the first five parts of the series — the project with the full endpoint set across the `books` + `comments` + `tags` tables, cover images, pagination/search, and batch import. Code conventions match the first five parts (`WithContext` / `errors.Is` for 404 / the 400 · 404 · 201 semantics). This part sits one level above them: its center of gravity shifts from "how to use GORM" to "how to organize a program".
-
-The first five parts kept wiring `db.DB` straight into the handlers — it ran, but it couldn't be tested and was hard to maintain. This part makes good on the engineering this series has been pointing toward all along: split the code into `Repository / Service / Handler` layers, use constructor injection to take the database out of the handlers, then use a fake repository + `httptest` to turn handlers into something `go test` can run.
-
-> **Map of this part (read it before you walk in):** several new concepts the first five parts never used appear here all at once: **interfaces** (`BookRepository` — first declare "what data access needs", with the implementation hidden behind it), **constructor injection** (`main.go` "feeds" the concrete implementation to the upper layers), **the `internal/` package rule**, **test doubles** (a fake repository) and **httptest table-driven tests**, and finally a **generic wrapper** (optional reading). Don't let the sheer number of new terms scare you — the body proceeds in the order "hit the pain point first → migrate just one path and get it running → then talk about scale and consolidation", and every step explains the "why" first. The generics section can be skipped.
->
-> Also note the **module path**: the import prefixes in this article's code blocks are `go-learning/` (the module name of the companion sample project). The project you built in the crash course is named `gin-demo` — before you start, replace every `go-learning/` prefix in this article with your own module name (or run `go mod edit -module go-learning` to rename yours to match), and leave the rest of the code unchanged. We won't repeat this reminder below.
-
----
-
 ## 1. The Layering Refactor: From Handlers Wired to db.DB to Three Layers
 
 **Goal:** refactor the flat code of the five parts into `internal/repository` + `internal/service` + `internal/handler`; handlers stop touching the database, and every dependency is constructor-injected in `main.go`.
@@ -81,14 +69,23 @@ import (
 // BookRepository is the data-access contract: handler/service see only the interface, never the implementation
 type BookRepository interface {
     Create(ctx context.Context, book *models.Book) error
-    FindByID(ctx context.Context, id uint) (*models.Book, error) // full detail, with Comments and Tags loaded
-    Query(ctx context.Context, q string) *gorm.DB                // the chain with filters applied (Part 7's sort whitelist will use it)
+    FirstBook(ctx context.Context, id uint) (*models.Book, error) // existence check (no associations)
+    FindByID(ctx context.Context, id uint) (*models.Book, error)  // full detail, with Comments and Tags loaded
+    Query(ctx context.Context, q string) *gorm.DB                 // the chain with filters applied (Part 7's sort whitelist will use it)
     ListOrdered(ctx context.Context, query *gorm.DB, order string, page, pageSize int) ([]models.Book, int64, error)
     List(ctx context.Context, q string, page, pageSize int) ([]models.Book, int64, error) // convenience version: ListOrdered with a fixed descending order
-    UpdateBook(ctx context.Context, book *models.Book, fields map[string]interface{}) error
+    ListByTag(ctx context.Context, tagName string) ([]models.Book, error)
+    UpdateStruct(ctx context.Context, id uint, input interface{}) error // Updates: zero values are skipped
+    SetCover(ctx context.Context, id uint, url string) error
     SoftDelete(ctx context.Context, id uint) error
+    HardDelete(ctx context.Context, id uint) error
+    CreateComment(ctx context.Context, comment *models.Comment) error
+    ListComments(ctx context.Context, bookID uint, page, pageSize int) ([]models.Comment, int64, error)
+    DeleteComment(ctx context.Context, bookID, cid uint) error // cross-tenant guard: book_id + id
     AddTag(ctx context.Context, bookID, tagID uint) error
     RemoveTag(ctx context.Context, bookID, tagID uint) error
+    FirstOrCreateTag(ctx context.Context, name string) (*models.Tag, error)
+    CountBookTag(ctx context.Context, bookID, tagID uint) (int64, error)
 }
 ```
 
@@ -141,9 +138,11 @@ func (r *gormBookRepository) List(ctx context.Context, q string, page, pageSize 
 }
 ```
 
-> **How big should an interface be?** What's above is the final shape **for this part's migration scope** — it only collects the "book + tag" dimension of data access (the comment and upload handlers aren't migrated in this part yet; they still hit `db.DB` directly, and Part 7's `Uploader` abstraction will fold them in together). For teaching, access is consolidated into a small number of interfaces around aggregate roots with identical shape; real projects often split into multiple interfaces by aggregate root — the principle is the same.
+> **How big should an interface be?** What's above is the **repository's final shape** (18 methods, verbatim the companion repo) — this part only walks the Create / Get paths end to end and fills in the rest from the §1.7 checklist. Handing over the whole interface up front is so you can see the complete boundary of "what data access needs". For teaching, access is consolidated into a small number of interfaces around aggregate roots; real projects often split into multiple interfaces by aggregate root — the principle is the same.
 >
 > One more point to align on up front: `AddTag(bookID, tagID uint)` is a low-level operation **by id** — whereas the route/front-end semantics tag **by name** (see the many-to-many part, §3.1). "Resolving names to ids, creating tags by name, deduping idempotently" is the Service's job (see 1.4); the interface layer exposes only the most atomic data operations.
+>
+> **Real projects split this by aggregate root.** The single 18-method interface here exists so §1.7's migration checklist fits in one table; in practice you'd split it into three: `BookRepository` (Create / FirstBook / FindByID / List / Update / SoftDelete / SetCover), `CommentRepository` (CreateComment / ListComments / DeleteComment), `TagRepository` (FirstOrCreateTag / AddTag / RemoveTag / CountBookTag / ListByTag). The handler then injects two more fields and gains an interface per aggregate that can be swapped and faked independently — pick the boundary that fits, don't copy the 18-method version as a template.
 
 ### 1.4 The Service Layer & Transactions
 
@@ -197,23 +196,13 @@ func (s *BookService) CreateBookWithTags(ctx context.Context, book *models.Book,
 }
 ```
 
-> **The honest trade-off between transactions and layering:** a transaction is naturally "cross-repository" — one transaction touches the book, the tags, and the join table in three places. Stuffing transactions into the repository interface would make it explode immediately (the Unit-of-Work style of `WithTx(func(repo) error)`). This part takes the pragmatic route: `*gorm.DB` is injected into Service directly for transactions, and all other data access goes through the `repo` interface. When it grows bigger, evolve — this is the same kind of trade-off as the "teaching gradient" pacing used in every earlier part (difficulty is deliberately staged across parts).
+> **The honest trade-off between transactions and layering:** a transaction is naturally "cross-repository" (one transaction touches books, tags, and the join table), and stuffing it into the repository interface explodes the interface (the Unit-of-Work style of `WithTx(func(repo) error)`). This part stays pragmatic: `*gorm.DB` goes into Service for transactions, everything else goes through `repo`. The interface still shields **single data operations** (`Create` / `FindByID` / `SoftDelete` can be faked, so handler branches are testable); a transaction is **orchestration across operations** and belongs to no single repo method. Three arrangements:
 >
-> **Then if Service grabs `db` directly, what is the Repository interface still shielding?**
+> 1. **Service holds `*gorm.DB` for transactions** (this part): simplest, but transactional paths are verified against a real database.
+> 2. **Unit of Work**: `repo.Transaction(ctx, func(tx BookRepository) error)` — best testability, higher interface and implementation cost.
+> 3. **Inject a `TxRunner` interface**: ①'s testable upgrade, one extra interface method.
 >
-> The interface shields **single data operations** — one-shot "data accesses" like `Create` / `FindByID` / `SoftDelete` can be swapped out, can be faked, and the branching logic of handlers / services therefore becomes testable.
->
-> Transactions are another matter: they are **orchestrations across multiple operations** and by nature don't belong to any single repo method. The three common arrangements:
->
-> 1. **Service holds `*gorm.DB` for transactions** (this part's route): the most straightforward; the cost is that transactional paths can't be unit-tested with a fake — they need integration verification against a real database.
-> 2. **Unit of Work**: `repo.Transaction(ctx, func(tx BookRepository) error)` pulls the transaction boundary into the interface — the best testability, but interface size, nesting, and implementation cost all go up; it suits medium-to-large projects dense with transactions.
-> 3. **Inject a "transaction runner"**: Service depends on a `TxRunner` interface rather than a bare `*gorm.DB`, and you swap the runner in tests — ①'s testable upgrade, at the cost of just one extra interface method.
->
-> This part picks ① for **teaching first**: lay "how a transaction is written" out plainly to see it clearly, and leave the engineering trade-offs to real projects; ② and ③ are its evolution directions, not "more correct" options.
->
-> This is also why the series has no "Engineering (Part 3)" — the seven parts close the loop, and what remains is for readers to make up at real-world scale.
->
-> **How to choose (run the three criteria and you have your answer):** ① is the transaction really "cross-table/cross-aggregate" (operating on a single row needs no transaction at all); ② should transactional paths be in automated tests (if yes → don't stop at ①); ③ the scale signals — more than ~10 repo interface methods, or more than ~3 transaction sites (if hit → move up from ① to ③). Stopping at ① is perfectly reasonable for small projects and teaching; once ② or ③ triggers, switch to ③ early (② fits transaction-dense scenarios where the team is already used to Unit of Work).
+> Choosing: is the transaction genuinely cross-table, do transactional paths need automated tests, does the repo interface exceed ~10 methods or the transaction sites ~3 — once the last two trigger, move from ① to ③ early. That is also why the series has no "Engineering (Part 3)": seven parts close the loop, and the rest is for real-world scale.
 
 ### 1.5 Handlers Are Left with Only Three Jobs
 
@@ -234,12 +223,11 @@ import (
     "github.com/go-playground/validator/v10"
 )
 
-// createBookInput: adds Tags on top of the data-engineering part's DTO (see the 1.4 note: tagging on POST /books is new behavior)
+// createBookInput: one extra line on top of the data-engineering part's DTO
+// (Title / Author / Price and their rules are unchanged; the full struct is in
+// that part's §2 or the companion repo's internal/handler/book.go)
 type createBookInput struct {
-    Title  string   `json:"title" binding:"required"`
-    Author string   `json:"author" binding:"required"`
-    Price  *int     `json:"price" binding:"required,gte=0,lte=1000000"`
-    Tags   []string `json:"tags"`
+    Tags []string `json:"tags"`
 }
 
 // bindBookInput does binding + validation-error translation: folds the data-engineering part's §2.1 logic into one function every handler reuses
@@ -292,7 +280,7 @@ func (h *BookHandler) Create(c *gin.Context) {
     c.JSON(http.StatusCreated, result)
 }
 
-func (h *BookHandler) GetByID(c *gin.Context) {
+func (h *BookHandler) Get(c *gin.Context) {
     id, err := strconv.ParseUint(c.Param("id"), 10, 64)
     if err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
@@ -312,11 +300,11 @@ func (h *BookHandler) GetByID(c *gin.Context) {
 **How does an error become a response? (the minimal error middleware)** Handlers only call `c.Error(err)` and never write a response — the translation is done by an error middleware provided by the handler package; mount one on the `gin.Engine` and every handler's error path is unified. Here's the minimal version (404/500); Part 7 upgrades it to ok/fail + `slog` + 504:
 
 ```go
-// internal/handler/error.go
+// internal/handler/middleware.go
 func errorMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         c.Next()
-        logList := c.Errors.ByType(gin.ErrorTypePrivate)
+        logList := c.Errors // c.Error(err) already attaches ErrorTypePrivate; no need to filter by type
         if len(logList) == 0 {
             return
         }
@@ -364,17 +352,17 @@ func main() {
 
 > **The order is the contract:** dependencies always point top-down — `db` at the bottom, `handler` at the top. Nobody may reverse it. To swap an implementation (say, switch to the SQLite driver or to a fake), change one line in `main.go`'s assembly.
 >
-> **The runnable checkpoint (first slice done):** by now you've only migrated two book-dimension paths (Create / GetByID) — verify immediately: `go build ./...` passes, and `curl http://localhost:8080/books/1` returns normally, which proves the injection chain is wired. The remaining endpoints (Update / Delete / comments / tags / find books by tag) are **fully isomorphic** to this skeleton: add a method to the interface → pass it through in service → attach the error in the handler → register in main; just fill them in one by one. **Uploads and cover storage stay wired straight to `db.DB` for now** (Part 7's `Uploader` will fold them in together).
+> **The runnable checkpoint (first slice done):** the two book-dimension paths (Create / Get) now run end to end — `go build ./...` passes and `curl http://localhost:8080/books/1` returns normally, which proves the injection chain is wired. The remaining endpoints are **fully isomorphic** (add a method to the interface → GORM implementation → pass-through in service → attach the error in the handler → register in main); just fill them in one by one. **Uploads and cover storage stay wired straight to `db.DB` for now** (Part 7's `Uploader` folds them in).
 
 ### 1.7 A Migration Checklist for the Remaining Endpoints (the Isomorphic Template)
 
-The first slice demonstrated the skeleton; every remaining endpoint is just filled in line by line — each row walks the same drill of "add a method to the interface → GORM implementation → pass-through in service → attach the error in the handler → register in main", differing from the Create / GetByID above only in parameters and validation:
+The table below spreads the "isomorphic" claim into one row per endpoint; the differences are only parameters and validation. One hand-off note: the "book must exist" check at the top of every handler in the first five parts now retires — it sinks into `repo.FirstBook`, and the handler doesn't even import `db` any more.
 
 | Endpoint (old direct-`db.DB` handler) | Repository methods to add | Service method | Handler changes | Transaction? |
 | ------------------------------------- | ------------------------- | -------------- | --------------- | ------------ |
 | `PUT /books/:id` (partial update) | `FirstBook` (existence check → 404) + `UpdateStruct` (zero values not updated — the crash course's semantics) | `UpdateBook` | parseID + bind | No |
 | `DELETE /books/:id` (soft delete) | `SoftDelete` (0 rows → `gorm.ErrRecordNotFound`) | `SoftDelete` | parseID + attach error | No |
-| `DELETE /books/:id/permanent` (hard delete) | `HardDelete` | `HardDelete` | parseID + attach error | Suggested: clear the associations with `Select(clause.Associations)` first, then delete (tags part §3.4) |
+| `DELETE /books/:id/permanent` (hard delete) | `HardDelete` | `HardDelete` | parseID + attach error | Not needed: associations declare `OnDelete:CASCADE` (Parts 2 and 5), so the database cascades |
 | Comments: create / paginated list / delete | `CreateComment` / `ListComments` / `DeleteComment` | same-name pass-through | parseID (`cid` likewise) | No |
 | Tags: add / remove / list books by tag | `FirstOrCreateTag` + `CountBookTag` + `AddTag` / `RemoveTag` / `ListByTag` | name resolution + idempotency (§1.3's convention) | parseID / `:name` | No |
 | Cover upload | rolled up in Part 7 (`storage.Uploader` + `SetCover`) | `SetCover` | see Part 7's full code | No |
@@ -402,6 +390,7 @@ import (
     "strings"
     "testing"
 
+    "go-learning/internal/repository"
     "go-learning/internal/service"
     "go-learning/models"
 
@@ -434,7 +423,36 @@ func (f *fakeBookRepo) FindByID(ctx context.Context, id uint) (*models.Book, err
     }
     return nil, gorm.ErrRecordNotFound
 }
-// ...implement the remaining methods as needed; ones you don't need can just return dummy data
+// The interface must be **fully** implemented before it can be assigned to
+// repository.BookRepository — miss one method and it won't compile.
+// This line is a compile-time assertion: go build fails, no test run needed.
+var _ repository.BookRepository = (*fakeBookRepo)(nil)
+
+// Unused methods get empty implementations (the other 16, folded to one line each for space)
+func (f *fakeBookRepo) FirstBook(context.Context, uint) (*models.Book, error) { return nil, nil }
+func (f *fakeBookRepo) Query(context.Context, string) *gorm.DB                { return nil }
+func (f *fakeBookRepo) ListOrdered(context.Context, *gorm.DB, string, int, int) ([]models.Book, int64, error) {
+    return nil, 0, nil
+}
+func (f *fakeBookRepo) List(context.Context, string, int, int) ([]models.Book, int64, error) {
+    return nil, 0, nil
+}
+func (f *fakeBookRepo) ListByTag(context.Context, string) ([]models.Book, error) { return nil, nil }
+func (f *fakeBookRepo) UpdateStruct(context.Context, uint, interface{}) error    { return nil }
+func (f *fakeBookRepo) SetCover(context.Context, uint, string) error             { return nil }
+func (f *fakeBookRepo) SoftDelete(context.Context, uint) error                   { return nil }
+func (f *fakeBookRepo) HardDelete(context.Context, uint) error                   { return nil }
+func (f *fakeBookRepo) CreateComment(context.Context, *models.Comment) error     { return nil }
+func (f *fakeBookRepo) ListComments(context.Context, uint, int, int) ([]models.Comment, int64, error) {
+    return nil, 0, nil
+}
+func (f *fakeBookRepo) DeleteComment(context.Context, uint, uint) error { return nil }
+func (f *fakeBookRepo) AddTag(context.Context, uint, uint) error        { return nil }
+func (f *fakeBookRepo) RemoveTag(context.Context, uint, uint) error     { return nil }
+func (f *fakeBookRepo) FirstOrCreateTag(context.Context, string) (*models.Tag, error) {
+    return nil, nil
+}
+func (f *fakeBookRepo) CountBookTag(context.Context, uint, uint) (int64, error) { return 0, nil }
 ```
 
 > **The difference between a fake and a mock (one sentence):** a fake is an in-memory implementation that actually works (the one above really returns data); a mock is a double of the sqlmock kind that "asserts what you called". For testing handlers, a fake is the most comfortable — you're testing "behavior", not "call sequences".
@@ -444,7 +462,7 @@ func (f *fakeBookRepo) FindByID(ctx context.Context, id uint) (*models.Book, err
 `httptest.NewRecorder` plus a real `gin.Engine` to mount the route — fire the request in, assert the status code and the response body:
 
 ```go
-func TestBookHandler_GetByID(t *testing.T) {
+func TestBookHandler_Get(t *testing.T) {
     tests := []struct {
         name       string
         repo       *fakeBookRepo
@@ -459,11 +477,11 @@ func TestBookHandler_GetByID(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             svc := service.NewBookService(tt.repo, nil) // the fake doesn't need a real db
-            h := NewBookHandler(svc)
+            h := NewBookHandler(svc) // once Part 7 makes the constructor two-arg: NewBookHandler(svc, nil)
 
             r := gin.New()
             r.Use(errorMiddleware()) // same as in main: after the handler attaches the error, the middleware translates it into 404/500
-            r.GET("/books/:id", h.GetByID)
+            r.GET("/books/:id", h.Get)
 
             req := httptest.NewRequest(http.MethodGet, "/books/1", nil)
             w := httptest.NewRecorder()
@@ -484,43 +502,26 @@ Run it:
 
 ```bash
 go test ./internal/handler/ -v
-# === RUN   TestBookHandler_GetByID/found
-# === RUN   TestBookHandler_GetByID/not_found
-# === RUN   TestBookHandler_GetByID/query_failed
+# === RUN   TestBookHandler_Get/found
+# === RUN   TestBookHandler_Get/not_found
+# === RUN   TestBookHandler_Get/query_failed
 # --- PASS
 ```
 
-> **What table-driven tests are for:** one test case = one row of data + one row of assertion. The three branches "found / not found / query failed" lie side by side; adding a branch is adding a row, not copying a test function. **Every migrated endpoint** can fill in its own branch table from this template (the example demonstrates GetByID; the rest are isomorphic). Two boundaries worth being honest about: (1) only methods that go through the `repo` interface can be tested with the fake (read/delete paths like GetByID); methods that go through `s.db` transactions (like 1.4's `CreateBookWithTags`) would panic under a fake + `nil db`, so their transactional correctness is verified by integration tests against a real database; (2) what's tested here is the handler's behavior branches — whether the repository's GORM implementation emits the right SQL is verified with the sqlmock idea in 2.3 (kept brief).
+> **What table-driven tests are for:** one test case = one row of data + one row of assertion. The three branches "found / not found / query failed" lie side by side; adding a branch is adding a row, not copying a test function. **Every migrated endpoint** can fill in its own branch table from this template (the example demonstrates Get; the rest are isomorphic). Two boundaries worth being honest about: (1) only methods that go through the `repo` interface can be tested with the fake (read/delete paths like Get); methods that go through `s.db` transactions (like 1.4's `CreateBookWithTags`) would panic under a fake + `nil db`, so their transactional correctness is verified by integration tests against a real database; (2) what's tested here is the handler's behavior branches — whether the repository's GORM implementation emits the right SQL — see 2.3's conclusion (sqlmock is not recommended).
 
-### 2.3 Does the Repository Layer Need Tests? sqlmock in One Paragraph
+### 2.3 Should the Repository Layer Be Tested? Don't Use sqlmock
 
-Handlers are covered — but should the GORM implementation itself (`gormBookRepository`'s SQL behavior) be tested? It can be, with go-sqlmock (`github.com/DATA-DOG/go-sqlmock`):
-
-```go
-db, mockSQL, _ := sqlmock.New()
-gormDB, _ := gorm.Open(postgres.New(postgres.Config{Conn: db}), &gorm.Config{})
-
-mockSQL.ExpectQuery(`SELECT .* FROM "books" WHERE id = .*`).
-    WillReturnRows(sqlmock.NewRows([]string{"id", "title"}).AddRow(1, "Go"))
-
-repo := NewBookRepository(gormDB)
-book, err := repo.FindByID(context.Background(), 1)
-```
-
-This snippet carries value and cost in equal measure: what it asserts is "GORM emitted the SQL you expected" — **which is exactly what GORM guarantees for you**. Teaching conclusion: **what layering must test is "our code" (handler branches, service business logic); GORM's correctness is GORM's own responsibility**. So this part's main act is the fake + httptest; sqlmock is touched only briefly.
+Should the GORM implementation itself (`gormBookRepository`'s SQL behavior) have unit tests? **sqlmock is not recommended**: it asserts "GORM emitted the SQL you expected" — which is exactly what GORM guarantees for you; the SQL also shifts between GORM versions, so regex assertions are costly to maintain and yield little. What layering must test is "our code" (handler branches, service business logic); the repository's correctness is covered by integration tests (a real database or testcontainers), and when you do need a double, prefer a fake at the interface boundary rather than at the SQL layer.
 
 ---
 
 ## 3. [Optional Reading] Wrapping the Boilerplate: Generic GetPaginated[T]
 
-**Goal:** use generics to fold `Count + Order + Offset + Limit + error handling` into one function, leaving each list endpoint with only "filling in the arguments" to do.
-
-The first five parts' body deliberately wrote the pagination skeleton out explicitly (that was teaching); this engineering part keeps the promise and wraps it up. The generic fetch function lives in the **repository package** (it needs the `*gorm.DB` chain; if it were in handler, repository would depend back on handler and form a cycle):
-
-> **Optional reading:** this section is syntactic sugar — skipping it doesn't affect this part's main line. And it only works for "pure-model pagination" — lists like `GetPaginated[models.Book]` that `Find` directly into the model; aggregate lists like the media part's `BookListItem` with a JOIN / `commentCount` need a dedicated query shape (`Scan` into a custom carrier), so this generic doesn't apply there.
+The first five parts deliberately wrote the pagination skeleton out explicitly (teaching); the engineering part folds it into one generic function, placed in the repository package (it needs the `*gorm.DB` chain; putting it in handler would make repository depend on handler):
 
 ```go
-// internal/repository/pagination.go — the generic fetch: Count + Order + Offset + Limit wrapped in one go
+// internal/repository/pagination.go — Count + Order + Offset + Limit in one place
 func GetPaginated[T any](query *gorm.DB, order string, page, pageSize int, dest *[]T) (int64, error) {
     var total int64
     if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
@@ -536,65 +537,22 @@ func GetPaginated[T any](query *gorm.DB, order string, page, pageSize int, dest 
 }
 ```
 
-`ListOrdered` (see 1.3)'s three pagination lines can now be swapped for this function — the type parameter lets `[]models.Book`, `[]models.Comment` share one piece of logic:
+> **`Session(&gorm.Session{})` is the real point.** When `Count` and `Find` reuse the same chain, GORM carries the `SELECT count(*)` state into the next query; clone a clean chain first to get "filtered total + current page". Follow this even if you don't wrap the generic.
+
+Usage is just replacing the three pagination lines:
 
 ```go
-// inside repository.ListOrdered (the equivalent rewrite)
 var books []models.Book
 total, err := GetPaginated(query, order, page, pageSize, &books)
 ```
 
-**The Scan variant: aggregate lists wrap up too.** The media part's "each book with its comment count" goes through `Scan` into `BookListItem` (a custom carrier) rather than `Find` into the model — with the same skeleton, only the last step changes from `Find` to `Scan`, and aggregate lists get pagination as well:
-
-```go
-// the Scan variant of the same skeleton: dest becomes a custom query carrier (BookListItem, etc.)
-func GetPaginatedScan[T any](query *gorm.DB, order string, page, pageSize int, dest *[]T) (int64, error) {
-    var total int64
-    if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
-        return 0, err
-    }
-    if err := query.Order(order).
-        Offset((page - 1) * pageSize).
-        Limit(pageSize).
-        Scan(dest).Error; err != nil {
-        return 0, err
-    }
-    return total, nil
-}
-```
-
-Usage (the media part's §2.3 aggregate query — the chain already carries `Select/Joins/Group`; here we only add pagination):
-
-```go
-query := db.DB.WithContext(ctx).Model(&models.Book{}).
-    Select("books.*, COUNT(comments.id) AS comment_count").
-    Joins("LEFT JOIN comments ON comments.book_id = books.id AND comments.deleted_at IS NULL").
-    Group("books.id")
-var items []BookListItem
-total, err := GetPaginatedScan(query, "books.created_at DESC", page, pageSize, &items)
-```
-
-In one sentence: the generic wraps the **pagination skeleton** (Count / ordering / Offset / Limit), not the way rows are fetched — pure-model lists use the `Find` version (`GetPaginated`), aggregate carriers use the `Scan` version (`GetPaginatedScan`), and the two differ only in the last line. Both count as optional reading.
-
-The response shape belongs on the **handler** side, unified with `PageResult` (the return structure of the list endpoints):
-
-```go
-// internal/handler/pagination.go
-type PageResult[T any] struct {
-    Items    []T   `json:"items"`
-    Total    int64 `json:"total"`
-    Page     int   `json:"page"`
-    PageSize int   `json:"pageSize"`
-}
-```
-
-> **Why consolidate only now?** Echoing the opening line of this section — "the engineering part keeps its promises": generics fold the "pagination skeleton" into a black-box function — it was written explicitly in the body twice first ([GORM Relations in Practice](./gorm-gin-relations) §2.2, [GORM Media & Query Enhancement](./gorm-gin-media-query) §2.2), and only in the engineering part is encapsulation allowed; the timeout middleware follows the same idea ("hand-written in the body, and in the engineering parts it can be a one-line library swap").
+> **Optional, and only for pure-model lists**: aggregate lists with JOINs (the media part's `BookListItem`) don't `Find` into the model — writing a `Scan` variant would just add a nearly identical function; write `Count + Scan` by hand there. The response shape (`{items,total,page,pageSize}`) belongs to the handler; a plain struct or `PageResult[T]` both work, not expanded here.
 
 ---
 
 ## Wrap-Up
 
 - **The new package structure**: `main.go` + `db/` + `models/` + `internal/{repository,service,handler}`, with dependencies flowing `db → repository → service → handler` and `main.go` constructor-injecting everything in one place;
-- **The migration scope this part demonstrates**: the book dimension's two paths, Create / GetByID, run end to end (interface → GORM implementation → Service → handler → injection → tests); Update / Delete / comments / tags / find books by tag are **isomorphic** to that skeleton and just need filling in from the same template; **the upload handler still talks to `db.DB` directly**, waiting to be folded in together with Part 7's `Uploader` abstraction;
-- **Your project now**: three-layer architecture + fake/httptest table-driven tests (the example covers GetByID's 404/500 branches, and the template is reusable for every migrated endpoint), `go test ./internal/handler/ -v` passing, and the pagination boilerplate wrapped into the generic `GetPaginated[T]` (optional reading);
+- **The migration scope this part demonstrates**: the book dimension's two paths, Create / Get, run end to end (interface → GORM implementation → Service → handler → injection → tests); Update / Delete / comments / tags / find books by tag are **isomorphic** to that skeleton and just need filling in from the same template; **the upload handler still talks to `db.DB` directly**, waiting to be folded in together with Part 7's `Uploader` abstraction;
+- **Your project now**: three-layer architecture + fake/httptest table-driven tests (the example covers Get's 404/500 branches, and the template is reusable for every migrated endpoint), `go test ./internal/handler/ -v` passing, and the pagination boilerplate wrapped into the generic `GetPaginated[T]` (optional reading);
 - Next part, [GORM Engineering in Practice (Part 2): Reliability & Production Readiness](./gorm-gin-engineering-reliability): a unified error middleware with ok/fail responses (`slog` takes over logging, timeouts map to 504), the `GetBooks` sort whitelist, upload header sniffing and an object-storage abstraction, and connection-pool settings — settling every reliability item the first five parts foreshadowed in one go.

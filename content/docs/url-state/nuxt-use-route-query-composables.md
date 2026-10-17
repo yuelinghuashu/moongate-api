@@ -296,124 +296,13 @@ watch(searchInput, (val) => {
 > - ❌ **模块级 `Set`**：跨请求累积（`onUnmounted` 在服务端不触发），会造成服务端内存泄漏——正是 [《Nuxt SSR 内存泄漏排查实录》](./nuxt-ssr-memory-leak-troubleshooting) 记录的真实案例。
 > - ✅ **以 `nuxtApp` 为 key 的 `WeakMap`**：服务端每个请求有独立注册表（请求结束随 nuxtApp 被 GC），客户端全局唯一注册表（组件卸载时由 `onUnmounted` 清理）。这才是"SSR 安全"的完整形态。
 
-## 七、完整代码
+## 七、串成完整文件
+
+把 §三 的四个函数按顺序放进 `composables/useRouteQuery.ts` 就是完整实现：`useRouteQueryRaw`（§3.1）→ `useRouteQueryString`（§3.2）→ `useRouteQueryNumber`（§3.3）→ `useRouteQueryArray`（§3.4），文件头补一行：
 
 ```ts
-// composables/useRouteQuery.ts
 import { useRoute, useRouter } from "vue-router"
 import type { Ref } from "vue"
-
-/**
- * 基础原始查询参数读写（不暴露给外部，仅内部使用）
- * 负责核心的 URL 同步逻辑，使用 replace 避免产生多余历史记录
- */
-function useRouteQueryRaw(name: string) {
-  const route = useRoute()
-  const router = useRouter()
-  const value = ref(route.query[name])
-
-  watch(
-    () => route.query[name],
-    (newVal) => {
-      value.value = newVal
-    },
-  )
-
-  watch(value, (newVal) => {
-    const query = { ...route.query }
-    if (newVal !== undefined && newVal !== null && newVal !== "") {
-      query[name] = newVal
-    } else {
-      delete query[name]
-    }
-    router.replace({ query })
-  })
-
-  return value
-}
-
-/**
- * 字符串类型查询参数
- */
-export function useRouteQueryString(
-  name: string,
-  options?: { defaultValue?: string },
-) {
-  const raw = useRouteQueryRaw(name)
-  const defaultValue = options?.defaultValue ?? ""
-  return computed({
-    get: () => (raw.value?.toString() ?? defaultValue) as string,
-    set: (v: string) => {
-      raw.value = v === defaultValue ? undefined : v
-    },
-  }) as Ref<string>
-}
-
-/**
- * 数字类型查询参数
- */
-export function useRouteQueryNumber(
-  name: string,
-  options?: { defaultValue?: number },
-) {
-  const raw = useRouteQueryRaw(name)
-  const defaultValue = options?.defaultValue ?? 0
-  return computed({
-    get: () => {
-      const val = raw.value
-      if (val === undefined) return defaultValue
-      const num = Number(val)
-      return isNaN(num) ? defaultValue : num
-    },
-    set: (v: number) => {
-      raw.value = v === defaultValue ? undefined : v.toString()
-    },
-  }) as Ref<number>
-}
-
-/**
- * 字符串数组类型查询参数
- * 使用多参数格式：?tag=go&tag=vue
- * 与 Gin 的 c.QueryArray("tag") 天然兼容，无需后端额外解析
- */
-export function useRouteQueryArray(name: string) {
-  const route = useRoute()
-  const router = useRouter()
-
-  const getValue = (): string[] => {
-    const val = route.query[name]
-    if (!val) return []
-    return Array.isArray(val) ? val : [val]
-  }
-
-  const value = ref(getValue())
-
-  watch(
-    () => route.query[name],
-    () => {
-      const newVal = getValue()
-      if (JSON.stringify(value.value) !== JSON.stringify(newVal)) {
-        value.value = newVal
-      }
-    },
-  )
-
-  watch(
-    value,
-    (newVal) => {
-      const query = { ...route.query }
-      if (newVal.length === 0) {
-        delete query[name]
-      } else {
-        query[name] = newVal
-      }
-      router.replace({ query })
-    },
-    { deep: true },
-  )
-
-  return value
-}
 ```
 
 ## 八、总结

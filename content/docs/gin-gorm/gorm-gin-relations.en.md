@@ -10,12 +10,6 @@ tags:
   - ORM
 ---
 
-> **Prerequisites:** finish the crash course — the project with a single `books` table and the five CRUD handlers (plus an optional hard-delete route `DELETE /books/:id/permanent`; register it or not, per Part 9's final `main.go`). Conventions are the same as the crash course (`WithContext` on every DB call, `errors.Is` for 404, and the 400 · 404 · 201 semantics).
-
-A real book API can't live with only a `books` table. This part adds a second table, `comments`, and turns "one-to-many" into a real model.
-
----
-
 ## 1. Adding a Second Table: comments (One-to-Many)
 
 **Goal:** model the one-to-many relationship between `Book` and `Comment`, so "a book has many comments" becomes a real model.
@@ -47,17 +41,13 @@ Field notes:
 
 ### 1.2 Adding the Relationship Field to Book
 
-Append to `models/book.go`:
+Add just this one line to `models/book.go` (everything else is unchanged from Part 3 of the crash course):
 
 ```go
-type Book struct {
-    gorm.Model
-    Title    string    `json:"title" gorm:"not null"`
-    Author   string    `json:"author" gorm:"not null"`
-    Price    int       `json:"price"`
-    Comments []Comment `json:"comments,omitempty"` // relationship declaration, not a table column; only used by Preload
-}
+Comments []Comment `json:"comments,omitempty" gorm:"constraint:OnDelete:CASCADE"` // relationship declaration, not a table column; only used by Preload
 ```
+
+`constraint:OnDelete:CASCADE` makes AutoMigrate build the foreign key as `ON DELETE CASCADE`: hard-deleting a book takes its comments with it. Without it the foreign key defaults to `NO ACTION` and deleting a book that has comments errors out (exactly the ⚠️ in Part 8 of the crash course).
 
 > **Why doesn't this field need a `foreignKey` tag?** GORM's has-many default convention is "parent type name + parent primary-key field name" (`Book` + `ID` = `BookID`) — `Comment.BookID` hits that convention, so the association resolves automatically. **When must you write `gorm:"foreignKey:..."` explicitly?** When the child's foreign-key field drifts from the convention (say, you name it `BookRef`). And note: **this field must not be removed** — it's the relationship declaration that `Preload("Comments")` resolves by name.
 
@@ -212,7 +202,7 @@ func ListComments(c *gin.Context) {
         Offset((page - 1) * pageSize).
         Limit(pageSize).
         Find(&comments).Error; err != nil {
-        _ = c.Error(err) // specific error goes to Gin's log; the client message stays uniform
+        _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query comments"})
         return
     }
@@ -326,7 +316,7 @@ func GetBook(c *gin.Context) {
 
 `Preload("Comments")` makes a single `First` also fetch all of that book's comments: GORM queries `books` first, then fetches `comments` by `book_id` in one bulk query and assembles the result — **no N+1** (two SQL statements assembled once, not row-by-row queries).
 
-> **List endpoints don't Preload:** `GetBooks` stays exactly as it is (no comments); only the detail loads them. **The API contract is decided by what the data is for, not by what the ORM can do.**
+> **List endpoints don't Preload:** `GetBooks` stays exactly as it is (no comments); only the detail loads them (the reasoning is in the 1.2 note "Why doesn't `Comments` appear in list responses?").
 
 **Testing:**
 

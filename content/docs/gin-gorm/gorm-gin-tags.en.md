@@ -10,12 +10,6 @@ tags:
   - ORM
 ---
 
-> **Prerequisites:** finish [the crash course](./gorm-gin-crud-tutorial), [the relations part](./gorm-gin-relations), [the media part](./gorm-gin-media-query), and [the data engineering part](./gorm-gin-dto-batch) — the project with `books` + `comments` + cover images + paginated search. Conventions are the same as the crash course (`WithContext` on every DB call, `errors.Is` for 404, and the 400 · 404 · 201 semantics).
-
-When the relations part finished laying out "book → comments" (one-to-many), it left a teaser — "the third table, `tags` (many-to-many), is left for later". This part pays it off: adding tags to books, and covering GORM's many2many in one go — the join-table declaration, loading, filtering, and association add/remove.
-
----
-
 ## 1. Model & Migration: Declaring the many2many
 
 **Goal:** declare `Book` ↔ `Tag` with `many2many`, so `AutoMigrate` automatically creates `tags` and the join table `book_tags`.
@@ -31,21 +25,26 @@ import "gorm.io/gorm"
 
 type Tag struct {
     gorm.Model
-    Name string `json:"name" gorm:"uniqueIndex;not null"`
+    // partial unique index: only rows that are not soft-deleted are constrained
+    Name string `json:"name" gorm:"index:idx_tags_name,unique,where:deleted_at IS NULL;not null"`
 }
 ```
 
 - `Name` carries a unique index: the same tag name exists exactly once globally — this is the foundation of "tag deduplication" (`FirstOrCreate` relies on it; see Section 3);
+- **Why a *partial* unique index (`where deleted_at IS NULL`) instead of a plain one?** The crash course, Part 8, flagged a trap: soft-deleted rows still occupy a unique index, so re-creating the same name hits the constraint. That example used a hypothetical `ISBN`; here it is **real** — `tags` embeds `gorm.Model` (including `deleted_at`), so with a plain `uniqueIndex`, soft-deleting `Go` and then creating `Go` again fails on the unique constraint. With `where`, only live rows take part in uniqueness, and soft-deleted tags don't hold the name;
 
-> **Free-form tags vs. a controlled vocabulary (a design decision):** this part follows **user-defined tags** (the Douban-style model) — anyone can tag a book on the fly; the `Name` unique index plus `FirstOrCreate` deduplicates automatically, and tags are created on first use. If your product ships a **controlled vocabulary** of official, preset tags (the category model), the change is simple: drop the "create-by-name `FirstOrCreate` + filter-by-name" logic, and instead preset the tag table with the front end only sending existing `tagId`s; the handler validates the tag first (404) and then `Append`s — the relationship goes from "find-or-create by name" to "validate by id". The vocabulary model has no dedup problem, but it is less flexible; free-form tags need normalization as a safety net (see 3.1).
+> **Free-form tags vs. a controlled vocabulary (a design decision):** this part follows **user-defined tags** (the Douban-style model) — anyone can tag a book on the fly; the `Name` unique index plus `FirstOrCreate` deduplicates automatically, and tags are created on first use.
+> If your product ships a **controlled vocabulary** of official, preset tags (the category model), the change is simple: drop the "create-by-name `FirstOrCreate` + filter-by-name" logic, and instead preset the tag table with the front end only sending existing `tagId`s; the handler validates the tag first (404) and then `Append`s — the relationship goes from "find-or-create by name" to "validate by id". The vocabulary model has no dedup problem, but it is less flexible; free-form tags need normalization as a safety net (see 3.1).
 
 ### 1.2 Adding the Association Field to Book
 
 In `models/book.go`, append after `CoverPath` (existing fields such as `Comments` stay unchanged):
 
 ```go
-Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;"` // many-to-many: through the join table book_tags
+Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;constraint:OnDelete:CASCADE"` // many-to-many: through the join table book_tags
 ```
+
+`constraint:OnDelete:CASCADE` gives both join-table foreign keys cascade deletes — a physical book delete takes the join rows with it (why this is mandatory: Section 3.4).
 
 > **The essential difference from one-to-many:** a one-to-many relationship is written on the **child table** (`comments.book_id`); a many-to-many is written on the **association declaration** (`gorm:"many2many:book_tags;"`), and the join table itself **needs no model** — AutoMigrate creates it for you. What you declare is the "relationship", not a "table".
 
@@ -65,6 +64,9 @@ if err := db.DB.AutoMigrate(&models.Book{}, &models.Comment{}, &models.Tag{}); e
 \d book_tags
 -- you should see two columns, book_id and tag_id, whose primary key is the
 -- composite key (book_id, tag_id) (unique by default)
+
+\d tags
+-- idx_tags_name is a partial unique index: UNIQUE, btree (name) WHERE deleted_at IS NULL
 ```
 
 > The join table's composite primary key means the same (book, tag) pair can exist at most once — both "a duplicate append errors out" and "natural deduplication", covered later, stem from it.
@@ -143,7 +145,7 @@ curl "http://localhost:8080/tags/Go/books"
 
 ### 3.1 Adding a Tag to a Book (Check First, Then Insert — Idempotent)
 
-`FirstOrCreate` keeps tags unique (the `Name` unique index); `Association("Tags").Append` writes the join table:
+`FirstOrCreate` keeps tags unique (the `Name` unique index); `Association("Tags").Append` writes the join table (the imports in `handlers/tag.go`: `errors`, `gorm`, plus `db` / `models` / `net/http` / `gin`):
 
 ```go
 // AddBookTag appends a tag to a book: the tag is created first if it doesn't
@@ -289,23 +291,23 @@ db.DB.WithContext(c.Request.Context()).Model(&book).Association("Tags").Replace(
 `DELETE /books/:id` (soft delete) and `/books/:id/permanent` (physical delete) already exist — many-to-many gives each of the two deletes a layer of nuance:
 
 - **Soft delete:** stamps `books.deleted_at`, and the join-table rows stay **exactly as they are**; queries and Preloads on the book can't see it (the book itself is filtered out) — the same logic as the relations part's comments;
-- **Physical delete:** GORM by default does **not clean up the join-table rows**! Orphan `book_tags` rows don't block queries (the book is already gone from any book-based filter), but they waste table space, and ID reuse can splice data across records. Two solutions:
+- **Physical delete:** GORM **creates the join table with two foreign keys** (`book_tags.book_id → books.id`, `book_tags.tag_id → tags.id`), default **`NO ACTION`** — so "deleting the book leaves orphan join rows" is *not* the default behaviour; the default is a hard **error**: `DELETE FROM books` hits `fk_book_tags_book` and PostgreSQL returns `violates foreign key constraint` (the endpoint 500s). For a physical delete to work the foreign keys must cascade. Two solutions:
 
 ```go
-// Solution one: when deleting, explicitly cascade the delete to the associations (Select(clause.Associations))
-db.DB.WithContext(c.Request.Context()).
-    Select(clause.Associations).
-    Unscoped().Delete(&models.Book{}, id)
+// Solution one: cascade at the database level from the association declaration
+// (the §1.2 form; a freshly AutoMigrated database picks it up directly)
+Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;constraint:OnDelete:CASCADE"`
 ```
 
 ```sql
--- Solution two: give the join table a foreign-key constraint at table-creation time,
--- and let the database cascade the cleanup
-ALTER TABLE book_tags
-  ADD CONSTRAINT fk_book_tags_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE;
+-- Solution two: patch an existing database (AutoMigrate won't change a foreign key
+-- that already exists, so this has to be an explicit migration)
+ALTER TABLE book_tags DROP CONSTRAINT fk_book_tags_book;
+ALTER TABLE book_tags ADD CONSTRAINT fk_book_tags_book
+  FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE;
 ```
 
-> Use solution one for teaching (no change to the database structure); production often does both — GORM's explicit cascade plus the database foreign key as the safety net.
+> The same trap exists on `comments` (the crash course, Part 8 ⚠️): only after both foreign keys are `ON DELETE CASCADE` can `/permanent` delete a book that has comments and tags. Soft delete is unaffected — it only writes `deleted_at`.
 
 ---
 

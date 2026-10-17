@@ -207,7 +207,7 @@ func parsePagination(c *gin.Context) (page, pageSize int) {
 
 ### 2.2 改造 GetBooks
 
-> ⚠️ **破坏性契约变更：** `GET /books` 的响应从入门篇的裸数组变为 `{items,total,page,pageSize}` 对象——已有前端需要同步适配（系列路由总表里这条记为"1 → 3 改造"）。
+> ⚠️ **破坏性契约变更：** `GET /books` 的响应从入门篇的裸数组变为 `{items,total,page,pageSize}` 对象——已有前端需要同步适配（第 4 篇的路由总表把它记为"1 → 3 改造"）。
 
 `handlers/book.go`：
 
@@ -243,7 +243,7 @@ func GetBooks(c *gin.Context) {
         Offset((page - 1) * pageSize).
         Limit(pageSize).
         Find(&books).Error; err != nil {
-        _ = c.Error(err) // 具体错误交给 Gin 日志；客户端消息保持统一
+        _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
         return
     }
@@ -335,7 +335,7 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 | GET  | `/books`（改造）   | GetBooks 分页 + 搜索 + 评论数 |
 
 - 你现在的项目：`books` + `comments` 双表、封面图上传与静态服务、分页搜索列表、每本书带评论数；
-- 下一篇[《数据工程实战》](./gorm-gin-dto-batch)：批量导入真实数据、请求 DTO 与参数化校验、校验错误的友好翻译，末尾附系列一览与工程化条目清单（系列第 6/7 篇预告的集中对账）。
+- 下一篇[《数据工程实战》](./gorm-gin-dto-batch)：批量导入真实数据、请求 DTO 与参数化校验、校验错误的友好翻译，末尾附路由速查与工程化条目清单（系列第 6/7 篇预告的集中对账）。
 
 ---
 
@@ -347,6 +347,7 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 | --- | --- | --- | --- | --- |
 | 大小写不敏感的模糊搜索 | 本篇 §2.2 | `ILIKE ?` | `LIKE ?`（大小写由 collation 决定；必要时 `LOWER(col) LIKE LOWER(?)`） | `LIKE ?`（ASCII 内不区分大小写；非 ASCII 需 `COLLATE NOCASE`） |
 | 按主键分组后可直接选其它列（函数依赖） | 本篇 §2.3 | `SELECT books.*, COUNT(comments.id) ... GROUP BY books.id` | 默认 `only_full_group_by` 下报错：需把 `books.*` 展开成完整列清单并全部 `GROUP BY` | 同 MySQL（无函数依赖，需全列分组） |
-| 软删除 + 唯一字段的部分唯一索引 | 入门篇第八章 | `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` | 无直接等价：用生成列（`(deleted_at IS NULL)` 的布尔列）做部分唯一，或应用层保证 | 同 MySQL |
+| 软删除 + 唯一字段的部分唯一索引 | 入门篇第八章 / 多对多篇 §1.1 | `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` | 无直接等价：用生成列（`(deleted_at IS NULL)` 的布尔列）做部分唯一，或应用层保证 | 同 MySQL |
+| 前导通配搜索（`ILIKE '%q%'`）走索引 | 本篇 §2.2 | 默认**全表扫**；生产可加 `pg_trgm` + `CREATE INDEX ... USING gin (title gin_trgm_ops)` | `LIKE '%q%'` 同样扫全表，可用全文索引或外部引擎 | 无 trigram，前缀 `LIKE 'q%'` 可走索引 |
 
 另外 `%` / `_` 在 `ILIKE` 与 `LIKE` 里都是通配符（参数化只防 SQL 注入、不防通配符语义），三库一致。教程主线按 PostgreSQL 跑通；想换 MySQL / SQLite，把上面几行替换掉即可，其余代码不用动。

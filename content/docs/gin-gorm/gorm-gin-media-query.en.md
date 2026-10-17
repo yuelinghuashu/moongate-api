@@ -10,12 +10,6 @@ tags:
   - ORM
 ---
 
-> **Prerequisites:** finish the crash course ([GORM Crash Course: Building a Book Management API with Gin + GORM](./gorm-gin-crud-tutorial)) and the relations part ([GORM Relations in Practice: Comment Model, CRUD & Preload](./gorm-gin-relations)) — the two-table `books` + `comments` project. Code conventions are the same as in the crash course (`WithContext` on every DB call, `errors.Is` for 404, and the 400 · 404 · 201 semantics).
-
-Two things real endpoints can't dodge are filled in by this part: give books a **cover image** (Section 1), and upgrade the list query into **pagination + search + sort + comment count** (Section 2).
-
----
-
 ## 1. The Image Field: Cover Upload & Static Serving
 
 **Goal:** give books a cover image: a working upload endpoint — the image lands on disk, the path lands in the database, and the static directory is reachable from outside.
@@ -214,7 +208,7 @@ func parsePagination(c *gin.Context) (page, pageSize int) {
 
 ### 2.2 Reworking GetBooks
 
-> ⚠️ **Breaking contract change:** `GET /books`'s response changes from the crash course's bare array into a `{items,total,page,pageSize}` object — existing front ends must adapt in step (the series' route inventory logs this entry as a "1 → 3 rework").
+> ⚠️ **Breaking contract change:** `GET /books`'s response changes from the crash course's bare array into a `{items,total,page,pageSize}` object — existing front ends must adapt in step (Part 4's route inventory logs this entry as a "1 → 3 rework").
 
 `handlers/book.go`:
 
@@ -252,7 +246,7 @@ func GetBooks(c *gin.Context) {
         Offset((page - 1) * pageSize).
         Limit(pageSize).
         Find(&books).Error; err != nil {
-        _ = c.Error(err) // specific error goes to Gin's log; the client message stays uniform
+        _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
         return
     }
@@ -344,7 +338,7 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 | GET    | `/books` (reworked)  | GetBooks: pagination + search + comment count |
 
 - Your project now: the `books` + `comments` two tables, cover upload with static serving, a paginated & searchable list, and a comment count on every book;
-- Next part, [GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation](./gorm-gin-dto-batch): batch-import real data, request DTOs with parameterized validation, friendly translation of validation errors — and it closes with a series overview plus a list of the engineering items (the centralized reconciliation promised by the Parts 6/7 previews).
+- Next part, [GORM Data Engineering: Batch Import, Request DTOs & Validation-Error Translation](./gorm-gin-dto-batch): batch-import real data, request DTOs with parameterized validation, friendly translation of validation errors — and it closes with a route quick reference plus a list of the engineering items (the centralized reconciliation promised by the Parts 6/7 previews).
 
 ---
 
@@ -355,7 +349,8 @@ The only places in the whole series that truly depend on PostgreSQL are the few 
 | PG feature | Where it appears | This series' syntax | Moving to MySQL | Moving to SQLite |
 | --- | --- | --- | --- | --- |
 | Case-insensitive fuzzy search | this part §2.2 | `ILIKE ?` | `LIKE ?` (case is decided by the collation; use `LOWER(col) LIKE LOWER(?)` when needed) | `LIKE ?` (case-insensitive within ASCII; non-ASCII needs `COLLATE NOCASE`) |
+| Leading-wildcard search (`ILIKE '%q%'`) hitting an index | this part §2.2 | **full table scan** by default; in production add `pg_trgm` + `CREATE INDEX ... USING gin (title gin_trgm_ops)` | `LIKE '%q%'` scans too — use a full-text index or an external engine | no trigram; a prefix `LIKE 'q%'` can use an index |
 | Selecting other columns directly after grouping by the primary key (functional dependency) | this part §2.3 | `SELECT books.*, COUNT(comments.id) ... GROUP BY books.id` | errors under the default `only_full_group_by`: expand `books.*` into the full column list and `GROUP BY` all of it | same as MySQL (no functional dependency; must group every column) |
-| Partial unique index on a soft-delete + unique field | crash course, Part 8 | `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` | no direct equivalent: use a generated column (a boolean column of `(deleted_at IS NULL)`) to do the partial-unique, or guarantee it at the application layer | same as MySQL |
+| Partial unique index on a soft-delete + unique field | crash course, Part 8 / tags part §1.1 | `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` | no direct equivalent: use a generated column (a boolean column of `(deleted_at IS NULL)`) to do the partial-unique, or guarantee it at the application layer | same as MySQL |
 
 Also `%` / `_` are wildcards in both `ILIKE` and `LIKE` (parameterization only stops SQL injection, not wildcard semantics) — identical in all three databases. The tutorial's mainline runs through PostgreSQL; to switch to MySQL / SQLite, replace the few rows above and nothing else in the code needs to change.

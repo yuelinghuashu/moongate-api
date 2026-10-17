@@ -340,18 +340,7 @@ Full-width indentation and streaming look great in the terminal, but if the user
 
 ## VIII. Summary
 
-Six posts complete a full path:
-
-| Post | Problem Solved                            | Core Output                                       |
-| ---- | ----------------------------------------- | ------------------------------------------------- |
-| 1    | What format to write rules in?            | `.meph` format design                             |
-| 2    | What to run first?                        | Write a Faust contract from scratch and run it    |
-| 3    | How to parse precisely with good errors?  | Block scanner + Parser                            |
-| 4    | How to parse rules and variables?         | Rule expressions + interpolation syntax           |
-| 5    | How to ensure changes don't break things? | Golden file testing                               |
-| 6    | How to bring a contract to life?          | Five-layer prompt + branching + memory extraction |
-
-Together, they form a complete long-form narrative engine:
+Together, the six posts form a complete long-form narrative engine:
 
 ```plaintext
 Contract (.meph)
@@ -399,17 +388,6 @@ Child save (story.child.meph) ──→ Long-term continuity + multiple branches
         User input → rule matching → execute action → LLM streaming narrative
         → memory extraction → Session auto-save → hot-reload listener → wait for next input
 ```
-
-For quick reference on where to find specific content:
-
-| Flow Node      | Corresponding Post | Key Concepts                                    |
-| -------------- | ------------------ | ----------------------------------------------- |
-| `.meph` format | Post 1             | Block titles, rule syntax                       |
-| Hands-on       | Post 2             | Write a contract from scratch, no-LLM mode      |
-| Scanner        | Post 3             | Line number binding, whitelist-first            |
-| Parser         | Post 4             | Rule decomposition, interpolation syntax        |
-| Testing        | Post 5             | Golden file, error-scenario tests               |
-| Engine runtime | Post 6             | Five-layer prompt, branching, memory extraction |
 
 ---
 

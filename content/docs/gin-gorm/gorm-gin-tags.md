@@ -25,11 +25,13 @@ import "gorm.io/gorm"
 
 type Tag struct {
     gorm.Model
-    Name string `json:"name" gorm:"uniqueIndex;not null"`
+    // 部分唯一索引：只约束"未软删除"的行
+    Name string `json:"name" gorm:"index:idx_tags_name,unique,where:deleted_at IS NULL;not null"`
 }
 ```
 
 - `Name` 带唯一索引：同名标签全局只有一个——这是"标签去重"的基础（`FirstOrCreate` 依赖它，见第三节）；
+- **为什么是"部分"唯一索引（`where deleted_at IS NULL`）而不是普通唯一索引？** 入门篇第八章讲过一个坑：软删除的行仍占着唯一索引，同名重建会撞约束。那个例子当时是假设的 `ISBN`，在这里是**真实存在的**——`tags` 自带 `gorm.Model`（含 `deleted_at`），用普通 `uniqueIndex` 的话，软删过 `Go` 之后再建 `Go` 会直接报唯一约束冲突；加上 `where` 后，只有未删除的行参与唯一性，软删的标签不占名字；
 
 > **自由标签 vs 受控词表（设计决策）：** 本篇按「用户自定义标签」讲（豆瓣式）——任何人可随手打标签，`Name` 唯一索引 + `FirstOrCreate` 自动去重，标签随用随建。若你的产品是官方预置的**受控词表**（分类式），改法很简单：
 > 去掉「按名 `FirstOrCreate` + 按名筛选」，改为预置标签表 + 前端只传已有的 `tagId`，handler 先校验标签存在（404）再 `Append`——关系从「按名找或建」变成「按 id 校验」。词表模式没有去重问题，但灵活性低；自由标签需要用归一化兜底（见 3.1）。
@@ -39,8 +41,10 @@ type Tag struct {
 `models/book.go` 在 `CoverPath` 之后追加（`Comments` 等原有字段保持不变）：
 
 ```go
-Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;"` // 多对多：经连接表 book_tags
+Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;constraint:OnDelete:CASCADE"` // 多对多：经连接表 book_tags
 ```
+
+`constraint:OnDelete:CASCADE` 让连接表的两条外键都带级联删除——物理删书时数据库顺手清连接行（为什么必须有它，3.4 会讲）。
 
 > **与一对多的本质区别：** 一对多关系写在**子表**上（`comments.book_id`）；多对多关系写在**标签声明**上（`gorm:"many2many:book_tags;"`），连接表本身**不需要写模型**——AutoMigrate 会自动建。你声明的是"关系"，不是"表"。
 
@@ -59,6 +63,9 @@ if err := db.DB.AutoMigrate(&models.Book{}, &models.Comment{}, &models.Tag{}); e
 ```text
 \d book_tags
 -- 应看到 book_id、tag_id 两列，主键是 (book_id, tag_id) 复合主键（默认唯一）
+
+\d tags
+-- idx_tags_name 是带 WHERE 的部分唯一索引：UNIQUE, btree (name) WHERE deleted_at IS NULL
 ```
 
 > 连接表复合主键 = 同一对 (书, 标签) 最多一行——后面"重复追加报错"和"天然去重"都源于它。
@@ -137,7 +144,7 @@ curl "http://localhost:8080/tags/Go/books"
 
 ### 3.1 给书加标签（先查后插，保证幂等）
 
-`FirstOrCreate` 保证标签唯一（Name 唯一索引），`Association("Tags").Append` 写连接表：
+`FirstOrCreate` 保证标签唯一（Name 唯一索引），`Association("Tags").Append` 写连接表（`handlers/tag.go` 的 import：`errors`、`gorm`，以及 `db`/`models`/`net/http`/`gin`）：
 
 ```go
 // AddBookTag 给书追加一个标签：标签不存在则先创建，再写连接表（POST /books/:id/tags）
@@ -280,22 +287,21 @@ db.DB.WithContext(c.Request.Context()).Model(&book).Association("Tags").Replace(
 `DELETE /books/:id`（软删除）与 `/books/:id/permanent`（物理删除）已存在——多对多让两种删除各有一层讲究：
 
 - **软删除**：给 `books.deleted_at` 打时间戳，连接表行**原样保留**；书的查询/Preload 都看不见它（书本身被过滤）——与多表关联篇的 comments 同理；
-- **物理删除**：GORM 默认**不会清理连接表行**！孤儿 `book_tags` 行不挡查询（按书过滤时书已不存在），但会占表空间，ID 复用还会串数据。两种解法：
+- **物理删除**：GORM 建连接表时会**自带两条外键**（`book_tags.book_id → books.id`、`book_tags.tag_id → tags.id`），默认 **`NO ACTION`**——所以"删书留孤儿连接行"不是默认行为，**默认是直接报错**：`DELETE FROM books` 会撞 `fk_book_tags_book`，PostgreSQL 返回 `violates foreign key constraint`（接口 500）。想让物理删除成立，只能把外键改成级联。两种解法：
 
 ```go
-// 解法一：删除时显式连坐删除关联（Select(clause.Associations)）
-db.DB.WithContext(c.Request.Context()).
-    Select(clause.Associations).
-    Unscoped().Delete(&models.Book{}, id)
+// 解法一：在关联声明上让数据库级联删除（§1.2 的写法，新库 AutoMigrate 直接生效）
+Tags []Tag `json:"tags,omitempty" gorm:"many2many:book_tags;constraint:OnDelete:CASCADE"`
 ```
 
 ```sql
--- 解法二：建表时给连接表加外键约束，让数据库层级联清理
-ALTER TABLE book_tags
-  ADD CONSTRAINT fk_book_tags_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE;
+-- 解法二：已有库上补约束（AutoMigrate 不会改已有外键，只能显式迁移）
+ALTER TABLE book_tags DROP CONSTRAINT fk_book_tags_book;
+ALTER TABLE book_tags ADD CONSTRAINT fk_book_tags_book
+  FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE;
 ```
 
-> 教学用解法一（不动数据库结构）；生产常两手都做：GORM 显式连坐 + 数据库外键兜底。
+> 同样的坑在 `comments` 上也有一份（入门篇第八章的 ⚠️）：两条外键都改成 `ON DELETE CASCADE` 后，`/permanent` 才能删掉"有评论、有标签"的书。软删除不受外键影响——它只改 `deleted_at`。
 
 ---
 

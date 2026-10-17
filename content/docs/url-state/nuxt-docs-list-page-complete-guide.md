@@ -77,33 +77,12 @@ utils/
 - **双向同步**：`watch(route.query)` 将 URL 变化同步到内部 ref；`watch` 内部 ref 变化时调用 `router.push` 更新 URL。
 - **防抖**：搜索输入防抖，其他立即更新。
 
-### 3.2 代码示例（主文件 `index.vue` 中的状态定义与同步）
+### 3.2 代码示例（主文件 `index.vue` 中与第 1 篇不同的部分）
 
-双向同步的完整实现（`watch(route.query)` 同步到内部 ref、`pushQuery()` 写回 URL）与系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §2.2 完全一致，此处不再重复。本文只保留页面特有部分：状态定义、标签解析、搜索防抖与"视图模式不触发数据请求"的取舍。
+双向同步的完整实现（`watch(route.query)` 同步到内部 ref、`pushQuery()` 写回 URL）与系列第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §2.2 完全一致，此处不再重复；状态定义与 `parseTagsFromQuery` 也同第 1 篇。下面只保留**本页特有**的两处：搜索防抖与"视图模式不触发数据请求"的取舍。
 
 ```ts
-const route = useRoute()
-const router = useRouter()
-
-// 状态定义（全部从 URL 初始化，与第 1 篇相同）
-const searchInput = ref(route.query.search?.toString() || "")
-const searchOption = ref(Number(route.query.option) || 1)
-const page = ref(Number(route.query.page) || 1)
-const size = ref(Number(route.query.size) || 10)
-const viewMode = ref(Number(route.query.viewMode) || 1)
-const level = ref(route.query.level?.toString() || "")
-const tags = ref<string[]>([])
-
-// 解析 URL 中的标签（支持逗号分隔）
-const parseTagsFromQuery = () => {
-  const tagParam = route.query.tag
-  tags.value = tagParam
-    ? Array.isArray(tagParam)
-      ? tagParam
-      : tagParam.split(",")
-    : []
-}
-parseTagsFromQuery()
+// 状态定义、parseTagsFromQuery、pushQuery 均同第 1 篇 §2.2
 
 // 本页特有：搜索输入防抖 500ms，其他状态立即同步
 watchDebounced(
@@ -120,8 +99,6 @@ watchDebounced(
 watch([page, size, viewMode, level, tags], () => pushQuery())
 watch(searchOption, () => pushQuery())
 ```
-
-> **说明**：上文中被引用的 `watch(route.query)` 双向同步与 `pushQuery()` 函数体见第 1 篇 §2.2，此处为保证页面代码可独立阅读仅保留调用骨架。
 
 ## 四、数据获取：useAsyncData + 响应式依赖
 
@@ -210,7 +187,7 @@ watch(
 水合失败的根本原因是服务端与客户端渲染的 DOM 结构不一致。通用原则（初始状态从 URL 读、环境敏感值只在根组件计算、`useAsyncData` 的 `watch` 直接用 ref 等）在第 1 篇[《Nuxt 中 URL 与状态双向绑定指南》](./nuxt-url-state-guide) §四已有完整论述，此处只列出本文专属的两条增量：
 
 1. **`isFilterVisible` 使用 `useLocalStorage`**：它不影响初始 DOM（服务端默认为 false，客户端从 localStorage 读取后更新，但不改变水合结构）。
-2. **累积列表逻辑仅在水合完成后才启用**：通过 `page.value > 1` 条件限制——水合时 `page` 为 1，不会合并数据，服务端与客户端列表长度一致。
+2. **累积列表逻辑仅在水合完成后才启用**：即第 1 篇原则 3 在本页的落地——通过 `page.value > 1` 条件限制，水合时 `page` 为 1，不会合并数据，服务端与客户端列表长度一致。
 
 ## 六、组件拆分与职责划分
 
@@ -300,6 +277,8 @@ const handleTagClick = (tag: string, event: MouseEvent) => {
     newTags = tags.value.includes(tag) ? [] : [tag]
   }
   const query = { ...route.query }
+  // 注意：第 2 篇这一版用逗号分隔；第 3 篇会改成多参数 ?tag=go&tag=vue，
+  // 与 Go 后端的 c.QueryArray("tag") 对齐
   if (newTags.length) query.tag = newTags.join(",")
   else delete query.tag
   query.page = "1"
@@ -447,9 +426,4 @@ const clearAllFilters = () => {
 
 ### 相关链接
 
-- [Nuxt 中 URL 与状态双向绑定指南](./nuxt-url-state-guide)
 - [Nuxt 4 中安全实现状态持久化：根治水合失败指南](./nuxt-state-persistence-guide)
-
----
-
-_文中代码为实际项目简化版，完整实现请参考项目源码。_

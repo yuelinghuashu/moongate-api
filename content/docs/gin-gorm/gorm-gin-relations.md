@@ -41,17 +41,13 @@ type Comment struct {
 
 ### 1.2 Book 增加关联字段
 
-`models/book.go` 追加：
+`models/book.go` 只加这一行（其余字段同入门篇第三章）：
 
 ```go
-type Book struct {
-    gorm.Model
-    Title    string    `json:"title" gorm:"not null"`
-    Author   string    `json:"author" gorm:"not null"`
-    Price    int       `json:"price"`
-    Comments []Comment `json:"comments,omitempty"` // 关系声明，不是表列；仅用于 Preload
-}
+Comments []Comment `json:"comments,omitempty" gorm:"constraint:OnDelete:CASCADE"` // 关系声明，不是表列；仅用于 Preload
 ```
+
+`constraint:OnDelete:CASCADE` 让 AutoMigrate 把外键建成 `ON DELETE CASCADE`：物理删书时数据库连带删评论。不加的话外键默认 `NO ACTION`，删有评论的书会直接报错（入门篇第八章的 ⚠️ 讲的就是这个坑）。
 
 > **为什么这个字段连 `foreignKey` 标签都不用写？** 因为 GORM 的 has-many 默认约定是"父类型名 + 父主键字段名"（`Book` + `ID` = `BookID`）——`Comment.BookID` 恰好命中约定，关联自动解析。**什么时候必须显式写 `gorm:"foreignKey:..."`**：子表外键字段偏离约定时（比如改成 `BookRef`）；同时注意**这个字段不能删**——它是关系声明，`Preload("Comments")` 靠它按名字加载。
 
@@ -204,7 +200,7 @@ func ListComments(c *gin.Context) {
         Offset((page - 1) * pageSize).
         Limit(pageSize).
         Find(&comments).Error; err != nil {
-        _ = c.Error(err) // 具体错误交给 Gin 日志；客户端消息保持统一
+        _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询评论失败"})
         return
     }
@@ -315,7 +311,7 @@ func GetBook(c *gin.Context) {
 
 `Preload("Comments")` 让一次 `First` 顺带查出该书全部评论：GORM 先查 `books` 再按 `book_id` 批量查 `comments` 组装——**它不会触发 N+1**（是两条 SQL 一次组装，不是逐行查询）。
 
-> **列表接口不 Preload：** `GetBooks` 保持原样（不带评论）——详情才带。**接口契约由数据用途决定，不由 ORM 能力决定**。
+> **列表接口不 Preload：** `GetBooks` 保持原样（不带评论）——详情才带（理由见 1.2 的「为什么 `Comments` 不直接出现在列表响应里」）。
 
 **测试：**
 

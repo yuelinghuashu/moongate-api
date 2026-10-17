@@ -11,18 +11,6 @@ tags:
   - Engineering
 ---
 
-> 🎓 **Optional engineering reading:** continues the advanced track of [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) — production-focused topics for architecture and delivery roles; skipping it doesn't affect the main storyline of the first five parts.
-
-> **Prerequisites:** finish [GORM Engineering in Practice (Part 1)](./gorm-gin-engineering-layering) — a project that is already layered (`internal/` three tiers + constructor injection), whose handlers depend on interfaces, and where `go test ./internal/handler/` passes (covering the migrated interfaces). The code conventions are unchanged (`WithContext` / `errors.Is` for 404 / 400 · 404 · 201).
-
-Layering solved *testability*; this part solves *reliability*. The first five parts left teasers everywhere — unified errors, timeout 504, sort whitelist, file-header sniffing, object storage, connection pool — and this part settles all of them at once.
-
-> **Two-phase teaching approach (let me clear up a doubt first):** the first five parts have handlers hand-writing `c.JSON(error)` with error messages all over the place; this part folds that into "the handler only attaches the error, the middleware translates it uniformly". This is not "we taught it wrong before" — in the tutorial phase the boilerplate must be laid out flat so you can see exactly where each status code comes from; in the engineering phase it gets folded up, so you understand what the folding solves. Both phases are indispensable; this part is phase two.
->
-> **Map of this part:** four topics, each unfolded as "motivation → old way → new way → why": (1) unified errors (ok/fail + error middleware + slog + 504); (2) security hardening (sort whitelist, file-header sniffing); (3) storage abstraction (Uploader); (4) connection pool. (3) and (4) are "optional production reading" — skipping them doesn't break the closed loop of (1) and (2).
-
----
-
 ## 1. Unified Error Handling: Middleware + ok/fail + slog
 
 **Goal:** fold the `c.JSON(status, gin.H{"error": ...})` boilerplate scattered across handlers into "the handler only attaches the error, the middleware translates it uniformly", log server-side with `slog`, and map timeout errors to 504.
@@ -94,7 +82,7 @@ func errorMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         c.Next()
 
-        logList := c.Errors.ByType(gin.ErrorTypePrivate)
+        logList := c.Errors // c.Error(err) already attaches ErrorTypePrivate; no need to filter by type
         if len(logList) == 0 {
             return // nothing attached (or a success response) — no fallback needed
         }
@@ -126,8 +114,10 @@ Register it:
 
 ```go
 r.Use(gin.Logger(), gin.Recovery())
-r.Use(errorMiddleware())
+r.Use(handler.ErrorMiddleware()) // exported by the handler package (errorMiddleware inside it)
 ```
+
+> This replaces Part 6's minimal `errorMiddleware`: the file is still `internal/handler/middleware.go`, it just gains ok/fail, `slog`, and the 504 classification; `main` registers it through `handler.ErrorMiddleware()`.
 
 > **Two benefits of the error middleware:** first, **status-code semantics are centralized** — the `errors.Is` discrimination logic (404 vs 500 vs 504) is gathered from every handler into one place; the tutorial parts kept the explicit checks so you could see them, and the engineering part is where they get folded up. Second, **logging is separated from the response** — `slog` records the real cause, while the client only receives `"Internal Server Error"`, so no internal details leak (echoing the "Why are the error messages uniform?" note in [GORM Relations in Practice](./gorm-gin-relations)).
 
@@ -227,6 +217,8 @@ curl -X POST http://localhost:8080/books/1/cover -F "cover=@/etc/hosts;filename=
 
 In the Media & Query part, `UploadCover` nailed storage to the local disk with `c.SaveUploadedFile(file, filepath.Join("uploads", ...))`. Switching to S3 would mean editing the handler — and a handler shouldn't know storage details. Extract an interface:
 
+> One caveat first: **a single-storage project (local disk only) doesn't need this abstraction** — `SaveUploadedFile` is enough; extract the interface when you actually move to object storage or a second backend, so the cost pays for itself.
+
 ```go
 // internal/storage/uploader.go — one file with everything up front (interface + Disk + S3 in a single file)
 package storage
@@ -286,13 +278,13 @@ func (s *S3Uploader) Save(ctx context.Context, key string, r io.Reader) (string,
 
 ### 3.2 The Handler Only Knows the Interface
 
-After the refactor, `UploadCover` depends only on `storage.Uploader` — business logic and storage are decoupled. First close the three "wiring" gaps (Part 6's `BookHandler` has only one field, `svc`): add `up` to the struct and give the constructor a second parameter; add `SetCover` to the Service (check the book exists first, then update `cover_path`); add the matching single-field update to the repository.
+After the refactor, `UploadCover` depends only on `storage.Uploader` — business logic and storage are decoupled. First close the three "wiring" gaps (Part 6's `BookHandler` has only one field, `svc`): add `up` to the struct and give the constructor a second parameter; add `BookExists` (existence) and `SetCover` (update only) to the Service; add the matching single-field update to the repository — and add `SetCover(ctx, id, url)` to the interface too (`FirstBook` is already in Part 6's interface block).
 
 ```go
-// internal/handler/book.go — the BookHandler struct and constructor (compare Part 6's single-argument version)
+// internal/handler/book.go — compared with Part 6 only two things change: one extra field, one extra parameter
 type BookHandler struct {
     svc *service.BookService
-    up  storage.Uploader // Part 6 had only svc; this part adds the storage abstraction (see 3.1)
+    up  storage.Uploader // new: the storage abstraction (see 3.1)
 }
 
 func NewBookHandler(svc *service.BookService, up storage.Uploader) *BookHandler {
@@ -301,11 +293,14 @@ func NewBookHandler(svc *service.BookService, up storage.Uploader) *BookHandler 
 ```
 
 ```go
-// internal/service/book.go — BookService adds SetCover: first confirm the book exists (404), then update the cover field
+// internal/service/book.go — split existence from the single-field update:
+// the handler uses BookExists for the 404; SetCover only updates (one fewer round trip)
+func (s *BookService) BookExists(ctx context.Context, id uint) error {
+    _, err := s.repo.FirstBook(ctx, id)
+    return err
+}
+
 func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
-    if _, err := s.repo.FirstBook(ctx, id); err != nil {
-        return err
-    }
     return s.repo.SetCover(ctx, id, url)
 }
 
@@ -313,7 +308,7 @@ func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
 //   r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url).Error
 ```
 
-The complete new `UploadCover` (the §2.2 sniffer + the Media & Query part's size cap + the rewound stream header + the 3.1 storage abstraction, all combined in one function):
+The complete new `UploadCover` (the §2.2 sniffer + the Media & Query part's size cap + the rewound stream header + the 3.1 storage abstraction, all combined in one function) — same name, same route: it replaces the old `handlers/cover.go` version from the Media & Query part rather than adding a second endpoint:
 
 ```go
 func (h *BookHandler) UploadCover(c *gin.Context) {
@@ -323,9 +318,9 @@ func (h *BookHandler) UploadCover(c *gin.Context) {
         fail(c, http.StatusBadRequest, "invalid id")
         return
     }
-    // 1. The book must exist (the 404 is translated by the error middleware)
-    book, err := h.svc.GetBook(c.Request.Context(), uint(id))
-    if err != nil {
+    // 1. The book must exist (the 404 is translated by the error middleware):
+    //    use BookExists rather than GetBook — the latter also Preloads comments and tags for nothing
+    if err := h.svc.BookExists(c.Request.Context(), uint(id)); err != nil {
         _ = c.Error(err)
         return
     }
@@ -360,14 +355,14 @@ func (h *BookHandler) UploadCover(c *gin.Context) {
     }
     // 6. Hand it to the Uploader to store: the extension comes from the content, never trusting the user's filename suffix
     ext := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[ctype]
-    key := fmt.Sprintf("%d_%d%s", book.ID, time.Now().UnixNano(), ext)
+    key := fmt.Sprintf("%d_%d%s", id, time.Now().UnixNano(), ext)
     url, err := h.up.Save(c.Request.Context(), key, fh)
     if err != nil {
         _ = c.Error(err)
         return
     }
     // 7. What goes into the DB is Save's displayable URL/path (not the raw key); then respond
-    if err := h.svc.SetCover(c.Request.Context(), book.ID, url); err != nil {
+    if err := h.svc.SetCover(c.Request.Context(), uint(id), url); err != nil {
         _ = c.Error(err)
         return
     }
@@ -414,13 +409,12 @@ The seven-part series closes its loop here — let's reconcile, one by one, ever
 
 | Promise | Where it was made | Where it landed |
 | --- | --- | --- |
-| `BookRepository` interface + Service + injection + `internal/` | [GORM Crash Course](./gorm-gin-crud-tutorial) "Learning-grade structure" note / ch10 "Engineering pay-off" / [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §1 |
-| `httptest` table-driven tests (+ sqlmock) | [GORM Data Engineering](./gorm-gin-dto-batch) §4 / crash course note | Engineering (Part 1), §2 |
-| Generic `GetPaginated[T]` | crash course ch10 / [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §3 |
-| Aggregation + pagination fold-up (`GetPaginatedScan`, optional) | [GORM Media & Query Enhancement](./gorm-gin-media-query) §2.3 | Engineering (Part 1), §3 (optional note) |
+| `BookRepository` interface + Service + injection + `internal/` | [GORM Crash Course](./gorm-gin-crud-tutorial) "Learning-grade structure" note / [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §1 |
+| `httptest` table-driven tests | [GORM Data Engineering](./gorm-gin-dto-batch) §4 / crash course note | Engineering (Part 1), §2 |
+| Generic `GetPaginated[T]` | [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §3 |
 | Transactions `db.Transaction()` | crash course ch10 | Engineering (Part 1), §1 (atomic Service operations) |
 | Timeout mapped to 504 | crash course ch10 | This part, §1 (the error middleware) |
-| Unified error handling / ok-fail / slog | [GORM Relations in Practice](./gorm-gin-relations) "Why are the error messages uniform?" note / crash course ch10 | This part, §1 |
+| Unified error handling / ok-fail / slog | [GORM Relations in Practice](./gorm-gin-relations) "Why are the error messages uniform?" note | This part, §1 |
 | Sort whitelist | [GORM Media & Query Enhancement](./gorm-gin-media-query) §2.2 note & key point | This part, §2 |
 | File-header sniffing | [GORM Media & Query Enhancement](./gorm-gin-media-query) §1.3 key point | This part, §2 |
 | Object-storage abstraction | [GORM Media & Query Enhancement](./gorm-gin-media-query) §1.3 (cover_path/cover_key comparison table) | This part, §3 |

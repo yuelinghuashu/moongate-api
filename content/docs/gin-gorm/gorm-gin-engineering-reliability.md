@@ -19,12 +19,12 @@ tags:
 
 前五篇的响应有两种：成功裸数据、失败 `{"error": ...}`。前端每次都要猜。统一成显式形状。先把系列的**响应形状演进**收在一张表里讲清——按顺序读的读者会看到它是"摊开 → 收拢"的教学过程；跳读的读者请以最新一篇的契约为准：
 
-| 阶段 | 篇目 | 成功形状 | 错误形状 | 为什么变 |
-| --- | --- | --- | --- | --- |
-| 单表入门 | 入门篇 | 裸对象 / 裸数组 | `{"error": string}` | 教学：先看清"返回什么就是什么" |
-| 分页化 | 媒体篇（第 3 篇） | `{items, total, page, pageSize}` | 仍是 `{"error": string}` | 列表需要分页元数据——**破坏性变更**，契约以本篇为准 |
-| 多条校验错误 | 数据工程篇（第 4 篇） | 不变 | 可选新增 `{"errors": []}` | 想一次告诉客户端所有字段问题（新形态，接口自选） |
-| 统一收拢 | 本篇（第 7 篇） | `{"ok": true, "data": …}` | `{"ok": false, "error": …}` | 成败显式化 + 收拢样板——**最终契约** |
+| 阶段         | 篇目                  | 成功形状                         | 错误形状                    | 为什么变                                           |
+| ------------ | --------------------- | -------------------------------- | --------------------------- | -------------------------------------------------- |
+| 单表入门     | 入门篇                | 裸对象 / 裸数组                  | `{"error": string}`         | 教学：先看清"返回什么就是什么"                     |
+| 分页化       | 媒体篇（第 3 篇）     | `{items, total, page, pageSize}` | 仍是 `{"error": string}`    | 列表需要分页元数据——**破坏性变更**，契约以本篇为准 |
+| 多条校验错误 | 数据工程篇（第 4 篇） | 不变                             | 可选新增 `{"errors": []}`   | 想一次告诉客户端所有字段问题（新形态，接口自选）   |
+| 统一收拢     | 本篇（第 7 篇）       | `{"ok": true, "data": …}`        | `{"ok": false, "error": …}` | 成败显式化 + 收拢样板——**最终契约**                |
 
 于是从本篇起，成功走 `ok(...)`、失败走 `fail(...)`：
 
@@ -82,7 +82,7 @@ func errorMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         c.Next()
 
-        logList := c.Errors.ByType(gin.ErrorTypePrivate)
+        logList := c.Errors // c.Error(err) 挂的就是 ErrorTypePrivate，不用再按类型过滤
         if len(logList) == 0 {
             return // 没有挂错（或成功响应），不用兜底
         }
@@ -114,8 +114,10 @@ func errorMiddleware() gin.HandlerFunc {
 
 ```go
 r.Use(gin.Logger(), gin.Recovery())
-r.Use(errorMiddleware())
+r.Use(handler.ErrorMiddleware()) // handler 包导出（同包内仍叫 errorMiddleware）
 ```
+
+> 这行是替换篇 6 的 `errorMiddleware` 最小版：文件仍是 `internal/handler/middleware.go`，只是多了 ok/fail、`slog` 与 504 分类；`main` 包通过 `handler.ErrorMiddleware()` 注册。
 
 > **错误中间件的两个好处**：一是**状态码语义集中**——`errors.Is` 的区分逻辑（404 vs 500 vs 504）从每个 handler 收进一处，前五篇正文保持显式检查是为了看清它，工程篇就该收拢；二是**日志与响应分离**——`slog` 记真实原因，客户端只拿到 `"Internal Server Error"`，不泄露内部细节（呼应[《多表关联实战》](./gorm-gin-relations)的「错误消息为什么统一」注记）。
 
@@ -215,6 +217,8 @@ curl -X POST http://localhost:8080/books/1/cover -F "cover=@/etc/hosts;filename=
 
 媒体篇的 `UploadCover` 里 `c.SaveUploadedFile(file, filepath.Join("uploads", ...))` 把存储钉死在本地磁盘。换成 S3 要改 handler——而 handler 不该知道存储细节。抽接口：
 
+> 先提醒一句：**单存储（只落本地盘）的项目不需要这层抽象**，直接 `SaveUploadedFile` 就够；等你真的要换对象存储或多后端时再抽，接口成本才值。
+
 ```go
 // internal/storage/uploader.go —— 文件头一次给全（interface + Disk + S3 三段拼成同一个文件）
 package storage
@@ -274,13 +278,13 @@ func (s *S3Uploader) Save(ctx context.Context, key string, r io.Reader) (string,
 
 ### 3.2 handler 只认接口
 
-`UploadCover` 改造后只依赖 `storage.Uploader`——业务与存储解耦。先补齐三处"接线"（篇 6 的 `BookHandler` 只有 `svc` 一个字段）：结构体加 `up`、构造器变双参；Service 加 `SetCover`（先验书存在、再更新 `cover_path`）；repository 加对应的单字段更新。
+`UploadCover` 改造后只依赖 `storage.Uploader`——业务与存储解耦。先补齐三处"接线"（篇 6 的 `BookHandler` 只有 `svc` 一个字段）：结构体加 `up`、构造器变双参；Service 加 `BookExists`（存在性）与 `SetCover`（只更新 `cover_path`）；repository 加对应的单字段更新——接口也要同步加 `SetCover(ctx, id, url)`（`FirstBook` 篇 6 接口块已有）。
 
 ```go
-// internal/handler/book.go —— BookHandler 结构体与构造器（对照篇 6 的单参版本）
+// internal/handler/book.go —— 对照篇 6 只改两处：多一个字段、构造器多一个参数
 type BookHandler struct {
     svc *service.BookService
-    up  storage.Uploader // 篇 6 只有 svc；本篇补存储抽象（见 3.1）
+    up  storage.Uploader // 新增：存储抽象（见 3.1）
 }
 
 func NewBookHandler(svc *service.BookService, up storage.Uploader) *BookHandler {
@@ -289,11 +293,14 @@ func NewBookHandler(svc *service.BookService, up storage.Uploader) *BookHandler 
 ```
 
 ```go
-// internal/service/book.go —— BookService 增加 SetCover：先确认书存在（404），再更新封面字段
+// internal/service/book.go —— 存在性检查与单字段更新分开：
+// handler 用 BookExists 判 404；SetCover 只更新，不再重复查一次（少一次往返）
+func (s *BookService) BookExists(ctx context.Context, id uint) error {
+    _, err := s.repo.FirstBook(ctx, id)
+    return err
+}
+
 func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
-    if _, err := s.repo.FirstBook(ctx, id); err != nil {
-        return err
-    }
     return s.repo.SetCover(ctx, id, url)
 }
 
@@ -301,7 +308,7 @@ func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
 //   r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url).Error
 ```
 
-完整的新 `UploadCover`（§2.2 嗅探 + 媒体篇大小上限 + 倒回流头 + 3.1 存储抽象一次合体）：
+完整的新 `UploadCover`（§2.2 嗅探 + 媒体篇大小上限 + 倒回流头 + 3.1 存储抽象一次合体）——同名同路由，直接覆盖媒体篇 `handlers/cover.go` 里的旧版，不是新增第二个接口：
 
 ```go
 func (h *BookHandler) UploadCover(c *gin.Context) {
@@ -311,9 +318,9 @@ func (h *BookHandler) UploadCover(c *gin.Context) {
         fail(c, http.StatusBadRequest, "id 非法")
         return
     }
-    // 1. 书必须存在（404 由错误中间件翻译）
-    book, err := h.svc.GetBook(c.Request.Context(), uint(id))
-    if err != nil {
+    // 1. 书必须存在（404 由错误中间件翻译）：
+    //    用 BookExists 而不是 GetBook —— 后者会顺带 Preload 评论和标签，纯属浪费
+    if err := h.svc.BookExists(c.Request.Context(), uint(id)); err != nil {
         _ = c.Error(err)
         return
     }
@@ -348,14 +355,14 @@ func (h *BookHandler) UploadCover(c *gin.Context) {
     }
     // 6. 交给 Uploader 落盘：扩展名由内容给出，不信任用户文件名后缀
     ext := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[ctype]
-    key := fmt.Sprintf("%d_%d%s", book.ID, time.Now().UnixNano(), ext)
+    key := fmt.Sprintf("%d_%d%s", id, time.Now().UnixNano(), ext)
     url, err := h.up.Save(c.Request.Context(), key, fh)
     if err != nil {
         _ = c.Error(err)
         return
     }
     // 7. 入库的是 Save 返回的可展示 URL/路径（不是原始 key），并响应
-    if err := h.svc.SetCover(c.Request.Context(), book.ID, url); err != nil {
+    if err := h.svc.SetCover(c.Request.Context(), uint(id), url); err != nil {
         _ = c.Error(err)
         return
     }
@@ -400,19 +407,18 @@ sqlDB.SetMaxIdleConns(10)           // 空闲上限：池中最多保留 10 条�
 
 系列七篇至此闭环——把五篇处处的预告逐条对账：
 
-| 承诺                                                 | 出处                                                                                                         | 兑现位置                           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| `BookRepository` 接口 + Service + 注入 + `internal/` | [入门篇](./gorm-gin-crud-tutorial)「学习级结构」注记 / ch10「工程化沉淀」/ [dto 篇](./gorm-gin-dto-batch)§四 | 工程化（一）一                     |
-| `httptest` 表驱动测试（+ sqlmock）                   | [dto 篇](./gorm-gin-dto-batch)§四 / 入门篇注记                                                               | 工程化（一）二                     |
-| 泛型 `GetPaginated[T]`                               | 入门篇 ch10 / [dto 篇](./gorm-gin-dto-batch)§四                                                              | 工程化（一）三                     |
-| 聚合分页收拢（`GetPaginatedScan`，选读）             | [媒体篇](./gorm-gin-media-query)§2.3                                                                         | 工程化（一）三（选读注记）         |
-| 事务 `db.Transaction()`                              | 入门篇 ch10                                                                                                  | 工程化（一）一（Service 原子操作） |
-| 超时映射 504                                         | 入门篇 ch10                                                                                                  | 本篇一（错误中间件）               |
-| 统一错误处理 / ok-fail / slog                        | [多表关联篇](./gorm-gin-relations)「错误消息为什么统一」注记 / 入门篇 ch10                                   | 本篇一                             |
-| 排序白名单                                           | [媒体篇](./gorm-gin-media-query)§2.2 注释与要点                                                              | 本篇二                             |
-| 文件头嗅探                                           | [媒体篇](./gorm-gin-media-query)§1.3 要点                                                                    | 本篇二                             |
-| 对象存储抽象                                         | [媒体篇](./gorm-gin-media-query)§1.3（cover_path/cover_key 对照表）                                          | 本篇三                             |
-| 连接池                                               | 入门篇 ch10                                                                                                  | 本篇四                             |
+| 承诺                                                 | 出处                                                                                     | 兑现位置                           |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
+| `BookRepository` 接口 + Service + 注入 + `internal/` | [入门篇](./gorm-gin-crud-tutorial)「学习级结构」注记 / [dto 篇](./gorm-gin-dto-batch)§四 | 工程化（一）一                     |
+| `httptest` 表驱动测试                                | [dto 篇](./gorm-gin-dto-batch)§四 / 入门篇注记                                           | 工程化（一）二                     |
+| 泛型 `GetPaginated[T]`                               | [dto 篇](./gorm-gin-dto-batch)§四                                                        | 工程化（一）三                     |
+| 事务 `db.Transaction()`                              | 入门篇 ch10                                                                              | 工程化（一）一（Service 原子操作） |
+| 超时映射 504                                         | 入门篇 ch10                                                                              | 本篇一（错误中间件）               |
+| 统一错误处理 / ok-fail / slog                        | [多表关联篇](./gorm-gin-relations)「错误消息为什么统一」注记                             | 本篇一                             |
+| 排序白名单                                           | [媒体篇](./gorm-gin-media-query)§2.2 注释与要点                                          | 本篇二                             |
+| 文件头嗅探                                           | [媒体篇](./gorm-gin-media-query)§1.3 要点                                                | 本篇二                             |
+| 对象存储抽象                                         | [媒体篇](./gorm-gin-media-query)§1.3（cover_path/cover_key 对照表）                      | 本篇三                             |
+| 连接池                                               | 入门篇 ch10                                                                              | 本篇四                             |
 
 **你现在的项目**：三层架构（book 维度链路端到端迁移，其余按同构模板补齐）+ handler 层表驱动测试 + 统一错误中间件（404/500/504 语义集中 + slog 日志）+ 排序白名单 + 文件头嗅探（含流倒回与 2MB 上限）+ 可切换的存储抽象 + 连接池配置——可以放心上线的骨架齐了。
 

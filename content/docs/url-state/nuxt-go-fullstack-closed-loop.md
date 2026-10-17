@@ -154,23 +154,10 @@ tags                 →  tag[]    →  c.QueryArray("tag")
 
 ### 3.3 searchMode 枚举约定
 
-```go
-// Go 后端
-type SearchMode string
-
-const (
-    SearchModeAll         SearchMode = "all"         // 标题 + 描述
-    SearchModeTitle       SearchMode = "title"       // 仅标题
-    SearchModeDescription SearchMode = "description" // 仅描述
-)
-
-func (m SearchMode) IsValid() bool {
-    return m == SearchModeAll || m == SearchModeTitle || m == SearchModeDescription
-}
-```
+Go 侧的定义（常量 + `IsValid`）在 §4.2，这里只对齐约定：
 
 ```typescript
-// 前端 Nuxt（与后端完全一致）
+// 前端 Nuxt 与 Go 后端完全一致
 type SearchMode = "all" | "title" | "description"
 ```
 
@@ -514,9 +501,7 @@ const _useDocs = () => {
     { deep: true },
   )
 
-  // 构建请求参数
-  // 注意：使用 URLSearchParams 的多参数格式（?tag=go&tag=vue）
-  // 与 Gin 的 c.QueryArray("tag") 天然兼容
+  // 构建请求参数（多参数格式 ?tag=go&tag=vue，与 Gin 的 QueryArray 对齐，见 §7.3）
   const queryParams = computed(() => {
     const params = new URLSearchParams()
     params.append("page", String(page.value))
@@ -744,15 +729,6 @@ tags := c.QueryArray("tag")  // ["go", "vue"] ✅
 ## 九、结语
 
 本篇将前三篇的 URL 状态管理延伸到了 Go 后端，完成了从前端到后端的完整数据流闭环。
-
-### 系列四篇的演进路径
-
-| 篇目  | 核心内容                               | 技术栈                 |
-| ----- | -------------------------------------- | ---------------------- |
-| 1     | URL ↔ 状态双向同步原理                 | Nuxt + Vue Router      |
-| 2     | 完整文档列表页实现（手写方案）         | Nuxt 前端              |
-| 3     | useRouteQuery 可复用封装               | Nuxt + Composition API |
-| **4** | **URL 状态 → Go API → 完整数据流闭环** | **Nuxt + Go**          |
 
 你现在拥有的是一套完整可复用的全栈架构：
 
