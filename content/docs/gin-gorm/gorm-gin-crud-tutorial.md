@@ -157,7 +157,7 @@ type Book struct {
 
 - **`gorm.Model` 的字段在 JSON 里是大写原名**：它没有 json 标签，所以响应里是 `"ID"`、`"DeletedAt": null`。想统一命名就用自定义字段声明或 DTO（见第十章「响应精简」）。
 - **金额统一用 `int`（单位：分）**：浮点数有精度误差（`0.1 + 0.2 != 0.3`），`price: 5990` 表示 59.90 元，前端需要"元"时自行除以 100。
-- **`binding:"required"` 加在 DTO 上，不加在模型上**：模型会被更新接口复用，`required` 会把部分更新拦成 400（第五章会用一次）。
+- **`binding:"required"` 加在 DTO 上，不加在模型上**：模型会被创建、更新等多个接口复用，各接口的必填规则并不相同，钉死在模型上就会把合法请求拦成 400（第五章会用一次）。
 
 **命名规则：**
 
@@ -247,6 +247,7 @@ func CreateBook(c *gin.Context) {
     // 2. 插入数据库
     result := db.DB.WithContext(c.Request.Context()).Create(&book)
     if result.Error != nil {
+        _ = c.Error(result.Error) // 具体错误进日志，客户端只看统一文案
         c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
         return
     }
@@ -255,6 +256,8 @@ func CreateBook(c *gin.Context) {
     c.JSON(http.StatusCreated, book)
 }
 ```
+
+> **500 之前那行 `_ = c.Error(result.Error)` 是干什么的？** 它把具体错误交给 Gin：`gin.Default()` 里的 Logger 中间件会把 `c.Errors` 拼进访问日志（日志行末尾的 `Error #01: ...`），而 HTTP 响应仍只给客户端一句统一文案——**原因进日志，细节不外泄**。`c.Error` 本身返回 error（只在 `c.Errors` 装满或传的不是 error 时才非 nil），所以用 `_` 丢掉返回值；本篇其余 handler 的 500 分支都照这一行办，生产环境再换成 `slog` + 统一错误中间件（见第七篇）。
 
 > ⚠️ 路由到第九章才注册。建议先跳到第九章把 `main.go` 抄下来跑起服务，再回头逐章测试第五~八章的接口。
 
@@ -282,11 +285,11 @@ curl -X POST http://localhost:8080/books \
 
 > `ID` / `CreatedAt` / `DeletedAt` 大写是 `gorm.Model` 没有 json 标签导致的（见第三章）；`title` / `author` / `price` 是我们自己用 tag 定义的。
 
-### 进阶：加参数校验
+### 请求校验：用 DTO 收请求
 
-上面的代码不校验请求内容，`{"price":5990}`（没有 `title` / `author`）也能插入成功。校验标签加在**收请求的结构**上，而不是 `models.Book` 上：
+上一版不校验任何东西——`{"price":5990}`（没有 `title` / `author`）也能插库成功。那只是为了让「请求 → 结构体 → 数据库」这条线先跑通；**真实接口不能这样上线**。校验不是锦上添花，而是接口契约的一部分，并且它属于**收请求的结构**，不属于 `models.Book`：
 
-**第一步：定义请求结构（DTO）。** 放在 `handlers/book.go` 里、`CreateBook` 上方即可（小写开头够用；若以后要跨包引用，改成导出的 `CreateBookInput`）：
+**第一步：定义请求结构（DTO）**，放在 `handlers/book.go` 里、`CreateBook` 上方（小写够用；将来要跨包引用再改成导出的 `CreateBookInput`）：
 
 ```go
 // createBookInput：创建图书专用的请求结构（DTO），校验标签只属于它
@@ -297,52 +300,28 @@ type createBookInput struct {
 }
 ```
 
-**为什么不在 `models.Book` 上加 `binding:"required"`？** 同一个模型还被第七章的更新接口复用——更新是部分更新（只传 `{"price":6990}`），模型上有 `required` 会让它被 400 拦下。所以：**模型管数据库结构与 JSON 命名，校验是接口契约、属于请求结构（DTO）**；正式落地见[《数据工程实战》](./gorm-gin-dto-batch)。
-
-**第二步：让 `CreateBook` 真的绑这个结构。** 只定义 DTO 不换绑定目标，代码一个字都不会变（缺字段照样插库成功）——把第五章开头那版 `CreateBook` 整体替换成下面这版：
+**第二步：把原来的「绑定 → 入库」两步换掉。** 只定义 DTO 而不换绑定目标，代码一个字都不会变——缺字段照样插库成功：
 
 ```go
-// CreateBook 创建图书（POST /books）——先绑 DTO 校验，再翻译成模型入库
-func CreateBook(c *gin.Context) {
-    // 1. 绑定到 DTO：binding 标签在这一层生效，缺字段当场 400
-    var input createBookInput
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON（title、author 必填，price 不能为负）"})
-        return
-    }
-
-    // 2. DTO → 模型：只搬「客户端可以决定」的字段
-    //    DeletedAt / ID / CreatedAt 这些不许客户端碰的字段，DTO 里根本没有，自然搬不过来
-    book := models.Book{
-        Title:  input.Title,
-        Author: input.Author,
-        Price:  input.Price,
-    }
-
-    // 3. 插入数据库（注意传给 Create 的是 book，不是 input）
-    result := db.DB.WithContext(c.Request.Context()).Create(&book)
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
-        return
-    }
-
-    // 4. 返回落库后的模型（响应形状和第五章开头完全一致，多出来的 ID/CreatedAt 由 GORM 填）
-    c.JSON(http.StatusCreated, book)
+var input createBookInput // 原来是 var book models.Book
+if err := c.ShouldBindJSON(&input); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON（title、author 必填，price 不能为负）"})
+    return
 }
+book := models.Book{Title: input.Title, Author: input.Author, Price: input.Price} // DTO → 模型
+result := db.DB.WithContext(c.Request.Context()).Create(&book)                    // 之后照旧
 ```
 
-> **为什么不直接 `Create(&input)`？** 因为 `input` 是 DTO、`book` 是模型：模型嵌了 `gorm.Model`（主键、时间戳、软删），将来还会加 `cover_path` 这类不归客户端管的列。DTO 到模型的这一段「翻译」是刻意的安全检查——只有你显式写进 `models.Book{...}` 的字段才会落库，客户端多传的键（比如 `"deletedAt"`）在绑定时就丢了。这就是后文反复提到的「收什么和存什么是两件事」。
+> **为什么不写 `Create(&input)`？** `input` 是 DTO、`book` 是模型：模型嵌了 `gorm.Model`（主键、时间戳、软删），以后还会多出 `cover_path` 这类不归客户端管的列。这行「翻译」是刻意的安全检查——只有写进 `models.Book{...}` 的字段才会落库（客户端多传的键为什么必须挡在门外，见第七章的 ⚠️）。校验错误翻译、更新 DTO 等完整实践见[《数据工程实战》](./gorm-gin-dto-batch)。
 
-改完之后，缺字段的请求才真的会走 400 分支：
+**为什么不在 `models.Book` 上加 `binding:"required"`？** 模型会被多个接口复用：创建要全量、更新的入参各不相同，钉死在模型上，凡是只需要部分字段的接口都会被 400 拦下。**模型管数据库结构与 JSON 命名，校验是接口契约、属于请求结构**。
+
+改完后缺字段才真的走 400：
 
 ```bash
-# 缺少必填字段 → 400（原代码这里是 201）
+# 400（原代码这里是 201）；传完整字段 → 201，响应与章首示例一致
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books \
   -H "Content-Type: application/json" -d '{"price":5990}'
-
-# 完整字段 → 201，响应与第五章开头的示例一致
-curl -s -X POST http://localhost:8080/books \
-  -H "Content-Type: application/json" -d '{"title":"Go语言实战","author":"张三","price":5990}'
 ```
 
 ### 为什么必须带 Context
@@ -363,6 +342,7 @@ func GetBooks(c *gin.Context) {
     books := []models.Book{} // 空切片而非 nil：表为空时 JSON 输出 []，而不是 null
     result := db.DB.WithContext(c.Request.Context()).Find(&books)
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
         return
     }
@@ -380,6 +360,7 @@ func GetBook(c *gin.Context) {
         return
     }
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
         return
     }
@@ -412,6 +393,7 @@ func UpdateBook(c *gin.Context) {
         return
     }
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
         return
     }
@@ -423,58 +405,61 @@ func UpdateBook(c *gin.Context) {
         return
     }
 
-    // 3. 更新字段（仅更新 input 中的非零字段，WHERE 条件由上方 First 决定）
+    // 3. 更新字段（WHERE 由上方 First 决定；只写 input 里的非零字段——见心智模型 3）
     result = db.DB.WithContext(c.Request.Context()).Model(&book).Updates(input)
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
         return
     }
 
-    // 4. 返回更新后的数据（GORM 会把更新的非零字段回写 book，与落库一致；零值字段保持上方 First 加载的值）
+    // 4. 返回更新后的数据（GORM 把本次改动的字段回写 book；没改的字段保持上方 First 加载的值）
     c.JSON(http.StatusOK, book)
 }
 ```
 
 ### PUT 还是 PATCH？
 
-`PUT` 严格语义是「整体替换」，部分更新该用 `PATCH`。本章的 `Updates` 只改传入的非零字段，本质是 PATCH 语义——入门示例用 `PUT` 没问题，想更严谨就把路由改成 `r.PATCH("/books/:id", handlers.UpdateBook)`。
+`PUT` 严格语义是「整体替换」，部分更新该用 `PATCH`。下一节会把更新实现成**真正的整体替换**，所以这里用 `PUT` 是对的；若以后想把接口改成部分更新（只改客户端传了的字段），那是另一套写法，本篇不展开（见[《数据工程实战》§2.2](./gorm-gin-dto-batch)）。
 
 ### 零值陷阱
 
-`Updates` 传入**结构体**时，GORM 默认忽略零值字段（`0`、`""`、`false`），所以 `{"price":0}` 会被静默跳过。这是设计如此，但"把价格改成 0"就做不到。
+心智模型 3 的直接后果：**`{"price":0}` 会被静默跳过**，"把价格改成 0"做不到。**根源不在 GORM，而在绑定那一层**：非指针字段收 JSON 时，"没传"和"传了零值"落进同一个 `0`——GORM 拿到的是「值」，不是「意图」。
 
-解法是**指针 DTO**：`nil` 表示"没传"，`&0` 表示"传了 0"：
+本篇只给一条写法：**把接口做成真正的整体替换（PUT），用 `Select` 列出参与更新的列。** PUT 的语义本来就是「整体替换」，零值自然是合法值，于是不需要指针——列出的列零值照写，白名单还顺带堵住批量赋值（替换上面 `UpdateBook` 的第 2、3 步，第 1 步查存在不动；`result` 已在第 1 步声明，这里用 `=` 续上）：
 
 ```go
-type updateBookInput struct {
-    Title  *string `json:"title"`
-    Author *string `json:"author"`
-    Price  *int    `json:"price" binding:"omitempty,gte=0,lte=1000000"`
+type updateBookInput struct { // PUT 要求全量提交，所以 required 在这里是合理的
+    Title  string `json:"title" binding:"required"`
+    Author string `json:"author" binding:"required"`
+    Price  int    `json:"price" binding:"gte=0,lte=1000000"`
 }
 
 var in updateBookInput
 if err := c.ShouldBindJSON(&in); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON"})
+    c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON（title、author 必填）"})
     return
 }
-// 只把非 nil 的字段放进更新
-fields := map[string]any{}
-if in.Title != nil { fields["title"] = *in.Title }
-if in.Author != nil { fields["author"] = *in.Author }
-if in.Price != nil { fields["price"] = *in.Price }
-db.DB.WithContext(c.Request.Context()).Model(book).Updates(fields)
+result = db.DB.WithContext(c.Request.Context()).Model(&book).
+    Select("title", "author", "price"). // 列出的列零值照写，同时就是白名单
+    Updates(models.Book{Title: in.Title, Author: in.Author, Price: in.Price})
 ```
 
-> **⚠️ 别把模型当请求体。** 上面 `var input models.Book` 直接拿模型收请求：JSON 绑定不区分大小写，`{"deletedAt":"2026-01-01T00:00:00Z"}` 能把书软删、`{"coverUrl":"/uploads/x.jpg"}` 能绕过上传接口改封面——等于开放了批量赋值。修法就是上面这个 DTO：**收什么和存什么是两件事**。本篇保留模型版本只为让零值陷阱看得见；上线代码请用指针 DTO（[《数据工程实战》](./gorm-gin-dto-batch)会把它正式落地）。
->
-> 想少写一点也可以用 `map[string]any` + 键白名单，但 map 里的数字会变成 `float64`、类型保证全丢，不推荐。
+```sql
+-- 传 {"title":"","author":"新作者","price":0} 时生成的 SQL（GORM v1.31.2 实测）
+UPDATE `books` SET `title`="",`author`="新作者",`price`=0,`updated_at`="..." WHERE ... AND `id` = 1
+```
+
+代价是 PUT 语义本身要求的：客户端漏传 `title` 等于「清空标题」，不是「不改」——所以 `required` 必须加。**这条写法只适用于 PUT**；如果这个接口本质上是部分更新（「没传就不动」），那是另一套写法，本篇不展开，见[《数据工程实战》§2.2](./gorm-gin-dto-batch)。
+
+> **⚠️ 别把模型当请求体。** `var input models.Book` 直接拿模型收请求，而 JSON 绑定不区分大小写：`{"deletedAt":"2026-01-01T00:00:00Z"}` 能把书软删、`{"coverUrl":"/uploads/x.jpg"}` 能绕过上传接口改封面——等于开放了批量赋值。修法就是 DTO：**收什么和存什么是两件事**。本篇保留模型版本只为让零值陷阱看得见。
 
 测试：
 
 ```bash
-curl -X PUT http://localhost:8080/books/1 \
-  -H "Content-Type: application/json" \
-  -d '{"price":6990}'
+# PUT 全量替换：0 真的写进去了
+curl -X PUT http://localhost:8080/books/1 -H "Content-Type: application/json" \
+  -d '{"title":"","author":"新作者","price":0}'
 ```
 
 ## 第八章：删除图书
@@ -489,6 +474,7 @@ func DeleteBook(c *gin.Context) {
     // 执行软删除
     result := db.DB.WithContext(c.Request.Context()).Delete(&models.Book{}, id)
     if result.Error != nil { // 先验错误，再判行数——顺序不能反
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
         return
     }
@@ -512,6 +498,8 @@ GORM 实际执行的是 `UPDATE ... SET deleted_at=NOW() WHERE id=? AND deleted_
 
 软删除后，默认的 `First` / `Find` 会自动加上 `deleted_at IS NULL`；要查已删除的记录，用 `db.DB.WithContext(c.Request.Context()).Unscoped().First(&book, id)`。
 
+> **软删只动自己这一行**：它不会级联到子表（比如这本书的评论）。想让"删书连带隐藏评论"，第二篇 §2.4 专门讨论了两种做法与怎么取舍（读侧判定 vs 写侧联动）。
+
 > **⚠️ 唯一约束的坑**：软删除的行仍占着唯一索引——带唯一索引的字段（比如 ISBN）在软删后重建同名记录会撞约束。PostgreSQL 的解法是**部分唯一索引**：`CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`，只让未删除的行参与唯一性。第 5 篇会在真实的 `tags.name` 上用一遍。
 
 ### 如果需要物理删除（彻底删除）
@@ -525,6 +513,7 @@ func DeleteBookPermanently(c *gin.Context) {
     // Unscoped() 绕过软删除，执行物理删除
     result := db.DB.WithContext(c.Request.Context()).Unscoped().Delete(&models.Book{}, id)
     if result.Error != nil { // 先验错误，再判行数（与 DeleteBook 同一套顺序）
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
         return
     }
@@ -551,7 +540,7 @@ r.Use(requestTimeout(5 * time.Second)) // 请求级超时：慢查询被 context
 r.POST("/books", handlers.CreateBook)
 r.GET("/books", handlers.GetBooks)
 r.GET("/books/:id", handlers.GetBook)
-r.PUT("/books/:id", handlers.UpdateBook) // 严格 REST 语义下部分更新用 PATCH
+r.PUT("/books/:id", handlers.UpdateBook) // 整体替换语义（Select 列出参与更新的列）
 r.DELETE("/books/:id", handlers.DeleteBook)
 r.DELETE("/books/:id/permanent", handlers.DeleteBookPermanently) // 可选
 
@@ -606,7 +595,7 @@ func main() {
     r.POST("/books", handlers.CreateBook)
     r.GET("/books", handlers.GetBooks)
     r.GET("/books/:id", handlers.GetBook)
-    r.PUT("/books/:id", handlers.UpdateBook) // 严格 REST 语义下部分更新用 PATCH
+    r.PUT("/books/:id", handlers.UpdateBook) // 整体替换语义（Select 列出参与更新的列）
     r.DELETE("/books/:id", handlers.DeleteBook)
     // 可选：第八章的物理删除示例（默认软删除即可满足需求）
     r.DELETE("/books/:id/permanent", handlers.DeleteBookPermanently)
@@ -626,7 +615,7 @@ func main() {
 | 创建       | `db.Create(&book)`                         | `INSERT INTO ...`                              |
 | 查询所有   | `db.Find(&books)`                          | `SELECT * FROM ...`                            |
 | 查询单条   | `db.First(&book, id)`                      | `SELECT * FROM ... WHERE id = ?`               |
-| 更新       | `db.Model(&book).Updates(input)`           | `UPDATE ... SET ...`                           |
+| 更新       | `db.Model(&book).Select("...").Updates(x)` | `UPDATE ... SET ...`（列表里的列零值也写）     |
 | 软删除     | `db.Delete(&models.Book{}, id)`            | `UPDATE ... SET deleted_at = NOW()`            |
 | 物理删除   | `db.Unscoped().Delete(&models.Book{}, id)` | `DELETE FROM ...`                              |
 | 查询已删除 | `db.Unscoped().First(&models.Book{}, id)`  | `SELECT * FROM ... WHERE id = ?`（不限软删除） |

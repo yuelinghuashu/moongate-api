@@ -17,17 +17,7 @@ tags:
 
 ### 1.1 问题的本质：handler 为什么不可测
 
-回顾入门篇的 `GetBook`：
-
-```go
-func GetBook(c *gin.Context) {
-    // ...直接调 db.DB.WithContext(...).Preload(...).First(&book, id)
-}
-```
-
-handler 和"具体拿到哪条数据"绑死了。要测试它，就得让测试环境里有一个真的 PostgreSQL——慢、脆、还得造数据。用户可见的行为（状态码、JSON 形状）测不了，这也是前五篇用 curl 验证的原因。**可测性 = 数据访问可替换**，这是分层的全部动机。
-
-> **先撞一次墙（为什么前五篇只能 curl）：** 假设想给入门篇的 `GetBook` 写单元测试——handler 内部直接 `db.DB.First(&book, id)`，测试就必须：连上一个真 PostgreSQL、建表、准备好"存在 / 不存在 / 数据库故障"三种数据，还要保证测试之间互不污染。这已经不是"单元测试"，是"起一套环境再手动演戏"；故障分支（连接断开）在测试里几乎模拟不出来。所以前五篇用 curl 验证不是偷懒，而是**当时 handler 没有可替换的数据入口**——正文的下一步就从给数据访问安一个"可替换的入口"下手。
+入门篇的 `GetBook` 里，数据入口就是那行 `db.DB.WithContext(...).Preload(...).First(&book, id)`——handler 和"具体拿到哪条数据"绑死了。要测它就得让测试环境里有一个真的 PostgreSQL：慢、脆、还得造数据，连"连接断开"这种故障分支都演不出来；用户可见的行为（状态码、JSON 形状）反而测不了，这也是前五篇只能 curl 的原因。**可测性 = 数据访问可替换**，这是分层的全部动机。
 
 ### 1.2 目标包结构
 
@@ -39,10 +29,12 @@ go-learning/                    # gin-demo
 ├── db/db.go
 ├── models/
 ├── internal/                   # internal/ 包约束：外部 import 即编译错误
-│   ├── repository/             # 数据访问（GORM 的活只在这里出现）
+│   ├── service/                # 业务逻辑（跨表、事务在此）+ 数据访问接口（消费者侧）
+│   │   ├── store.go            # BookStore 接口 + ListParams
 │   │   └── book.go
-│   ├── service/                # 业务逻辑（跨表、事务在此）
-│   │   └── book.go
+│   ├── repository/             # 数据访问实现（GORM 的活只在这里出现，不定义接口）
+│   │   ├── book.go
+│   │   └── pagination.go       # 泛型 GetPaginated[T]（第三节）
 │   └── handler/                # HTTP 层（参数、绑定、响应）
 │       ├── book.go
 │       └── pagination.go
@@ -51,98 +43,97 @@ go-learning/                    # gin-demo
 
 `internal/` 的语义：包路径含 `internal` 时，只有其父目录内的代码能 import 它——外部模块一引用就编译报错。它把"这是本项目内部实现"变成编译期事实，而不是约定。
 
-### 1.3 BookRepository 接口
+### 1.3 数据访问契约：接口放消费者侧
 
-`internal/repository/book.go`——接口定义"数据访问需要什么"，实现藏在后面。下面直接给出迁移完成后的**最终接口**；但动手时别一次写全：**第一刀只为实现一条链路立 2~3 个方法**（先从 `FindByID` 起步），跑通 1.6 的注入与测试后，再按这份清单补齐。先读全量形态，是为了看清"数据访问需要什么"这件事的完整边界：
+先决定接口放哪：**放 `internal/service`，只声明 Service 真正调用的方法**（Go 的惯例是"接受接口、返回结构体"，接口定义在消费者一侧）；`internal/repository` 只给实现，不定义接口。
 
 ```go
-package repository
-
-import (
-    "context"
-
-    "go-learning/models"
-
-    "gorm.io/gorm"
-)
-
-// BookRepository 数据访问契约：handler/service 只看接口，不看实现
-type BookRepository interface {
-    Create(ctx context.Context, book *models.Book) error
-    FirstBook(ctx context.Context, id uint) (*models.Book, error) // 存在性检查（不带关联）
-    FindByID(ctx context.Context, id uint) (*models.Book, error)  // 带 Comments 与 Tags 的完整详情
-    Query(ctx context.Context, q string) *gorm.DB                              // 搭好条件的链（篇7 的排序白名单要用）
-    ListOrdered(ctx context.Context, query *gorm.DB, order string, page, pageSize int) ([]models.Book, int64, error)
-    List(ctx context.Context, q string, page, pageSize int) ([]models.Book, int64, error) // 便捷版：ListOrdered 固定倒序
-    ListByTag(ctx context.Context, tagName string) ([]models.Book, error)
-    UpdateStruct(ctx context.Context, id uint, input interface{}) error // Updates：零值不更新
+// internal/service/store.go —— 消费者侧接口：只声明 Service 真正调用到的 4 个方法
+type BookStore interface {
+    FindByID(ctx context.Context, id uint) (*models.Book, error)  // 详情：带评论预览与标签
+    FirstBook(ctx context.Context, id uint) (*models.Book, error) // 存在性检查，不带关联
+    List(ctx context.Context, p ListParams) ([]models.Book, int64, error)
     SetCover(ctx context.Context, id uint, url string) error
-    SoftDelete(ctx context.Context, id uint) error
-    HardDelete(ctx context.Context, id uint) error
-    CreateComment(ctx context.Context, comment *models.Comment) error
-    ListComments(ctx context.Context, bookID uint, page, pageSize int) ([]models.Comment, int64, error)
-    DeleteComment(ctx context.Context, bookID, cid uint) error // 越权防护：book_id + id
-    AddTag(ctx context.Context, bookID, tagID uint) error
-    RemoveTag(ctx context.Context, bookID, tagID uint) error
-    FirstOrCreateTag(ctx context.Context, name string) (*models.Tag, error)
-    CountBookTag(ctx context.Context, bookID, tagID uint) (int64, error)
+}
+
+// ListParams 列表查询参数：排序在 Service 侧经白名单映射成 order 片段。
+// 这里传字符串而不是 *gorm.DB —— 接口才真的挡得住 GORM。
+type ListParams struct {
+    Q              string // 模糊搜索关键词（标题/作者）
+    Order          string // 已白名单化的排序片段，如 "created_at DESC"
+    Page, PageSize int
 }
 ```
 
-> **半接口的诚实说明：** `Query` / `ListOrdered` 的签名里出现了 `*gorm.DB`——调用方（Service，以及篇 7 的排序白名单）拿到的仍是一条 GORM 链。这说明"接口把 GORM 完全挡住"是理想态；现实里为了省样板，常让查询链透出。教学上接受这个妥协（想彻底隔离，要把查询也抽象成自己的 DSL，那是另一层话题），但要清楚：**这个接口挡住的是"数据库在哪里、怎么连"，不是"用 GORM 查"**。
+> **为什么只有 4 个方法？** 因为这 4 个就是本篇 + 下一篇实际调用到的全部：详情、存在性检查、列表、落封面。建书走的是事务连接（`tx.Create`，见 1.4），评论/标签/更新/删除这些端点本篇没有迁移——它们的待办记在 §1.7 的清单里，等你真迁移到那一条时再加方法。**接口按需长出来，而不是先铺 18 个让 fake 去填。**
+>
+> **为什么不再有 `Query(ctx, q) *gorm.DB`？** 把 GORM 链透出接口，等于让 Service 依赖 GORM 的具体类型，"换实现"就成了空话。条件与排序收进 `ListParams` 之后，只有 repository 内部碰 `*gorm.DB`——接口挡住的是"数据库在哪、怎么查"。
 
-GORM 实现（`NewBookRepository` 返回接口，调用方永远不需要知道具体类型）：
+repository 只给实现（`internal/repository/book.go`），返回具体类型：
 
 ```go
 type gormBookRepository struct {
     db *gorm.DB
 }
 
-// NewBookRepository 构造 GORM 实现并向上转型为接口
-func NewBookRepository(db *gorm.DB) BookRepository {
+// NewBookRepository 返回具体实现（Go 的习惯：返回结构体，接受接口）
+func NewBookRepository(db *gorm.DB) *gormBookRepository {
     return &gormBookRepository{db: db}
 }
 
+// 编译期断言：实现必须满足 Service 的需求（漏一个方法就编译不过）
+var _ service.BookStore = (*gormBookRepository)(nil)
+
 func (r *gormBookRepository) FindByID(ctx context.Context, id uint) (*models.Book, error) {
     var book models.Book
-    if err := r.db.WithContext(ctx).Preload("Comments").Preload("Tags").First(&book, id).Error; err != nil {
+    if err := r.db.WithContext(ctx).
+        Preload("Comments", func(tx *gorm.DB) *gorm.DB {
+            // 详情只带最新 5 条评论预览（有界写法见多表关联篇 §3.1）
+            return tx.Order("created_at DESC").Limit(5)
+        }).
+        Preload("Tags").
+        First(&book, id).Error; err != nil {
         return nil, err
     }
     return &book, nil
 }
 
-func (r *gormBookRepository) Query(ctx context.Context, q string) *gorm.DB {
-    query := r.db.WithContext(ctx).Model(&models.Book{})
-    if q != "" {
-        like := "%" + q + "%"
-        query = query.Where("title ILIKE ? OR author ILIKE ?", like, like)
+func (r *gormBookRepository) FirstBook(ctx context.Context, id uint) (*models.Book, error) {
+    var book models.Book
+    if err := r.db.WithContext(ctx).First(&book, id).Error; err != nil {
+        return nil, err
     }
-    return query
+    return &book, nil
 }
 
-func (r *gormBookRepository) ListOrdered(ctx context.Context, query *gorm.DB, order string, page, pageSize int) ([]models.Book, int64, error) {
-    var total int64
-    if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
-        return nil, 0, err
+func (r *gormBookRepository) List(ctx context.Context, p service.ListParams) ([]models.Book, int64, error) {
+    query := r.db.WithContext(ctx).Model(&models.Book{})
+    if p.Q != "" {
+        like := "%" + p.Q + "%"
+        query = query.Where("title ILIKE ? OR author ILIKE ?", like, like)
     }
     var books []models.Book
-    if err := query.Order(order).Offset((page - 1) * pageSize).Limit(pageSize).Find(&books).Error; err != nil {
+    total, err := GetPaginated(query, p.Order, p.Page, p.PageSize, &books) // 泛型封装见第三节
+    if err != nil {
         return nil, 0, err
     }
     return books, total, nil
 }
 
-// List 便捷版：固定倒序（无排序参数场景直接用）
-func (r *gormBookRepository) List(ctx context.Context, q string, page, pageSize int) ([]models.Book, int64, error) {
-    return r.ListOrdered(ctx, r.Query(ctx, q), "created_at DESC", page, pageSize)
+// SetCover 单字段更新：0 行 → ErrRecordNotFound（与 1.5 的"0 行 → 404"约定一致）
+func (r *gormBookRepository) SetCover(ctx context.Context, id uint, url string) error {
+    res := r.db.WithContext(ctx).Model(&models.Book{}).Where("id = ?", id).Update("cover_path", url)
+    if res.Error != nil {
+        return res.Error
+    }
+    if res.RowsAffected == 0 {
+        return gorm.ErrRecordNotFound
+    }
+    return nil
 }
 ```
 
-> **接口该多大？** 上面是**仓库最终形态**（18 个方法，与配套仓库逐字一致）——本篇只把 Create / Get 两条链路端到端走通，其余方法按 §1.7 清单逐个补；接口一次给全，是为了让你先看清"数据访问需要什么"的完整边界。教学上按聚合根收拢成少数接口、写法同构；真实项目常按聚合根拆多个接口，原则一样。
->
-> 另一个口径要提前对齐：`AddTag(bookID, tagID uint)` 是**按 id** 的底层操作——而路由/前端语义是**按名字**打标签（多对多篇 §3.1）。"把名字解析成 id、按名建标签、幂等去重"是 Service 的活（见 1.4），接口层只暴露最原子的数据操作。
->
-> **真实项目会按聚合根拆开。** 这里给 18 个方法的单接口，是为了让 §1.7 的迁移清单一张表讲完；实际项目通常拆成三个：`BookRepository`（Create / FirstBook / FindByID / List / Update / SoftDelete / SetCover）、`CommentRepository`（CreateComment / ListComments / DeleteComment）、`TagRepository`（FirstOrCreateTag / AddTag / RemoveTag / CountBookTag / ListByTag）。拆开后 handler 多注入两个字段，换来每个接口都能独立替换和 fake——按自己的聚合边界挑一种，别把 18 个方法当模板。
+> 真实项目通常按聚合根拆成几个小接口（`BookStore` / `CommentStore` / `TagStore`），每个只包含它那个消费者的方法——完整的数据访问边界见 §1.7 的清单。
 
 ### 1.4 Service 层与事务
 
@@ -162,11 +153,11 @@ import (
 
 // BookService 业务逻辑：依赖接口，不依赖数据库
 type BookService struct {
-    repo BookRepository
+    repo BookStore
     db   *gorm.DB // 事务天然跨仓库，需要直接拿连接（见下方注记）
 }
 
-func NewBookService(repo BookRepository, db *gorm.DB) *BookService {
+func NewBookService(repo BookStore, db *gorm.DB) *BookService {
     return &BookService{repo: repo, db: db}
 }
 
@@ -194,15 +185,20 @@ func (s *BookService) CreateBookWithTags(ctx context.Context, book *models.Book,
     }
     return book, nil
 }
+
+// GetBook 详情：直接透传给 repository（带 Comments 预览与 Tags，见 1.3 的 FindByID）
+// 注意错误要原样返回：gorm.ErrRecordNotFound 会由 handler 挂给错误中间件，翻成 404
+func (s *BookService) GetBook(ctx context.Context, id uint) (*models.Book, error) {
+    return s.repo.FindByID(ctx, id)
+}
+
+// ListBooks 列表（分页 + 搜索）。排序参数在篇 7 §2.1 加白名单后会扩展成 (q, sort, dir)
+func (s *BookService) ListBooks(ctx context.Context, q string, page, pageSize int) ([]models.Book, int64, error) {
+    return s.repo.List(ctx, q, page, pageSize)
+}
 ```
 
-> **事务与分层的诚实取舍：** 事务天然"跨仓库"（一个事务里要操作书、标签、连接表三处），塞进 repository 接口会让接口爆炸（`WithTx(func(repo) error)` 的 Unit of Work 风格）。本篇务实：`*gorm.DB` 直接注入 Service 做事务，其余数据访问走 `repo`。接口仍挡得住**单条数据操作**（`Create` / `FindByID` / `SoftDelete` 可被 fake，handler 分支可测）；事务是**跨操作的编排**，不属于任何单个 repo 方法。三种摆法：
->
-> 1. **Service 持 `*gorm.DB` 做事务**（本篇路线）：最直白，代价是事务路径靠真库集成验证。
-> 2. **Unit of Work**：`repo.Transaction(ctx, func(tx BookRepository) error)`——可测性最好，接口与实现成本都涨。
-> 3. **注入 `TxRunner` 接口**：是 ① 的可测升级版，接口只多一个方法。
->
-> 选型判据：事务是否真的跨表、事务路径要不要进自动化测试、repo 方法是否超过 ~10 个或事务点超过 ~3 处——后两条命中就尽早从 ① 升 ③。这也是系列没有"工程化（三）"的原因：七篇闭环，剩下的交给真实规模。
+> **事务为什么放在 Service：** 一个事务要动书、标签、连接表三处，天然跨仓库；塞进 repository 接口就是 Unit of Work 那一套（`WithTx(func(repo) error)`），接口会爆炸。本篇务实：`*gorm.DB` 直接注入 Service 包事务，其余数据访问走 `repo`——代价是事务路径靠真库集成验证；要可测就升 `TxRunner`（接口只多一个方法）。「删书 + 连带软删评论」（篇 2 §2.4 的备选方案）同属这类跨表事务，也只能放在 Service。
 
 ### 1.5 Handler 只剩三件事
 
@@ -223,10 +219,13 @@ import (
     "github.com/go-playground/validator/v10"
 )
 
-// createBookInput：在数据工程篇的 DTO 上只加这一行（Title / Author / Price 与校验规则不变；
-// 完整结构见数据工程篇 §2 或配套仓库 internal/handler/book.go）
+// createBookInput：数据工程篇 §2 的 DTO 原样搬过来，只多了 Tags 一行
+// （Title / Author / Price 与校验规则不变；Price 仍是 *int + required，见数据工程篇）
 type createBookInput struct {
-    Tags []string `json:"tags"`
+    Title  string   `json:"title" binding:"required"`
+    Author string   `json:"author" binding:"required"`
+    Price  *int     `json:"price" binding:"required,gte=0,lte=1000000"`
+    Tags   []string `json:"tags"`
 }
 
 // bindBookInput 绑定 + 校验错误翻译：把数据工程篇 §2.1 的逻辑收进一个函数，所有 handler 复用
@@ -292,23 +291,34 @@ func (h *BookHandler) Get(c *gin.Context) {
     }
     c.JSON(http.StatusOK, book)
 }
+
+// List 列表：参数 → Service → 响应（分页解析复用媒体篇的 parsePagination，这里省略细节）
+func (h *BookHandler) List(c *gin.Context) {
+    page, pageSize := parsePagination(c)
+    books, total, err := h.svc.ListBooks(c.Request.Context(), c.Query("q"), page, pageSize)
+    if err != nil {
+        _ = c.Error(err)
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"items": books, "total": total, "page": page, "pageSize": pageSize})
+}
 ```
 
-> **为什么 DTO 变了？** 前文若写"DTO 与校验规则不动"是错的：`POST /books` 要顺带收 `tags`，`createBookInput` 必须新增 `Tags []string`（1.4 注记已说明这是新增行为）；数据工程篇的校验翻译也收成了 `bindBookInput`，不会退回通用文案（import 见本片段头部：`errors` / `net/http` / `strconv` 与新增的 `validator/v10` 一次列全）。绑定/参数类 400 由 handler 就地返回——绑定错误不属于"数据错误"，不进错误中间件。
+> **为什么 DTO 变了？** `POST /books` 要顺带收 `tags`，所以 `createBookInput` 在数据工程篇那版之上新增了 `Tags []string`——其余字段与校验规则（`Title`/`Author` 必填、`Price *int` + 范围）一个字没改（1.4 注记已说明为什么要改 DTO 而不改模型）；数据工程篇的校验翻译也收成了 `bindBookInput`，不会退回通用文案（import 见本片段头部：`errors` / `net/http` / `strconv` 与新增的 `validator/v10` 一次列全）。绑定/参数类 400 由 handler 就地返回——绑定错误不属于"数据错误"，不进错误中间件。
 
-**错误怎么变成响应？（最小版错误中间件）** handler 只 `c.Error(err)` 不写响应——翻译由 handler 包提供的错误中间件完成；`gin.Engine` 上挂一个它，所有 handler 的错误路径就统一了。这里给最小版（404/500），篇 7 会升级为 ok/fail + `slog` + 504：
+**错误怎么变成响应：** handler 只挂错、不写响应，翻译交给一个中间件——`gin.Engine` 上挂一次，所有 handler 的错误路径就统一了：
 
 ```go
-// internal/handler/middleware.go
+// internal/handler/middleware.go —— 能跑的最小版（本文件 import：errors / net/http / gorm.io/gorm）
+// slog 日志、504 分类与 ok/fail 响应形状在篇 7 §1.3 统一升级
 func errorMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         c.Next()
-        logList := c.Errors // c.Error(err) 挂的就是 ErrorTypePrivate，不用再按类型过滤
-        if len(logList) == 0 {
+        if len(c.Errors) == 0 {
             return
         }
         status := http.StatusInternalServerError
-        if errors.Is(logList.Last().Err, gorm.ErrRecordNotFound) {
+        if errors.Is(c.Errors.Last().Err, gorm.ErrRecordNotFound) {
             status = http.StatusNotFound
         }
         c.AbortWithStatusJSON(status, gin.H{"error": http.StatusText(status)})
@@ -332,7 +342,7 @@ func main() {
         log.Fatal("迁移失败：", err)
     }
 
-    // 组装依赖：db → repository → service → handler
+    // 组装依赖：db → repository（具体实现） → service（构造器收的是 BookStore 接口） → handler
     bookRepo := repository.NewBookRepository(db.DB)
     bookSvc := service.NewBookService(bookRepo, db.DB)
     bookH := handler.NewBookHandler(bookSvc)
@@ -355,7 +365,7 @@ func main() {
 
 ### 1.7 其余端点的迁移清单（同构模板）
 
-下表把"同构"摊开成一行一个端点，差异只在参数与校验。顺带一个交接点：前五篇里每个 handler 开头那段"书必须存在"的检查，到这里正式退场——它下沉成 `repo.FirstBook`，handler 连 `db` 都不再 import。
+下表把"同构"摊开成一行一个端点，差异只在参数与校验。**这张表的第二列是"这个项目需要哪些数据操作"的完整地图，不是接口定义**——接口（`service.BookStore`）只包含 Service 当前调用到的那几条，迁移到哪一条就把哪几个方法加进接口与 repo。顺带一个交接点：前五篇里每个 handler 开头那段"书必须存在"的检查，到这里正式退场——它下沉成 `repo.FirstBook`，handler 连 `db` 都不再 import。
 
 | 端点（旧直连 handler）                  | repository 要补的方法                                                      | service 方法                 | handler 改造点        | 事务？                                                            |
 | --------------------------------------- | -------------------------------------------------------------------------- | ---------------------------- | --------------------- | ----------------------------------------------------------------- |
@@ -374,9 +384,9 @@ func main() {
 
 **目标：** 用内存版 repository 把 database 从测试里摘掉，`httptest` 起一个真 Gin 路由打请求，表驱动覆盖所有状态码分支，然后 `go test`。
 
-### 2.1 fake repository：接口的回报
+### 2.1 fake store：接口放对的回报
 
-`internal/handler/book_test.go`——接口定义时的许诺在这里兑现：
+`internal/handler/book_test.go`——因为接口只有 4 个方法，fake 也就只有 4 个，其中三个带真实行为：
 
 ```go
 package handler
@@ -389,7 +399,6 @@ import (
     "strings"
     "testing"
 
-    "go-learning/internal/repository"
     "go-learning/internal/service"
     "go-learning/models"
 
@@ -397,23 +406,13 @@ import (
     "gorm.io/gorm"
 )
 
-// fakeBookRepo 内存实现：不碰数据库，就能演完所有分支
-type fakeBookRepo struct {
-    books     map[uint]*models.Book
-    findErr   error
-    createErr error
+// fakeStore 内存实现：只实现 service.BookStore 的 4 个方法
+type fakeStore struct {
+    books   map[uint]*models.Book
+    findErr error
 }
 
-func (f *fakeBookRepo) Create(ctx context.Context, book *models.Book) error {
-    if f.createErr != nil {
-        return f.createErr
-    }
-    book.ID = uint(len(f.books) + 1)
-    f.books[book.ID] = book
-    return nil
-}
-
-func (f *fakeBookRepo) FindByID(ctx context.Context, id uint) (*models.Book, error) {
+func (f *fakeStore) FindByID(ctx context.Context, id uint) (*models.Book, error) {
     if f.findErr != nil {
         return nil, f.findErr
     }
@@ -422,38 +421,22 @@ func (f *fakeBookRepo) FindByID(ctx context.Context, id uint) (*models.Book, err
     }
     return nil, gorm.ErrRecordNotFound
 }
-// 接口必须**全部**实现才能赋给 repository.BookRepository——漏一个方法就编译不过。
-// 下面这行是编译期断言：go build 就会红，不用等测试。
-var _ repository.BookRepository = (*fakeBookRepo)(nil)
 
-// 用不到的方法给空实现（其余 16 个同形，为省篇幅折叠成单行）
-func (f *fakeBookRepo) FirstBook(context.Context, uint) (*models.Book, error) { return nil, nil }
-func (f *fakeBookRepo) Query(context.Context, string) *gorm.DB                { return nil }
-func (f *fakeBookRepo) ListOrdered(context.Context, *gorm.DB, string, int, int) ([]models.Book, int64, error) {
+func (f *fakeStore) FirstBook(ctx context.Context, id uint) (*models.Book, error) {
+    return f.FindByID(ctx, id)
+}
+
+func (f *fakeStore) List(ctx context.Context, p service.ListParams) ([]models.Book, int64, error) {
     return nil, 0, nil
 }
-func (f *fakeBookRepo) List(context.Context, string, int, int) ([]models.Book, int64, error) {
-    return nil, 0, nil
-}
-func (f *fakeBookRepo) ListByTag(context.Context, string) ([]models.Book, error) { return nil, nil }
-func (f *fakeBookRepo) UpdateStruct(context.Context, uint, interface{}) error    { return nil }
-func (f *fakeBookRepo) SetCover(context.Context, uint, string) error             { return nil }
-func (f *fakeBookRepo) SoftDelete(context.Context, uint) error                   { return nil }
-func (f *fakeBookRepo) HardDelete(context.Context, uint) error                   { return nil }
-func (f *fakeBookRepo) CreateComment(context.Context, *models.Comment) error     { return nil }
-func (f *fakeBookRepo) ListComments(context.Context, uint, int, int) ([]models.Comment, int64, error) {
-    return nil, 0, nil
-}
-func (f *fakeBookRepo) DeleteComment(context.Context, uint, uint) error { return nil }
-func (f *fakeBookRepo) AddTag(context.Context, uint, uint) error        { return nil }
-func (f *fakeBookRepo) RemoveTag(context.Context, uint, uint) error     { return nil }
-func (f *fakeBookRepo) FirstOrCreateTag(context.Context, string) (*models.Tag, error) {
-    return nil, nil
-}
-func (f *fakeBookRepo) CountBookTag(context.Context, uint, uint) (int64, error) { return 0, nil }
+
+func (f *fakeStore) SetCover(ctx context.Context, id uint, url string) error { return nil }
+
+// 编译期断言：接口方法漏一个就编译不过，不用等测试跑起来
+var _ service.BookStore = (*fakeStore)(nil)
 ```
 
-> **fake 与 mock 的差别（一句话）：** fake 是"能干活的内存实现"（上面这个真能返回数据）；mock 是 sqlmock 那种"断言你调用了什么"的替身。测 handler 用 fake 最顺手——你在测"行为"，不是测"调用序列"。
+> **这就是"接口按需长出来"的兑现：** 上一版把 18 个方法一次性铺开时，fake 必须写 16 个 `return nil, nil` 的空实现——不仅噪音大，还危险：Service 万一误调了某个没实现的方法，fake 会**静默返回空结果**，测试可能"通过"但什么都没测到。4 个方法里只有 `List` 是空实现（这轮测试没走列表），其余都有真实行为。
 
 ### 2.2 httptest 表驱动
 
@@ -463,18 +446,18 @@ func (f *fakeBookRepo) CountBookTag(context.Context, uint, uint) (int64, error) 
 func TestBookHandler_Get(t *testing.T) {
     tests := []struct {
         name       string
-        repo       *fakeBookRepo
+        store      *fakeStore
         wantStatus int
         wantBody   string
     }{
-        {"找到", &fakeBookRepo{books: map[uint]*models.Book{1: {Model: gorm.Model{ID: 1}, Title: "Go"}}}, 200, `"title":"Go"`},
-        {"不存在", &fakeBookRepo{books: map[uint]*models.Book{}}, 404, `"error"`},
-        {"查询失败", &fakeBookRepo{books: map[uint]*models.Book{}, findErr: errors.New("db down")}, 500, `"error"`},
+        {"找到", &fakeStore{books: map[uint]*models.Book{1: {Model: gorm.Model{ID: 1}, Title: "Go"}}}, 200, `"title":"Go"`},
+        {"不存在", &fakeStore{books: map[uint]*models.Book{}}, 404, `"error"`},
+        {"查询失败", &fakeStore{books: map[uint]*models.Book{}, findErr: errors.New("db down")}, 500, `"error"`},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            svc := service.NewBookService(tt.repo, nil) // fake 不需要真 db
+            svc := service.NewBookService(tt.store, nil) // fake 不需要真 db
             h := NewBookHandler(svc) // 篇 7 构造器变双参后写成 NewBookHandler(svc, nil)
 
             r := gin.New()
@@ -506,7 +489,7 @@ go test ./internal/handler/ -v
 # --- PASS
 ```
 
-> **表驱动的意义：** 一个用例 = 一行数据 + 一行断言。"找到 / 不存在 / 查询失败"三个分支并排躺着，新增分支就是加一行，不用复制测试函数。**被迁移的每个接口**都能照这个模板补自己的分支表（示例演示了 Get，其余同构）。两点边界要诚实：(1) 只有走 `repo` 接口的方法能被 fake 测（Get 这类查/删路径）；走 `s.db` 事务的方法（如 1.4 的 `CreateBookWithTags`）在 fake + `nil db` 下会 panic，它们的事务正确性靠对真库的集成验证；(2) 这里测的是 handler 的行为分支，repository 的 GORM 实现是否发出正确 SQL，见 2.3 的结论（不推荐用 sqlmock）。
+> **被迁移的每个接口**都能照这个模板补自己的分支表（示例演示了 Get，其余同构）。两点边界要诚实：(1) 只有走 `repo` 接口的方法能被 fake 测（Get 这类查/删路径）；走 `s.db` 事务的方法（如 1.4 的 `CreateBookWithTags`）在 fake + `nil db` 下会 panic，它们的事务正确性靠对真库的集成验证；(2) 这里测的是 handler 的行为分支，repository 的 GORM 实现是否发出正确 SQL，见 2.3 的结论（不推荐用 sqlmock）。
 
 ### 2.3 repository 层要测吗：不建议 sqlmock
 

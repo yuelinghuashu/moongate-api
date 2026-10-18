@@ -68,7 +68,7 @@ if err := db.DB.AutoMigrate(&models.Book{}, &models.Comment{}, &models.Tag{}); e
 -- idx_tags_name 是带 WHERE 的部分唯一索引：UNIQUE, btree (name) WHERE deleted_at IS NULL
 ```
 
-> 连接表复合主键 = 同一对 (书, 标签) 最多一行——后面"重复追加报错"和"天然去重"都源于它。
+> 连接表复合主键 = 同一对 (书, 标签) 最多一行，"天然去重"就来自它。注意重复追加**不会报错**——`Append` 插入连接表时自带 `ON CONFLICT DO NOTHING`（3.1 有实测 SQL）。
 
 ---
 
@@ -78,16 +78,19 @@ if err := db.DB.AutoMigrate(&models.Book{}, &models.Comment{}, &models.Tag{}); e
 
 ### 2.1 详情接口带标签
 
-多表关联篇的 `GetBook` 已经 `Preload("Comments")`，这里链上第二个 `Preload`：
+多表关联篇的 `GetBook` 已经 `Preload("Comments")`（带 `Limit(5)` 的边界写法），这里链上第二个 `Preload`：
 
 ```go
 result := db.DB.WithContext(c.Request.Context()).
-    Preload("Comments").
-    Preload("Tags").
+    Preload("Comments", func(tx *gorm.DB) *gorm.DB { // 篇 2 的边界原样保留：详情只带最新 5 条
+        return tx.Order("created_at DESC").Limit(5)
+    }).
+    Preload("Tags"). // 标签数量天然有限，不需要边界
     First(&book, id)
 ```
 
 - `Preload` 可以链多个：子查询各自批量取（`comments` 一条、`book_tags ⋈ tags` 一条），一次组装，**都不触发 N+1**；
+- **要不要加边界，看基数**：评论是无界的（一本书可能上万条），所以详情里只带最新 5 条预览；标签是有界的（几个到几十个），直接 `Preload("Tags")` 就够——边界写法的完整说明见多表关联篇 §3.1；
 - **列表不 Preload**：契约同多表关联篇（列表轻、详情重）；`json:"tags,omitempty"` + 不默认加载。
 
 **测试：**
@@ -97,29 +100,52 @@ curl http://localhost:8080/books/1
 # 详情里出现 "tags":[...]（先给书打上标签再测，见第三节）
 ```
 
-### 2.2 按标签筛选图书
+### 2.2 按标签筛选图书（分页）
 
-"列出所有带『Go』标签的书"——连接表 JOIN 两次：
+"列出所有带『Go』标签的书"——连接表 JOIN 两次，分页解析复用篇 3 收拢的 `parsePagination`（写在 `handlers/tag.go`；import 见 3.1，`parsePagination` 是同包函数）：
 
 ```go
-// GetBooksByTag 列出带指定标签的图书（GET /tags/:name/books）
+// GetBooksByTag 列出带指定标签的图书（GET /tags/:name/books）：分页 + 创建时间倒序。
+// 响应形状与篇 3 的图书列表一致：{items, total, page, pageSize}。
 func GetBooksByTag(c *gin.Context) {
-    tagName := c.Param("name")
+    // 标签名用与写入端同一套归一化（3.1），否则 "Go" / "go" 查不到同一个标签
+    tagName := strings.ToLower(strings.TrimSpace(c.Param("name")))
+    page, pageSize := parsePagination(c) // 篇 3 的分页帮助函数（handlers/pagination.go）
+
+    query := db.DB.WithContext(c.Request.Context()).
+        Model(&models.Book{}). // Count(&total) 的 dest 是 int64，没有 Model 时 GORM 不知道表名
+        Joins("JOIN book_tags ON book_tags.book_id = books.id").
+        // 手工 JOIN 进来的表不会自动带软删条件：tags 一侧要自己写
+        Joins("JOIN tags ON tags.id = book_tags.tag_id AND tags.deleted_at IS NULL").
+        Where("tags.name = ?", tagName)
+
+    var total int64
+    if err := query.Count(&total).Error; err != nil {
+        _ = c.Error(err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+        return
+    }
 
     var books []models.Book
-    if err := db.DB.WithContext(c.Request.Context()).
-        Joins("JOIN book_tags ON book_tags.book_id = books.id").
-        Joins("JOIN tags ON tags.id = book_tags.tag_id").
-        Where("tags.name = ?", tagName).
+    if err := query.
+        Order("books.created_at DESC"). // JOIN 后 created_at 有歧义，必须带表名
+        Offset((page - 1) * pageSize).
+        Limit(pageSize).
         Find(&books).Error; err != nil {
         _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
         return
     }
 
-    c.JSON(http.StatusOK, books)
+    c.JSON(http.StatusOK, gin.H{"items": books, "total": total, "page": page, "pageSize": pageSize})
 }
 ```
+
+> **⚠️ 破坏性契约变更：** 这个接口的响应从裸数组变成 `{items,total,page,pageSize}` 对象（与篇 3 的 `GET /books` 对齐）——已有前端需要同步适配。
+
+> **`Count` 之前必须让 GORM 知道表。** `Find(&books)` 能从 dest 的 `models.Book` 推断出 `books`，但 `Count(&total)` 的 dest 是 `int64`——不写 `Model(&models.Book{})` 就会直接报 `Table not set, please set it like: db.Model(&user) or db.Table("users")`（实测），接口表现为 500。这也是"什么时候必须写 `Model()`"最典型的一次：**终结方法的 dest 不是模型结构体时，必须显式指定**。
+
+> **为什么 `tags` 一侧要手写 `deleted_at IS NULL`？** GORM 的软删条件只加在**根模型**的表上：实测这条查询的 WHERE 是 `tags.name = ? AND books.deleted_at IS NULL`，`tags.deleted_at` 必须自己补（上面写在 JOIN 条件里），否则软删过的标签仍会列出它的书。同理，`ORDER BY` 里的 `created_at` 在 JOIN 之后有歧义（`books` 和 `tags` 都有这一列），必须写成 `books.created_at`。
 
 > **路由为什么不是 `/books/by-tag`？（实战坑）** 入门篇已注册 `GET /books/:id`，而 Gin 的路由树**不允许同一位置静态段与通配段并存**——再注册 `/books/by-tag` 会直接 panic（"conflicts with existing wildcard"）。所以按标签筛选放在 `tags` 前缀下：`GET /tags/:name/books`，语义也更 REST。
 
@@ -132,8 +158,9 @@ r.GET("/tags/:name/books", handlers.GetBooksByTag)
 **测试：**
 
 ```bash
-curl "http://localhost:8080/tags/Go/books"
-# 返回带 Go 标签的书（先打标签再测）
+curl "http://localhost:8080/tags/go/books?page=1&pageSize=10"
+# {"items":[...],"total":1,"page":1,"pageSize":10}
+curl "http://localhost:8080/tags/GO/books"   # 归一化后与 /tags/go/books 等价
 ```
 
 ---
@@ -142,78 +169,71 @@ curl "http://localhost:8080/tags/Go/books"
 
 **目标：** 写关系：给书加标签（幂等）、移除、整组替换，以及删除父记录时连接表如何处理。
 
-### 3.1 给书加标签（先查后插，保证幂等）
+### 3.1 给书加标签（Append 本身就幂等）
 
-`FirstOrCreate` 保证标签唯一（Name 唯一索引），`Association("Tags").Append` 写连接表（`handlers/tag.go` 的 import：`errors`、`gorm`，以及 `db`/`models`/`net/http`/`gin`）：
+`FirstOrCreate` 保证标签唯一（`Name` 唯一索引），`Association("Tags").Append` 写连接表（`handlers/tag.go` 的 import：`strings`，以及 `db`/`models`/`net/http`/`gin`）。这条路由挂在 2.4 的 `bookGroup` 上，书的存在性由 `requireBook` 兜底：
 
 ```go
+// addTagInput：给书加标签的请求 DTO（与 createBookInput / createCommentInput 同一约定：
+// 一个写接口一个具名 DTO，校验规则只写在 DTO 上）
+type addTagInput struct {
+    Name string `json:"name" binding:"required"`
+}
+
 // AddBookTag 给书追加一个标签：标签不存在则先创建，再写连接表（POST /books/:id/tags）
 func AddBookTag(c *gin.Context) {
-    id := c.Param("id")
+    // 1. 书的存在性已由 2.4 的 requireBook 中间件保证，直接取实体（路由必须挂在 bookGroup 上）
+    book := c.MustGet("book").(*models.Book)
 
-    // 1. 书必须存在
-    var book models.Book
-    result := db.DB.WithContext(c.Request.Context()).First(&book, id)
-    if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-        c.JSON(http.StatusNotFound, gin.H{"error": "图书不存在"})
-        return
-    }
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
-        return
-    }
-
-    // 2. 绑定标签名
-    var input struct {
-        Name string `json:"name" binding:"required"`
-    }
+    // 2. 绑定标签名并归一化：同一个语义只留一种写法
+    var input addTagInput
     if err := c.ShouldBindJSON(&input); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": "请发送合法的 JSON"})
         return
     }
+    name := strings.ToLower(strings.TrimSpace(input.Name))
 
-    // 3. 标签不存在则先创建（Name 唯一索引保证去重）
+    // 3. 标签不存在则先创建（Name 唯一索引保证去重）；第二个参数同时决定 WHERE 与新建记录的字段
     var tag models.Tag
     if err := db.DB.WithContext(c.Request.Context()).
-        Where("name = ?", input.Name).
-        FirstOrCreate(&tag, models.Tag{Name: input.Name}).Error; err != nil {
+        FirstOrCreate(&tag, models.Tag{Name: name}).Error; err != nil {
         _ = c.Error(err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "标签处理失败"})
         return
     }
 
-    // 4. 写连接表：先查后插，保证幂等
-    var count int64
+    // 4. 写连接表：Append 的插入自带 ON CONFLICT DO NOTHING，重复追加天然幂等
     if err := db.DB.WithContext(c.Request.Context()).
-        Table("book_tags").
-        Where("book_id = ? AND tag_id = ?", book.ID, tag.ID).
-        Count(&count).Error; err != nil {
+        Model(book).Association("Tags").Append(&tag); err != nil {
         _ = c.Error(err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "查询标签关系失败"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "添加标签失败"})
         return
-    }
-    if count == 0 {
-        if err := db.DB.WithContext(c.Request.Context()).
-            Model(&book).Association("Tags").Append(&tag); err != nil {
-            _ = c.Error(err)
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "添加标签失败"})
-            return
-        }
     }
 
     c.JSON(http.StatusOK, gin.H{"message": "标签已添加"})
 }
 ```
 
-> **自由标签的代价：名称归一化。** `FirstOrCreate` 的「去重」只对**完全相同的字符串**生效——`Go`、`golang`、`Go `（尾随空格）在数据库里是三个标签。
-> 生产要在入库前归一化：`strings.ToLower` + `strings.TrimSpace`，必要时再做别名映射（`Go` → `golang`）。本篇不展开实现，但要记住：**唯一索引保证的是「字符串唯一」，不是「语义唯一」。**
+> **`FirstOrCreate(&tag, models.Tag{Name: name})` 的两个参数不是重复。** 第一个是**目标**：查询结果填它，找不到时它就是被插入的那条记录；第二个是**条件**：GORM 用它生成 `WHERE name = ?`，并在找不到时把这条等值条件**回填进目标**，新建的标签才带上名字。
+>
+> 少了第二个会怎样？`Where("name = ?", name).FirstOrCreate(&tag)` 生成的 INSERT 是 `... (name) VALUES ("")`——字符串形式的 Where 是 `clause.Expr`，不会被回填；而 `name` 只约束了 `not null`，空串合法，于是库里静默多出一个匿名标签（v1.31.2 实测）。所以**结构体条件不能省**；反过来，既然它已经生成了 `WHERE name = ?`，外面再套一层 `Where("name = ?")` 就是多余的。
 
-> **为什么第 4 步要先查后插？** `Association("Tags").Append(&tag)` 是直接往连接表 `INSERT`。`book_tags` 的复合主键 `(book_id, tag_id)` 保证同一对关系最多一行——**重复追加同一标签会撞唯一约束报错，不是幂等**。所以示例先 `Count` 检查再插。若你的项目接受"重复请求报错"的语义，省掉第 4 步的 Count 也行——本篇按幂等演示。
+> **为什么第 4 步不用先 `Count` 再插？** 有种说法是"重复 `Append` 会撞 `book_tags` 的复合主键报错"，但 GORM 插连接表的那一刻就带了冲突处理（v1.31.2 实测）：
+>
+> ```sql
+> INSERT INTO book_tags (book_id, tag_id) VALUES (1,7) ON CONFLICT DO NOTHING
+> ```
+>
+> 所以重复追加既不报错、也不会多出第二行——**幂等是 `Append` 自带的**。先查再插只多了一次往返和一个并发窗口，没有收益。只有当你需要区分"这次真的新增了"（比如据此返回 201 / 200）时，才值得再查一次；那时的理由是响应语义，不是防报错。
+
+> **归一化：自由标签的命门。** `FirstOrCreate` 只能对**完全相同的字符串**去重——`Go`、`golang`、`Go ` 在库里是三个标签。第 2 步的 `strings.ToLower` + `strings.TrimSpace` 不是可选项：**唯一索引保证「字符串唯一」，不保证「语义唯一」**。需要别名（`Go` → `golang`）就在这里做映射表。读取端（2.2 的 `GetBooksByTag`）用同一套归一化，否则写进去的 `go` 用 `Go` 查不到。
+
+> **两个已知边界：**（1）`FirstOrCreate` 是"先查后插"，并发下两个请求可能同时查不到、同时插入，撞唯一索引返回 500——要更稳可加 `clause.OnConflict{DoNothing: true}` 或失败重试一次；（2）`FirstOrCreate` 与 `Append` 没有包在事务里，`Append` 失败会留下一个没人用的标签。[《工程化（一）》](./gorm-gin-engineering-layering)把它收进服务层用 `db.Transaction()` 一并解决。
 
 **路由注册：**
 
 ```go
-r.POST("/books/:id/tags", handlers.AddBookTag)
+bookGroup.POST("/tags", handlers.AddBookTag)
 ```
 
 **测试：**
@@ -222,7 +242,12 @@ r.POST("/books/:id/tags", handlers.AddBookTag)
 curl -X POST http://localhost:8080/books/1/tags \
   -H "Content-Type: application/json" \
   -d '{"name":"Go"}'
-# → 200 标签已添加；再执行一次同样命令，仍是 200（幂等，连接表无重复行）
+# → 200，落库的标签名是归一化后的 go；再执行一次同样命令，仍是 200
+# （幂等，连接表无重复行）；-d '{"name":" GO "}' 也会命中同一个标签
+
+curl -X POST http://localhost:8080/books/999/tags \
+  -H "Content-Type: application/json" -d '{"name":"Go"}'
+# → 404：书不存在。这条 404 由 requireBook 中间件给出，handler 不会执行
 ```
 
 ### 3.2 移除标签（直接删连接表行）
@@ -253,20 +278,23 @@ func RemoveBookTag(c *gin.Context) {
 }
 ```
 
+- **为什么叫 `RemoveBookTag` 而不是 `DeleteBookTag`？** 它删的是**关系**（`book_tags` 里的一行），`tags` 表里那个标签本身原封不动——别的书还在用它。系列里的动词分工是：**Create/Delete 作用于实体行**（`DeleteBook`、`DeleteComment`），**Add/Remove 作用于关系**（`AddBookTag`、`RemoveBookTag`）。叫 `DeleteBookTag` 会让人以为标签被删了；
 - `Table("book_tags")...Delete(nil)` 直接对连接表执行 `DELETE ... WHERE book_id = ? AND tag_id = ?`——读、写、删三路都能走"连接表即普通表"的思路；
 - `RowsAffected == 0` → 该书没有这个标签 → 404（与评论删除的归属校验同一套逻辑）。
 
 **路由注册：**
 
 ```go
-r.DELETE("/books/:id/tags/:tid", handlers.RemoveBookTag)
+bookGroup.DELETE("/tags/:tid", handlers.RemoveBookTag)
 ```
 
 **测试：**
 
 ```bash
 curl -X DELETE http://localhost:8080/books/1/tags/1
-# → 200；再删同一条 → 404
+# → 200；再删同一条 → 404（标签不在这本书上）
+curl -X DELETE http://localhost:8080/books/999/tags/1
+# → 404（书不存在——这是 requireBook 中间件给的，handler 根本没执行）
 ```
 
 ### 3.3 Replace：整组替换 vs 增量追加
@@ -307,7 +335,7 @@ ALTER TABLE book_tags ADD CONSTRAINT fk_book_tags_book
 
 ## 四、进阶：带字段的连接表（JoinModel）
 
-**目标：** 给"关系本身"附加字段——带字段的连接表（JoinModel）什么时候用、怎么声明。
+**目标：** 给"关系本身"附加字段——带字段的连接表什么时候用、两条实现路线怎么选。
 
 默认连接表只有 `book_id` / `tag_id` 两列。要给关系附属性（如"这本书的『精读』标签排第几""何时打上的标签"），需要**显式连接模型**：
 
@@ -321,27 +349,52 @@ type BookTag struct {
 }
 ```
 
-两个模型各挂一个 has-many 指向连接模型：
+### 4.1 首选：`SetupJoinTable`（保留 many2many API）
+
+比起把关系拆开，改动最小的一步是告诉 GORM "`book_tags` 这张连接表用 `BookTag` 这个模型"——`Book.Tags` 上的 `many2many:book_tags` 声明**一个字都不用改**：
+
+```go
+// db/db.go 的 InitDB 末尾，或 main.go 的 AutoMigrate 之前（启动时执行一次）
+if err := db.DB.SetupJoinTable(&models.Book{}, "Tags", &models.BookTag{}); err != nil {
+    log.Fatal("注册连接表模型失败：", err)
+}
+// 迁移时把连接模型一起列上（让 position / created_at 两列被创建）
+if err := db.DB.AutoMigrate(&models.Book{}, &models.Comment{}, &models.Tag{}, &models.BookTag{}); err != nil {
+    log.Fatal("迁移失败：", err)
+}
+```
+
+关联 API 全部照旧，附加列自动带上——GORM v1.31.2 实测 `Append` 生成的 SQL：
+
+```sql
+INSERT INTO book_tags (book_id, tag_id, position) VALUES (1,7,0) ON CONFLICT DO NOTHING
+```
+
+- `Preload("Tags")`、`Association("Tags").Append/Replace/Delete` 都可继续用，`Tags []Tag` 的读法不变；
+- 附加列在 `Append` 里取零值——要写 `position` 就直接对连接模型操作：`db.DB.Save(&models.BookTag{BookID: 1, TagID: 7, Position: 1})`（或先 `FirstOrCreate` 再 `Update`）；
+- `Tags` 字段上的 `constraint:OnDelete:CASCADE` 仍然生效，物理删书照样级联（3.4 的结论不变）。
+
+### 4.2 备选：两个 has-many 指向连接模型
+
+只有当连接表要承担**独立业务**（自己的接口、状态机、审计）时，才值得把关系拆开——那时它已经是一张普通业务表：
 
 ```go
 type Book struct {
     // ...原有字段
-    BookTags []BookTag `gorm:"foreignKey:BookID"`
+    BookTags []BookTag `gorm:"foreignKey:BookID;constraint:OnDelete:CASCADE"`
 }
 
 type Tag struct {
     // ...原有字段
-    BookTags []BookTag `gorm:"foreignKey:TagID"`
+    BookTags []BookTag `gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
 }
 ```
 
-升级后要点（点到为止）：
+- 读写都直接操作连接记录：`db.Create(&models.BookTag{BookID: 1, TagID: 7, Position: 1})`、`Preload("BookTags")` 后自行映射成 `[]Tag`；
+- `Association("Tags")` 的便捷写不再适用，"某本书的标签"要自己 join 或映射；
+- **⚠️ `constraint:OnDelete:CASCADE` 必须补回来**：这组 has-many 是新的外键，不给它 CASCADE 就是默认 `NO ACTION`（实测），3.4 解决过的"物理删书撞外键"会原地复活。
 
-- 关联不再靠"`Tags []Tag` + many2many 标签"，而是**两个 has-many 指向 `BookTag`**——读写要直接操作连接记录（`db.Create(&models.BookTag{BookID: 1, TagID: 2, Position: 1})`）；
-- `Association("Tags")` 的便捷自动写不再适用；取"某本书的标签"变成 `Preload("BookTags")` 后自行映射；
-- **默认连接表覆盖 90% 场景**——只有需要给"关系本身"存字段时才升级 JoinModel（教学顺序：先默认，再按需升级）。
-
----
+> **选择建议：** 90% 的场景用默认连接表就够；要给关系加字段，先试 `SetupJoinTable`（改动最小、`Tags []Tag` 的读法不变）；连接表需要独立生命周期时，才拆成两个 has-many。
 
 ## 本篇小结
 
@@ -353,7 +406,7 @@ type Tag struct {
 | DELETE | `/books/:id/tags/:tid` | RemoveBookTag |
 | GET    | `/tags/:name/books`    | GetBooksByTag |
 
-（`main.go` 增补：`AutoMigrate` 加 `&models.Tag{}`、上述三条路由。）
+（`main.go` 增补：`AutoMigrate` 加 `&models.Tag{}`；`POST /tags`、`DELETE /tags/:tid` 两行挂到 2.4 的 `bookGroup` 上，`GET /tags/:name/books` 仍单独注册；第四节按需再加 `&models.BookTag{}` 与 `SetupJoinTable`。）
 
 - 你现在的项目：`books` + `comments` + `tags` 三表、封面图上传与静态服务、分页搜索列表、评论 CRUD、标签与连接表、批量导入与 DTO 校验；
 - 系列至此覆盖 has-many / many2many 两种关联形态与查询、聚合、工程方法；可选延伸（选读）：[《GORM 工程化实战（一）：分层、注入与可测性》](./gorm-gin-engineering-layering)，把一直直连的 `db.DB` 重构为 `BookRepository` 接口 + Service 层 + 表驱动测试——分层后的测试与事务，会让这篇的每次 `WithContext` 都派上用场。

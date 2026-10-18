@@ -157,7 +157,7 @@ type Book struct {
 
 - **`gorm.Model` fields appear in JSON under their raw Go names.** It carries no `json` tags, so responses contain `"ID"` and `"DeletedAt": null`. To unify the naming, declare your own fields or use a DTO (see Part 10, "Next Steps").
 - **Money is an `int`, in cents.** Floating point has precision loss (`0.1 + 0.2 != 0.3`), so `price: 5990` means 59.90; the frontend divides by 100 when it needs whole units.
-- **`binding:"required"` goes on the DTO, not the model.** The model is reused by the update endpoint, and `required` would turn partial updates into 400s (you'll use this once in Part 5).
+- **`binding:"required"` goes on the DTO, not the model.** The model is reused by several endpoints (create, update, ...) whose required-field rules differ, so nailing it onto the model rejects legitimate requests with a 400 (you'll use it once in Part 5).
 
 **Naming conventions:**
 
@@ -247,6 +247,7 @@ func CreateBook(c *gin.Context) {
     // 2. Insert into the database
     result := db.DB.WithContext(c.Request.Context()).Create(&book)
     if result.Error != nil {
+        _ = c.Error(result.Error) // the specific error goes to the log; the client sees the uniform message
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create book"})
         return
     }
@@ -255,6 +256,8 @@ func CreateBook(c *gin.Context) {
     c.JSON(http.StatusCreated, book)
 }
 ```
+
+> **What is that `_ = c.Error(result.Error)` line before the 500 for?** It hands the specific error to Gin: the `Logger` middleware inside `gin.Default()` renders `c.Errors` into the access log (as `Error #01: ...` at the end of the line), while the HTTP response still carries one uniform message — **the reason goes to the log, the details never leak out**. `c.Error` returns an error of its own (non-nil only when `c.Errors` is full or the argument is not an error), so `_` drops it; every other 500 branch in this part follows the same line, and production swaps this for `slog` + a unified error middleware (Part 7).
 
 > ⚠️ Routes are only registered in Part 9. Jump ahead, copy the `main.go` there, get the server running, then come back and test Parts 5–8 chapter by chapter.
 
@@ -282,11 +285,11 @@ Response example (note the key casing):
 
 > `ID` / `CreatedAt` / `DeletedAt` come out capitalised because `gorm.Model` has no `json` tags (see Part 3); `title` / `author` / `price` are lowercase because we tagged them.
 
-### Going further: adding validation
+### Request Validation: Receiving the Body with a DTO
 
-The code above validates nothing — `{"price":5990}` (no `title` / `author`) inserts fine. Put the validation tags on the **request struct**, not on `models.Book`:
+The version above validates nothing — `{"price":5990}` (no `title` / `author`) inserts fine. It exists only so the "request → struct → database" line runs first; **a real endpoint cannot ship like that**. Validation is not a nice-to-have, it is part of the interface contract, and it belongs on the **request struct**, not on `models.Book`:
 
-**Step one: declare the request struct (DTO).** Keep it in `handlers/book.go`, just above `CreateBook` (lowercase is fine within the package; export it as `CreateBookInput` only if another package will ever reference it):
+**Step one: declare the request struct (DTO)** in `handlers/book.go`, just above `CreateBook` (lowercase is fine inside the package; export it as `CreateBookInput` only if another package will ever reference it):
 
 ```go
 // createBookInput: request-only DTO for creating a book; validation tags belong to it
@@ -297,55 +300,31 @@ type createBookInput struct {
 }
 ```
 
-**Why not put `binding:"required"` on `models.Book`?** The same model is reused by Part 7's update endpoint — updates are partial (only `{"price":6990}`), and `required` would turn them into 400s. So: **the model owns the schema and JSON naming; validation is an interface contract and belongs to the request struct (DTO)**. It lands for real in the [DTO article](./gorm-gin-dto-batch).
-
-**Step two: make `CreateBook` actually bind it.** Declaring the DTO changes nothing on its own — if the binding target stays `models.Book`, requests missing `title` still insert fine. Replace the `CreateBook` from the top of Part 5 with this version:
+**Step two: replace the old "bind → insert" pair.** Declaring the DTO without switching the binding target changes nothing — requests missing fields still insert fine:
 
 ```go
-// CreateBook creates a book (POST /books): bind the DTO to validate, then translate into the model
-func CreateBook(c *gin.Context) {
-    // 1. Bind into the DTO — this is where the binding tags take effect, and missing fields 400 right here
-    var input createBookInput
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON (title and author are required, price must be >= 0)"})
-        return
-    }
-
-    // 2. DTO → model: copy only the fields a client is allowed to decide.
-    //    Fields like ID / CreatedAt / DeletedAt simply don't exist on the DTO, so they can't be smuggled in.
-    book := models.Book{
-        Title:  input.Title,
-        Author: input.Author,
-        Price:  input.Price,
-    }
-
-    // 3. Insert (note we pass book to Create, not input)
-    result := db.DB.WithContext(c.Request.Context()).Create(&book)
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
-        return
-    }
-
-    // 4. Return the persisted model — same response shape as the top of Part 5, with ID/CreatedAt filled by GORM
-    c.JSON(http.StatusCreated, book)
+var input createBookInput // was: var book models.Book
+if err := c.ShouldBindJSON(&input); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON (title and author are required, price must be >= 0)"})
+    return
 }
+book := models.Book{Title: input.Title, Author: input.Author, Price: input.Price} // DTO -> model
+result := db.DB.WithContext(c.Request.Context()).Create(&book)                    // unchanged from here
 ```
 
-> **Why not just `Create(&input)`?** Because `input` is the DTO and `book` is the model: the model embeds `gorm.Model` (primary key, timestamps, soft delete) and will later grow columns the client has no say over, like `cover_path`. That DTO-to-model translation is a deliberate safety check — only fields you explicitly list inside `models.Book{...}` get persisted, while extra keys the client sends (say `"deletedAt"`) are dropped during binding. This is the "what you accept and what you store are two different things" rule the rest of the series keeps coming back to.
+> **Why not write `Create(&input)`?** `input` is the DTO and `book` is the model: the model embeds `gorm.Model` (primary key, timestamps, soft delete) and will later grow columns the client has no say over, like `cover_path`. That translation line is a deliberate safety check — only fields you list inside `models.Book{...}` get persisted (why extra keys must be kept out is Part 7's ⚠️). Validation-error translation, update DTOs and more are developed in full in the [DTO article](./gorm-gin-dto-batch).
 
-Only now does a request with missing fields take the 400 branch:
+**Why not put `binding:"required"` on `models.Book`?** The model gets reused by several endpoints: creation needs a full payload, updates take a different set of inputs — nail validation onto the model and every endpoint that only needs some fields gets a 400. **The model owns the schema and JSON naming; validation is an interface contract and belongs to the request struct.**
+
+Only after that does a request with missing fields take the 400 branch:
 
 ```bash
-# Missing a required field → 400 (the original code returned 201 here)
+# 400 (the original code returned 201); a full payload → 201, same response as above
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/books \
   -H "Content-Type: application/json" -d '{"price":5990}'
-
-# Full payload → 201, same response as the example at the top of Part 5
-curl -s -X POST http://localhost:8080/books \
-  -H "Content-Type: application/json" -d '{"title":"Go in Action","author":"Zhang San","price":5990}'
 ```
 
-### Going further: why you must carry the context
+### Why You Must Carry the Context
 
 `WithContext(ctx)` hangs a Go `context.Context` on the query chain; when the query executes, it travels through `database/sql` → the driver and becomes the source of **cancellation and timeout signals**.
 
@@ -363,6 +342,7 @@ func GetBooks(c *gin.Context) {
     books := []models.Book{} // empty slice, not nil: an empty table returns [] instead of null
     result := db.DB.WithContext(c.Request.Context()).Find(&books)
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
         return
     }
@@ -380,6 +360,7 @@ func GetBook(c *gin.Context) {
         return
     }
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
         return
     }
@@ -412,6 +393,7 @@ func UpdateBook(c *gin.Context) {
         return
     }
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
         return
     }
@@ -423,58 +405,61 @@ func UpdateBook(c *gin.Context) {
         return
     }
 
-    // 3. Update the fields (only non-zero fields of input; the WHERE condition comes from the First above)
+    // 3. Update the fields (WHERE comes from the First above; only non-zero fields are written — see mental model 3)
     result = db.DB.WithContext(c.Request.Context()).Model(&book).Updates(input)
     if result.Error != nil {
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
         return
     }
 
-    // 4. Return the updated data (GORM writes the updated non-zero fields back to book, matching the DB; zero-value fields keep the values loaded by First above)
+    // 4. Return the updated data (GORM writes the changed fields back into book; untouched fields keep the values loaded by First above)
     c.JSON(http.StatusOK, book)
 }
 ```
 
 ### PUT or PATCH?
 
-`PUT` strictly means "replace the whole resource"; partial updates belong to `PATCH`. `Updates` here only touches the non-zero fields sent in, so it is effectively PATCH semantics — `PUT` is fine for an introductory example; for stricter semantics, switch the route to `r.PATCH("/books/:id", handlers.UpdateBook)`.
+`PUT` strictly means "replace the whole resource"; partial updates belong to `PATCH`. The next section turns this endpoint into a **real full replacement**, which is why `PUT` is the right verb here; if you later want a partial update (only touch what the client actually sent), that is a different design and this part does not cover it (see [GORM Data Engineering §2.2](./gorm-gin-dto-batch)).
 
 ### The zero-value trap
 
-When `Updates` receives a **struct**, GORM ignores zero-value fields (`0`, `""`, `false`), so `{"price":0}` is silently skipped. That is by design, but it makes "set the price to 0" impossible.
+The direct consequence of mental model 3: **`{"price":0}` is silently skipped**, so "set the price to 0" is impossible. **The root cause is not GORM but the binding layer**: when non-pointer fields receive JSON, "not sent" and "sent as zero" collapse into the same `0` — GORM receives a **value**, not an **intent**.
 
-The fix is a **pointer DTO**: `nil` means "not sent", `&0` means "sent as 0":
+This part commits to exactly one approach: **make the endpoint a real PUT and let `Select` list the columns.** PUT means "replace the whole resource", so zero values are legitimate — no pointers needed. Listed columns are written even at zero, and the same list doubles as a mass-assignment whitelist (replace steps 2–3 of `UpdateBook` above; step 1's existence check is untouched, and `result` is already declared there, so this continues with `=`):
 
 ```go
-type updateBookInput struct {
-    Title  *string `json:"title"`
-    Author *string `json:"author"`
-    Price  *int    `json:"price" binding:"omitempty,gte=0,lte=1000000"`
+type updateBookInput struct { // PUT requires a full payload, so `required` is right here
+    Title  string `json:"title" binding:"required"`
+    Author string `json:"author" binding:"required"`
+    Price  int    `json:"price" binding:"gte=0,lte=1000000"`
 }
 
 var in updateBookInput
 if err := c.ShouldBindJSON(&in); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+    c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON (title and author are required)"})
     return
 }
-// only fields that are non-nil go into the update
-fields := map[string]any{}
-if in.Title != nil { fields["title"] = *in.Title }
-if in.Author != nil { fields["author"] = *in.Author }
-if in.Price != nil { fields["price"] = *in.Price }
-db.DB.WithContext(c.Request.Context()).Model(book).Updates(fields)
+result = db.DB.WithContext(c.Request.Context()).Model(&book).
+    Select("title", "author", "price"). // listed columns are written even at zero — and this is the whitelist
+    Updates(models.Book{Title: in.Title, Author: in.Author, Price: in.Price})
 ```
 
-> **⚠️ Don't use the model as the request body.** `var input models.Book` above hands the request straight to the model: JSON binding is case-insensitive, so `{"deletedAt":"2026-01-01T00:00:00Z"}` soft-deletes the book and `{"coverUrl":"/uploads/x.jpg"}` rewrites the cover without going through the upload endpoint — that is mass assignment. The fix is exactly the DTO above: **what you accept and what you store are two different things**. The main text keeps the model version so the zero-value trap stays visible; production code should use the pointer DTO (the [DTO article](./gorm-gin-dto-batch) lands it for real).
->
-> You can also get away with `map[string]any` plus a key whitelist, but numbers inside a map become `float64` and every type guarantee is gone — not recommended.
+```sql
+-- actual SQL for {"title":"","author":"新作者","price":0} (GORM v1.31.2)
+UPDATE `books` SET `title`="",`author`="新作者",`price`=0,`updated_at`="..." WHERE ... AND `id` = 1
+```
+
+The cost is inherent to PUT: a client omitting `title` means "clear the title", not "leave it alone" — which is exactly why `required` belongs here. **This route is for PUT only**; if the endpoint is really a partial update ("not sent means don't touch"), that is a different design, out of scope for this part — see [GORM Data Engineering §2.2](./gorm-gin-dto-batch).
+
+> **⚠️ Don't use the model as the request body.** `var input models.Book` hands the request straight to the model, and JSON binding is case-insensitive: `{"deletedAt":"2026-01-01T00:00:00Z"}` soft-deletes the book, `{"coverUrl":"/uploads/x.jpg"}` rewrites the cover without going through the upload endpoint — that is mass assignment. The fix is the DTO: **what you accept and what you store are two different things**. The main text keeps the model version so the zero-value trap stays visible.
 
 Testing:
 
 ```bash
-curl -X PUT http://localhost:8080/books/1 \
-  -H "Content-Type: application/json" \
-  -d '{"price":6990}'
+# full PUT replacement: the 0 really does get written
+curl -X PUT http://localhost:8080/books/1 -H "Content-Type: application/json" \
+  -d '{"title":"","author":"New Author","price":0}'
 ```
 
 ## Part 8: Deleting a Book
@@ -489,6 +474,7 @@ func DeleteBook(c *gin.Context) {
     // Perform the soft delete
     result := db.DB.WithContext(c.Request.Context()).Delete(&models.Book{}, id)
     if result.Error != nil { // check Error before RowsAffected — order matters
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
         return
     }
@@ -512,6 +498,8 @@ What GORM actually runs is `UPDATE ... SET deleted_at=NOW() WHERE id=? AND delet
 
 After a soft delete, `First` / `Find` add `deleted_at IS NULL` automatically; to read deleted rows use `db.DB.WithContext(c.Request.Context()).Unscoped().First(&book, id)`.
 
+> **A soft delete touches only its own row** — it never cascades to child tables (say, this book's comments). To get "deleting a book hides its comments", Part 2 §2.4 weighs the two approaches and how to choose between them (read-side gating vs write-side cascade).
+
 > **⚠️ The unique-index trap**: soft-deleted rows still occupy a unique index — re-creating a field with a unique index (say ISBN) after a soft delete violates the constraint. PostgreSQL's answer is a **partial unique index**: `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`, so only live rows participate. Part 5 puts that to work on a real `tags.name`.
 
 ### Hard deletion (remove for real)
@@ -525,6 +513,7 @@ func DeleteBookPermanently(c *gin.Context) {
     // Unscoped() bypasses soft delete and removes the row for real
     result := db.DB.WithContext(c.Request.Context()).Unscoped().Delete(&models.Book{}, id)
     if result.Error != nil { // check Error before RowsAffected — order matters
+        _ = c.Error(result.Error)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
         return
     }
@@ -551,7 +540,7 @@ r.Use(requestTimeout(5 * time.Second)) // per-request timeout: slow queries are 
 r.POST("/books", handlers.CreateBook)
 r.GET("/books", handlers.GetBooks)
 r.GET("/books/:id", handlers.GetBook)
-r.PUT("/books/:id", handlers.UpdateBook) // strict REST semantics would use PATCH for partial updates
+r.PUT("/books/:id", handlers.UpdateBook) // full-replacement semantics (Select lists the updated columns)
 r.DELETE("/books/:id", handlers.DeleteBook)
 r.DELETE("/books/:id/permanent", handlers.DeleteBookPermanently) // optional
 
@@ -579,7 +568,7 @@ import (
     "github.com/gin-gonic/gin"
 )
 
-// Timeout fallback for every request (see Part 5, "Going further")
+// Timeout fallback for every request (see Part 5)
 func requestTimeout(d time.Duration) gin.HandlerFunc {
     return func(c *gin.Context) {
         ctx, cancel := context.WithTimeout(c.Request.Context(), d)
@@ -606,7 +595,7 @@ func main() {
     r.POST("/books", handlers.CreateBook)
     r.GET("/books", handlers.GetBooks)
     r.GET("/books/:id", handlers.GetBook)
-    r.PUT("/books/:id", handlers.UpdateBook) // strict REST semantics would use PATCH for partial updates
+    r.PUT("/books/:id", handlers.UpdateBook) // full-replacement semantics (Select lists the updated columns)
     r.DELETE("/books/:id", handlers.DeleteBook)
     // Optional: the hard-delete example from Part 8 (soft delete is enough by default)
     r.DELETE("/books/:id/permanent", handlers.DeleteBookPermanently)
@@ -621,15 +610,15 @@ With the server up you can test every chapter with curl, including the hard dele
 
 ## Part 10: Summary
 
-| Operation    | GORM call                                  | SQL emitted                                 |
-| ------------ | ------------------------------------------ | ------------------------------------------- |
-| Create       | `db.Create(&book)`                         | `INSERT INTO ...`                           |
-| List all     | `db.Find(&books)`                          | `SELECT * FROM ...`                         |
-| Get one      | `db.First(&book, id)`                      | `SELECT * FROM ... WHERE id = ?`            |
-| Update       | `db.Model(&book).Updates(input)`           | `UPDATE ... SET ...`                        |
-| Soft delete  | `db.Delete(&models.Book{}, id)`            | `UPDATE ... SET deleted_at = NOW()`         |
-| Hard delete  | `db.Unscoped().Delete(&models.Book{}, id)` | `DELETE FROM ...`                           |
-| Read deleted | `db.Unscoped().First(&models.Book{}, id)`  | `SELECT * FROM ... WHERE id = ?` (unscoped) |
+| Operation    | GORM call                                  | SQL emitted                                    |
+| ------------ | ------------------------------------------ | ---------------------------------------------- |
+| Create       | `db.Create(&book)`                         | `INSERT INTO ...`                              |
+| List all     | `db.Find(&books)`                          | `SELECT * FROM ...`                            |
+| Get one      | `db.First(&book, id)`                      | `SELECT * FROM ... WHERE id = ?`               |
+| Update       | `db.Model(&book).Select("...").Updates(x)` | `UPDATE ... SET ...` (zero values written too) |
+| Soft delete  | `db.Delete(&models.Book{}, id)`            | `UPDATE ... SET deleted_at = NOW()`            |
+| Hard delete  | `db.Unscoped().Delete(&models.Book{}, id)` | `DELETE FROM ...`                              |
+| Read deleted | `db.Unscoped().First(&models.Book{}, id)`  | `SELECT * FROM ... WHERE id = ?` (unscoped)    |
 
 > All five handlers are instances of the six-step skeleton from "The Formula First": parameters → binding → existence → operation → result → response; every DB call carries `WithContext(c.Request.Context())`, and queries use `errors.Is` to tell "not found" (404) from other errors (500).
 

@@ -17,7 +17,7 @@ tags:
 
 ### 1.1 A Unified Response Shape: ok/fail
 
-So far the series has produced two kinds of responses: bare data on success, `{"error": ...}` on failure. The frontend has to guess every time. Unify them into an explicit shape. First, let's lay the series' **response-shape evolution** out in one table — readers who go part by part will see the "lay flat → fold up" teaching arc; skimmers should treat the newest part as the contract:
+So far the series has produced two kinds of responses: bare data on success, `{"error": ...}` on failure — the front end has to guess every time. Unify them into an explicit shape. The series' **response-shape evolution** (skimmers: the last row is the contract):
 
 | Stage | Part | Success shape | Error shape | Why it changed |
 | --- | --- | --- | --- | --- |
@@ -32,11 +32,7 @@ So from this part on, success goes through `ok(...)` and failure through `fail(.
 // internal/handler/respond.go
 package handler
 
-import (
-    "net/http"
-
-    "github.com/gin-gonic/gin"
-)
+import "github.com/gin-gonic/gin"
 
 func ok(c *gin.Context, status int, data any) {
     c.JSON(status, gin.H{"ok": true, "data": data})
@@ -47,17 +43,26 @@ func fail(c *gin.Context, status int, msg string) {
 }
 ```
 
+> **The success path switches too.** The promise above is "success → `{"ok":true,"data":…}`, failure → `{"ok":false,"error":…}`", so the `c.JSON(http.StatusOK, book)` lines Part 6 left in `Create` / `Get` / `List` must become `ok(c, http.StatusOK, book)` — otherwise the same API returns bare data on success and `{"ok":false,…}` on failure, and the front end is guessing again. One line each:
+>
+> ```go
+> // before: c.JSON(http.StatusCreated, result)  →  after: ok(c, http.StatusCreated, result)
+> // before: c.JSON(http.StatusOK, book)         →  after: ok(c, http.StatusOK, book)
+> // before: c.JSON(http.StatusOK, gin.H{...})   →  after: ok(c, http.StatusOK, gin.H{...})
+> ```
+>
+> 400s (binding/parameter errors) bypass the middleware — the handler writes them on the spot — so those use `fail(c, http.StatusBadRequest, msg)`.
+
 ### 1.2 Handlers Only Attach Errors — No More Writing Responses Themselves
 
-The handlers in the layering part already showed the shape (`_ = c.Error(err)` followed by an immediate `return`). Here it becomes the convention:
+Part 6's handlers already established this (attach with `_ = c.Error(err)` and return; the comments even say "the error middleware handles it"). This part changes only two things: the **response shape** (`ok`/`fail`) and the **middleware's translation power** (slog + 504). The handler's error path is unchanged — attaching the error is still all it does:
 
 ```go
-// the error path in a handler does one thing only: attach the error to the Gin context
-if err := h.svc.DeleteBook(c.Request.Context(), id); err != nil {
-    _ = c.Error(err) // the concrete status code and the logging are handled by the error middleware
+if err := h.svc.DeleteBook(c.Request.Context(), id); err != nil { // DeleteBook is in Part 6 §1.7's checklist
+    _ = c.Error(err) // status code and log are the middleware's job
     return
 }
-ok(c, http.StatusOK, gin.H{"message": "book deleted"})
+ok(c, http.StatusOK, gin.H{"message": "deleted"})
 ```
 
 ### 1.3 The Error Middleware: Translate + Classify + Log
@@ -119,8 +124,6 @@ r.Use(handler.ErrorMiddleware()) // exported by the handler package (errorMiddle
 
 > This replaces Part 6's minimal `errorMiddleware`: the file is still `internal/handler/middleware.go`, it just gains ok/fail, `slog`, and the 504 classification; `main` registers it through `handler.ErrorMiddleware()`.
 
-> **Two benefits of the error middleware:** first, **status-code semantics are centralized** — the `errors.Is` discrimination logic (404 vs 500 vs 504) is gathered from every handler into one place; the tutorial parts kept the explicit checks so you could see them, and the engineering part is where they get folded up. Second, **logging is separated from the response** — `slog` records the real cause, while the client only receives `"Internal Server Error"`, so no internal details leak (echoing the "Why are the error messages uniform?" note in [GORM Relations in Practice](./gorm-gin-relations)).
-
 **Testing:**
 
 ```bash
@@ -156,8 +159,6 @@ var bookSortWhitelist = map[string]string{
 
 // ListBooks paginates + searches + sorts through the whitelist
 func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, pageSize int) ([]models.Book, int64, error) {
-    query := s.repo.Query(ctx, q) // builds the chain with Where already attached (see the repository.List prototype in the layering part)
-
     order := "created_at DESC" // default
     if col, ok := bookSortWhitelist[sort]; ok {
         if dir == "asc" {
@@ -166,7 +167,9 @@ func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, 
             order = col + " DESC"
         }
     }
-    return s.repo.ListOrdered(ctx, query, order, page, pageSize)
+    // `order` is a fragment produced by the whitelist mapping — by the time the repo sees it,
+    // it can only be a column name we recognise
+    return s.repo.List(ctx, ListParams{Q: q, Order: order, Page: page, PageSize: pageSize})
 }
 ```
 
@@ -174,6 +177,8 @@ func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, 
 curl "http://localhost:8080/books?sort=price&dir=asc&page=1&pageSize=10"   # ascending by price ✓
 curl "http://localhost:8080/books?sort=created_at;DROP%20TABLE%20books--"   # outside the whitelist → falls back to the default sort, never reaches SQL ✓
 ```
+
+> **The call site changes too.** `ListBooks` gains `sort` / `dir`, so the call in Part 6's `BookHandler.List` must pass them along: `h.svc.ListBooks(c.Request.Context(), c.Query("q"), c.Query("sort"), c.Query("dir"), page, pageSize)` — otherwise it will not compile (Go does not fill new parameters for you).
 
 > **The point is "never splicing":** the whitelist keeps a mapping table forever between "the user's literal input" and "SQL fragments" — anything not found is simply ignored (falling back to the default sort) instead of erroring or guessing. The `order` variable can never hold any string other than the column name resolved through the whitelist.
 
@@ -271,14 +276,16 @@ type S3Uploader struct {
 }
 
 func (s *S3Uploader) Save(ctx context.Context, key string, r io.Reader) (string, error) {
-    // when building the real implementation: aws-sdk-go-v2's s3.PutObject goes here
+    // ⚠️ Shape only: r is never read, so nothing is actually uploaded yet a "displayable"
+    // URL is returned. Swap in aws-sdk-go-v2's s3.PutObject (and hand it r) before wiring
+    // this into production.
     return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.Bucket, s.Region, key), nil
 }
 ```
 
 ### 3.2 The Handler Only Knows the Interface
 
-After the refactor, `UploadCover` depends only on `storage.Uploader` — business logic and storage are decoupled. First close the three "wiring" gaps (Part 6's `BookHandler` has only one field, `svc`): add `up` to the struct and give the constructor a second parameter; add `BookExists` (existence) and `SetCover` (update only) to the Service; add the matching single-field update to the repository — and add `SetCover(ctx, id, url)` to the interface too (`FirstBook` is already in Part 6's interface block).
+After the refactor, `UploadCover` depends only on `storage.Uploader` — business logic and storage are decoupled. First close the three "wiring" gaps (Part 6's `BookHandler` has only one field, `svc`): add `up` to the struct and give the constructor a second parameter; add `BookExists` (existence) and `SetCover` (update only) to the Service; add the matching single-field update to the repository — and add `SetCover(ctx, id, url)` to `service.BookStore` too (`FirstBook` is already in Part 6's interface block).
 
 ```go
 // internal/handler/book.go — compared with Part 6 only two things change: one extra field, one extra parameter
@@ -305,7 +312,8 @@ func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
 }
 
 // internal/repository/book.go — repo.SetCover single-field update (illustrative):
-//   r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url).Error
+//   res := r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url)
+//   if res.RowsAffected == 0 { return gorm.ErrRecordNotFound } // same "0 rows → 404" rule as 1.5
 ```
 
 The complete new `UploadCover` (the §2.2 sniffer + the Media & Query part's size cap + the rewound stream header + the 3.1 storage abstraction, all combined in one function) — same name, same route: it replaces the old `handlers/cover.go` version from the Media & Query part rather than adding a second endpoint:
@@ -378,7 +386,7 @@ up := &storage.DiskUploader{Dir: uploadDir, BaseURL: "/uploads"}
 bookH := handler.NewBookHandler(bookSvc, up)
 ```
 
-> **Naming decision recap (store the key or the URL?):** the Media & Query part's comparison table planted two candidate fields — `cover_path` (stores the relative address/URL) and `cover_key` (stores the object store's raw key). This part's implementation choice: **`Save` returns a displayable address directly, and that address goes into `cover_path`** (Disk and S3 differ only in URL shape; the column means "displayable address" in both cases), which removes the extra hop of "store the key first, then rebuild the URL when reading". Only when you need to do secondary operations on the raw key server-side (migration, CDN signing, bulk deletion) does it pay to open a separate `cover_key` column for the raw key and assemble the URL when responding — that is the advanced move of fully separating "storage semantics" from the "display contract", and this part only touches on it.
+> **Naming decision recap (store the key or the URL?):** the Media & Query part planted two candidates — `cover_path` (a displayable address) and `cover_key` (the raw object-storage key). This part picks the former: `Save` returns a displayable address and that is what gets stored, skipping the "store the key, rebuild the URL on read" conversion. Only when the server needs the raw key for further operations (migration, CDN signing, batch deletes) is a separate `cover_key` worth it.
 
 ---
 
@@ -409,7 +417,7 @@ The seven-part series closes its loop here — let's reconcile, one by one, ever
 
 | Promise | Where it was made | Where it landed |
 | --- | --- | --- |
-| `BookRepository` interface + Service + injection + `internal/` | [GORM Crash Course](./gorm-gin-crud-tutorial) "Learning-grade structure" note / [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §1 |
+| `BookStore` interface (consumer side) + Service + injection + `internal/` | [GORM Crash Course](./gorm-gin-crud-tutorial) "Learning-grade structure" note / [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §1 |
 | `httptest` table-driven tests | [GORM Data Engineering](./gorm-gin-dto-batch) §4 / crash course note | Engineering (Part 1), §2 |
 | Generic `GetPaginated[T]` | [GORM Data Engineering](./gorm-gin-dto-batch) §4 | Engineering (Part 1), §3 |
 | Transactions `db.Transaction()` | crash course ch10 | Engineering (Part 1), §1 (atomic Service operations) |
@@ -422,4 +430,4 @@ The seven-part series closes its loop here — let's reconcile, one by one, ever
 
 **Your project now:** a three-tier architecture (the book-dimension chain migrated end to end; the rest filled in from the same isomorphic template) + table-driven tests at the handler layer + a unified error middleware (404/500/504 semantics centralized + `slog` logging) + a sort whitelist + file-header sniffing (with stream rewind and the 2MB cap) + a swappable storage abstraction + connection-pool configuration — the skeleton is complete and safe to put into production.
 
-Looking back, every `WithContext` and every `errors.Is` planted in the earlier parts ultimately flows into this part's one error middleware and one promise mapping table — their meaning only fully reveals itself at the moment of the fold-up.
+Every `WithContext` and every `errors.Is` planted in the earlier parts flows into the middleware and the mapping table above.

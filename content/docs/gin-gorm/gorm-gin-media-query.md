@@ -24,18 +24,23 @@ tags:
 | **相对路径（`/uploads/x.jpg`）——本教程方案** | **`cover_path`** |
 | 对象存储 key（S3 等）                        | `cover_key`      |
 
-本教程把图片落在 `uploads/` 磁盘目录，数据库存**相对路径**（换域名、接 CDN、挪位置都不必改数据）。所以字段名叫 `cover_path`。前端习惯用 `coverUrl`？用 Go tag 把"内部语义"和"对外契约"解耦——**内部名准确，JSON 名顺手，两不耽误**：
+本教程把图片落在 `uploads/` 磁盘目录，数据库存**相对路径**：换域名、接 CDN、挪目录时**数据库一行都不用改**——改的只是读取时拼接的 base。
 
-```go
-CoverPath string `json:"coverUrl" gorm:"column:cover_path"`
-```
+所以字段名叫 `cover_path`（存的是路径）。但对外，前端要的是"能直接放进 `<img src>` 的地址"，所以 JSON 键用 `coverUrl`：今天同源时它是 `/uploads/x.jpg`，将来接上 CDN 或对象存储就是完整的 `https://...`——键名描述的是**对外契约**（可展示地址），不是列里当下存的字面量。
+
+落到 Go 上就是一行：字段 `CoverPath`，加 `json:"coverUrl"` 把两层名字分开（列名不用写 tag，默认命名策略会把 `CoverPath` 转成 `cover_path`，入门篇第三章讲过）。具体追加位置见 1.2。
+
+> **两个注意点：**
+>
+> - `json:"coverUrl"` 是**唯一必要的那个 tag**：不写它，JSON 里会输出 Go 字段名 `CoverPath`。同时记住 **JSON 键是对外契约**，发布后改名的成本比改列名高得多（前端、缓存、文档、已有客户端都要跟），想清楚再定；
+> - **相对路径的代价**：前端拿到的不是绝对地址。同源页面可以直接 `<img src="/uploads/x.jpg">`；**跨域部署（比如前端是独立域名的 Nuxt 站点）必须用 API base 拼**：`apiBase + coverUrl`。想让前端"拿到就能用"，就在响应时把相对路径拼成绝对地址（配置里的 public base + 路径）——这也正是键名保持 `coverUrl` 的正当理由。
 
 ### 1.2 模型加字段
 
-`models/book.go` 在 `Price` 之后追加（字段标签写法见 1.1，`Comments` 等原有字段保持不变）：
+`models/book.go` 在 `Price` 之后追加一行（1.1 的命名落到代码上就是它；`Comments` 等原有字段保持不变）：
 
 ```go
-CoverPath string `json:"coverUrl" gorm:"column:cover_path"` // 相对路径，可空
+CoverPath string `json:"coverUrl"` // 相对路径，可空；列名 cover_path 由默认命名策略生成
 ```
 
 `AutoMigrate` 会给 `books` 补一列可空的 `cover_path`，**已有行不受影响**（空值）。
@@ -48,7 +53,6 @@ CoverPath string `json:"coverUrl" gorm:"column:cover_path"` // 相对路径，�
 package handlers
 
 import (
-    "errors"
     "fmt"
     "gin-demo/db"
     "gin-demo/models"
@@ -58,24 +62,13 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
-    "gorm.io/gorm"
 )
 
 // UploadCover 上传图书封面：限制类型与大小，存 uploads/，路径写回 cover_path
 func UploadCover(c *gin.Context) {
-    id := c.Param("id")
-
-    // 1. 书必须存在
-    var book models.Book
-    result := db.DB.WithContext(c.Request.Context()).First(&book, id)
-    if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-        c.JSON(http.StatusNotFound, gin.H{"error": "图书不存在"})
-        return
-    }
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
-        return
-    }
+    // 1. 父资源校验已由 2.4 的 requireBook 中间件完成：书不存在时根本进不到这里。
+    //    直接取中间件放进 context 的实体，书的数据也不用再查一次
+    book := c.MustGet("book").(*models.Book)
 
     // 2. 取文件并校验
     file, err := c.FormFile("cover")
@@ -106,7 +99,7 @@ func UploadCover(c *gin.Context) {
     // coverPath 存的是 URL 路径，用正斜杠拼接（为什么别用 filepath.Join 见下方要点）
     coverPath := "/uploads/" + filename
     if err := db.DB.WithContext(c.Request.Context()).
-        Model(&book).Update("cover_path", coverPath).Error; err != nil {
+        Model(book).Update("cover_path", coverPath).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "更新图书失败"})
         return
     }
@@ -117,6 +110,7 @@ func UploadCover(c *gin.Context) {
 
 要点：
 
+- **路由必须挂在 `/books/:id` 组上**（2.4 的 `bookGroup`）：`c.MustGet("book")` 依赖 `requireBook` 已经 `c.Set` 过，漏挂中间件会直接 panic。若你跳过了 2.4，就把第 1 步换回 `First(&book, id)` 的那段存在性检查；
 - **文件名不信任用户输入**：`filepath.Ext` 只取扩展名，主名用 `book.ID + 时间戳` 拼——既防覆盖也防 `../../` 这类路径注入；
 - **两种路径别混**：`coverPath` 是 **URL 路径**，永远正斜杠 `/`（存数据库、给前端），用 `path.Join` 或直接拼接；落盘才用 `filepath.Join`（按 OS 分隔符）。Windows 反斜杠恰恰是反例——用 `filepath.Join` 拼 URL 会在 Windows 下产出 `\uploads\` 存库，前端永远匹配不上；
 - 类型校验用的是**扩展名白名单**（简单教学版；严格做法要嗅探文件头 `http.DetectContentType`，落地见[《GORM 工程化实战（二）：可靠性与生产化》](./gorm-gin-engineering-reliability)第二节）；
@@ -129,7 +123,6 @@ func UploadCover(c *gin.Context) {
 ```go
 import (
     "os"
-    "path/filepath"
     // ...其余不变
 )
 
@@ -139,8 +132,8 @@ func main() {
         log.Fatal("迁移失败：", err)
     }
 
-    // 磁盘目录：用 filepath.Join 拼（OS 分隔符），MkdirAll 与 Static 共用同一个值
-    uploadDir := filepath.Join(".", "uploads")
+    // 磁盘目录：本地默认相对「启动时的工作目录」的 uploads/；生产用 UPLOAD_DIR 指到绝对路径
+    uploadDir := "uploads"
     _ = os.MkdirAll(uploadDir, 0o755) // 确保目录存在
 
     r := gin.Default()
@@ -148,19 +141,21 @@ func main() {
     r.Static("/uploads", uploadDir) // URL 前缀写死正斜杠 /uploads；目录走 uploadDir
     // /uploads/xxx.jpg → ./uploads/xxx.jpg
 
-    // ...路由区新增：
-    r.POST("/books/:id/cover", handlers.UploadCover)
+    // ...路由区：封面路由挂到 2.4 的 bookGroup 上（组路径已是 /books/:id）
+    bookGroup.POST("/cover", handlers.UploadCover)
 }
 ```
 
-`r.Static("/uploads", uploadDir)` 让 `/uploads/<文件名>` 直接映射到磁盘目录——浏览器/前端拼 `coverUrl` 即可展示图片。
+**`uploads` 是相对路径**，解析基准是进程启动时的当前工作目录——本地从项目根目录 `go run` 没问题，但用 systemd / Docker / IDE 指定了别的工作目录启动时，图片会写到（和读到）另一个目录。生产请用 `UPLOAD_DIR` 之类的环境变量指到绝对路径。
+
+`r.Static("/uploads", uploadDir)` 让 `/uploads/<文件名>` 直接映射到磁盘目录：同源页面直接 `<img src="/uploads/x.jpg">` 就能显示；跨域前端要拿 API base 拼（见 1.1 的两个注意点）。
 
 **测试：**
 
 ```bash
 curl -X POST http://localhost:8080/books/1/cover \
   -F "cover=@/path/to/cover.jpg"
-# {"coverUrl":"/uploads/1_1734xxxx.jpg"}
+# {"coverUrl":"/uploads/1_1734xxxx.jpg"}   ← 相对路径；跨域前端需 apiBase + 该值
 
 curl -I http://localhost:8080/uploads/1_1734xxxx.jpg   # 200，Content-Type image/jpeg
 
@@ -177,7 +172,7 @@ curl -X POST http://localhost:8080/books/1/cover -F "cover=@/etc/hosts"
 
 ### 2.1 先收拢帮助函数
 
-多表关联篇的 `ListComments` 里，分页解析是内联写的（先看完整形态是正确的教学顺序）。现在把它收拢到 `handlers/pagination.go`，供所有分页接口复用：
+多表关联篇的 `ListComments` 里，分页解析是内联写的（先看完整形态是正确的教学顺序）。现在原样搬进 `handlers/pagination.go`，供所有分页接口复用——行为不变，只是从内联变成一处可复用：
 
 ```go
 // handlers/pagination.go —— 分页参数解析 + 校验（防御式，非法值回落到默认）
@@ -190,8 +185,8 @@ import (
 )
 
 func parsePagination(c *gin.Context) (page, pageSize int) {
-    page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-    if err != nil || page < 1 {
+    page, _ = strconv.Atoi(c.DefaultQuery("page", "1")) // Atoi 出错返回 0，交给下面的 < 1 兜住
+    if page < 1 {
         page = 1
     }
     pageSize, _ = strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -271,7 +266,7 @@ curl "http://localhost:8080/books?page=2&pageSize=5"
 要点（都是 GORM 查询的骨架级知识）：
 
 - **`ILIKE` 是 PG 专用**：`LIKE` 分大小写、`ILIKE` 不分。教程用 PG，写 `ILIKE`；换 MySQL 用 `LIKE`，换 SQLite 用 `LIKE`（SQLite `LIKE` 对 ASCII 不区分大小写）——驱动差异的一个具体例子。另注意 `q` 若含 `%`/`_` 会被当成通配符：参数化只防 SQL 注入、不防通配符语义，按字面搜索需先转义或加 `ESCAPE`，教程不展开；
-- **`query` 是可复用的链**：同一个 `query` 变量先 `Count` 再追加 `Order/Offset/Limit` 执行 `Find`——`Count` 前不带分页条件，得到的是**过滤后的总数**，这正是分页接口的标准姿势；
+- **在篇 2 的骨架上加搜索**：`Count` → `Order/Offset/Limit` 的顺序没变，只是取数前多了这层 `Where`；`Count` 在分页条件之前执行，拿到的自然是**过滤后的总数**——这是分页 + 搜索接口的标准姿势；
 - **ORDER 注入**：如果 `sort` 参数来自用户，千万别直接拼进 `Order()`（`"/books?sort=created_at;DROP..."`）——教程固定排序即可，接受外部排序字段要先做白名单（落地见[《GORM 工程化实战（二）》](./gorm-gin-engineering-reliability)§2.1）。
 
 ### 2.3 给列表加评论数：JOIN + GROUP BY
@@ -304,7 +299,7 @@ if err := query.
 }
 ```
 
-聚合查询的三个坑（都是教科书级的）：
+聚合查询的四个坑：
 
 - **`LEFT JOIN` + `Group("books.id")`**：没评论的书也要出现（`comment_count = 0`），所以是 LEFT 不是 INNER；
 - **`comments.deleted_at IS NULL` 条件要进 JOIN 而不是 WHERE**：放进 WHERE 会把"无评论的书"整行剔除，放进 JOIN 才能保留左表 + 只数未删除的评论——聚合查询最常见的坑；
@@ -320,7 +315,7 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 # items[0].commentCount 应为该书的未删除评论数（无评论的书为 0）
 ```
 
-> 列表接口与详情接口的契约分层：`GET /books` 返回 `{items,total,page,pageSize}`，`GET /books/:id` 返回单本书+评论。**列表轻、详情重**——这是前面所有"按需加载"决策的落点。
+> 契约分层：`GET /books` 返回 `{items,total,page,pageSize}`，`GET /books/:id` 返回单本书 + 评论——**列表轻、详情重**。
 
 ---
 

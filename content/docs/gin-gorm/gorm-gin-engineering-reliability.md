@@ -17,7 +17,7 @@ tags:
 
 ### 1.1 统一响应形状 ok/fail
 
-前五篇的响应有两种：成功裸数据、失败 `{"error": ...}`。前端每次都要猜。统一成显式形状。先把系列的**响应形状演进**收在一张表里讲清——按顺序读的读者会看到它是"摊开 → 收拢"的教学过程；跳读的读者请以最新一篇的契约为准：
+前五篇的响应有两种：成功裸数据、失败 `{"error": ...}`，前端每次都要猜。统一成显式形状。系列的**响应形状演进**如下（跳读者以最新一行为准）：
 
 | 阶段         | 篇目                  | 成功形状                         | 错误形状                    | 为什么变                                           |
 | ------------ | --------------------- | -------------------------------- | --------------------------- | -------------------------------------------------- |
@@ -32,11 +32,7 @@ tags:
 // internal/handler/respond.go
 package handler
 
-import (
-    "net/http"
-
-    "github.com/gin-gonic/gin"
-)
+import "github.com/gin-gonic/gin"
 
 func ok(c *gin.Context, status int, data any) {
     c.JSON(status, gin.H{"ok": true, "data": data})
@@ -47,14 +43,23 @@ func fail(c *gin.Context, status int, msg string) {
 }
 ```
 
+> **成功路径也要一起换。** 上面的承诺是"成功 `{"ok":true,"data":…}`、失败 `{"ok":false,"error":…}`"，所以篇 6 留下的 `Create` / `Get` / `List` 里那几行 `c.JSON(http.StatusOK, book)` 要同步改成 `ok(c, http.StatusOK, book)`——否则同一个 API 成功时是裸数据、失败时是 `{"ok":false,…}`，前端又要猜。三个 handler 各改一行：
+>
+> ```go
+> // 改前：c.JSON(http.StatusCreated, result)  →  改后：ok(c, http.StatusCreated, result)
+> // 改前：c.JSON(http.StatusOK, book)         →  改后：ok(c, http.StatusOK, book)
+> // 改前：c.JSON(http.StatusOK, gin.H{...})   →  改后：ok(c, http.StatusOK, gin.H{...})
+> ```
+>
+> 400（绑定/参数错误）不走 `ok`/`fail` 之外的中间件——它是 handler 就地写响应的，所以也要用 `fail(c, http.StatusBadRequest, msg)`。
+
 ### 1.2 handler 只挂错误，不再自己写响应
 
-分层篇的 handler 已经见到雏形（`_ = c.Error(err)` 后直接 return）。这里把它变成约定：
+这个约定篇 6 的 handler 已经确立（`_ = c.Error(err)` 后直接 return，注释里也写明"交给错误中间件"），本篇只换两样东西：**响应形状**（`ok`/`fail`）和**中间件的翻译能力**（slog + 504）。handler 的错误路径写法一个字不变——错误仍只做一件事：
 
 ```go
-// handler 里的错误路径，只做一件事：把错误挂到 Gin 上下文
-if err := h.svc.DeleteBook(c.Request.Context(), id); err != nil {
-    _ = c.Error(err) // 具体状态码与日志由错误中间件统一处理
+if err := h.svc.DeleteBook(c.Request.Context(), id); err != nil { // DeleteBook 见篇 6 §1.7 清单
+    _ = c.Error(err) // 状态码与日志由错误中间件统一处理
     return
 }
 ok(c, http.StatusOK, gin.H{"message": "删除成功"})
@@ -119,8 +124,6 @@ r.Use(handler.ErrorMiddleware()) // handler 包导出（同包内仍叫 errorMid
 
 > 这行是替换篇 6 的 `errorMiddleware` 最小版：文件仍是 `internal/handler/middleware.go`，只是多了 ok/fail、`slog` 与 504 分类；`main` 包通过 `handler.ErrorMiddleware()` 注册。
 
-> **错误中间件的两个好处**：一是**状态码语义集中**——`errors.Is` 的区分逻辑（404 vs 500 vs 504）从每个 handler 收进一处，前五篇正文保持显式检查是为了看清它，工程篇就该收拢；二是**日志与响应分离**——`slog` 记真实原因，客户端只拿到 `"Internal Server Error"`，不泄露内部细节（呼应[《多表关联实战》](./gorm-gin-relations)的「错误消息为什么统一」注记）。
-
 **测试：**
 
 ```bash
@@ -156,8 +159,6 @@ var bookSortWhitelist = map[string]string{
 
 // ListBooks 分页 + 搜索 + 白名单排序
 func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, pageSize int) ([]models.Book, int64, error) {
-    query := s.repo.Query(ctx, q) // 组装好 Where 的链（见分层篇 repository.List 的原型）
-
     order := "created_at DESC" // 默认
     if col, ok := bookSortWhitelist[sort]; ok {
         if dir == "asc" {
@@ -166,7 +167,8 @@ func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, 
             order = col + " DESC"
         }
     }
-    return s.repo.ListOrdered(ctx, query, order, page, pageSize)
+    // order 是白名单映射出来的片段，交给 repo 时已经是"只能是我们认识的列名"
+    return s.repo.List(ctx, ListParams{Q: q, Order: order, Page: page, PageSize: pageSize})
 }
 ```
 
@@ -174,6 +176,8 @@ func (s *BookService) ListBooks(ctx context.Context, q, sort, dir string, page, 
 curl "http://localhost:8080/books?sort=price&dir=asc&page=1&pageSize=10"   # 按价格升序 ✓
 curl "http://localhost:8080/books?sort=created_at;DROP%20TABLE%20books--"   # 白名单外 → 回落默认排序，永不进 SQL ✓
 ```
+
+> **调用点要跟着改。** `ListBooks` 的签名多了 `sort` / `dir` 两个参数，篇 6 的 `BookHandler.List` 里那行调用要同步传进来：`h.svc.ListBooks(c.Request.Context(), c.Query("q"), c.Query("sort"), c.Query("dir"), page, pageSize)`——否则编译不过（Go 不会自动给新参数填零值）。
 
 > **关键在"永不拼接"：** 白名单让"用户的字面输入"与"SQL 片段"之间永远隔着一张映射表——查不到就直接忽略（用默认排序），而不是报错或猜测。`order` 变量里除了白名单查出的列名，不可能出现其它字符串。
 
@@ -271,14 +275,15 @@ type S3Uploader struct {
 }
 
 func (s *S3Uploader) Save(ctx context.Context, key string, r io.Reader) (string, error) {
-    // 构造真实实现时：aws-sdk-go-v2 的 s3.PutObject 到这里
+    // ⚠️ 只保留形状：r 一次都没读，文件并没有真正上传，却会返回一个"可展示"的 URL。
+    // 构造真实实现时换成 aws-sdk-go-v2 的 s3.PutObject（并把 r 交出去），在此之前不要接进生产。
     return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.Bucket, s.Region, key), nil
 }
 ```
 
 ### 3.2 handler 只认接口
 
-`UploadCover` 改造后只依赖 `storage.Uploader`——业务与存储解耦。先补齐三处"接线"（篇 6 的 `BookHandler` 只有 `svc` 一个字段）：结构体加 `up`、构造器变双参；Service 加 `BookExists`（存在性）与 `SetCover`（只更新 `cover_path`）；repository 加对应的单字段更新——接口也要同步加 `SetCover(ctx, id, url)`（`FirstBook` 篇 6 接口块已有）。
+`UploadCover` 改造后只依赖 `storage.Uploader`——业务与存储解耦。先补齐三处"接线"（篇 6 的 `BookHandler` 只有 `svc` 一个字段）：结构体加 `up`、构造器变双参；Service 加 `BookExists`（存在性）与 `SetCover`（只更新 `cover_path`）；repository 加对应的单字段更新——`service.BookStore` 里也要补 `SetCover(ctx, id, url)`（`FirstBook` 篇 6 的接口块已有）。
 
 ```go
 // internal/handler/book.go —— 对照篇 6 只改两处：多一个字段、构造器多一个参数
@@ -305,7 +310,8 @@ func (s *BookService) SetCover(ctx context.Context, id uint, url string) error {
 }
 
 // internal/repository/book.go —— repo.SetCover 单字段更新（示意）：
-//   r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url).Error
+//   res := r.db.WithContext(ctx).Model(&models.Book{Model: gorm.Model{ID: id}}).Update("cover_path", url)
+//   if res.RowsAffected == 0 { return gorm.ErrRecordNotFound } // 与 1.5 的"0 行 → 404"约定一致
 ```
 
 完整的新 `UploadCover`（§2.2 嗅探 + 媒体篇大小上限 + 倒回流头 + 3.1 存储抽象一次合体）——同名同路由，直接覆盖媒体篇 `handlers/cover.go` 里的旧版，不是新增第二个接口：
@@ -378,7 +384,7 @@ up := &storage.DiskUploader{Dir: uploadDir, BaseURL: "/uploads"}
 bookH := handler.NewBookHandler(bookSvc, up)
 ```
 
-> **命名决策回顾（存 key 还是存 URL？）：** 媒体篇对照表埋过两个候选字段——`cover_path`（存相对地址/URL）与 `cover_key`（存对象存储的原始 key）。本篇实现的取舍是：**`Save` 直接返回可展示地址并存入 `cover_path`**（Disk 与 S3 只是 URL 形态不同，列语义都是"可展示地址"），省掉"先存 key、读时再拼 URL"的一次换算。只有当你要在服务端对原始 key 做二次操作（迁移、CDN 签名、批量删除）时，才值得另开 `cover_key` 列存原始 key、响应时再拼——那是把"存储语义"与"展示契约"彻底拆开的进阶，本篇点到为止。
+> **命名决策回顾（存 key 还是存 URL？）：** 媒体篇埋过两个候选字段——`cover_path`（存可展示地址）与 `cover_key`（存对象存储的原始 key）。本篇选前者：`Save` 直接返回可展示地址并入库，省掉"先存 key、读时再拼 URL"的一次换算。只有当你需要在服务端对原始 key 做二次操作（迁移、CDN 签名、批量删除）时，才值得另开 `cover_key`。
 
 ---
 
@@ -409,7 +415,7 @@ sqlDB.SetMaxIdleConns(10)           // 空闲上限：池中最多保留 10 条�
 
 | 承诺                                                 | 出处                                                                                     | 兑现位置                           |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
-| `BookRepository` 接口 + Service + 注入 + `internal/` | [入门篇](./gorm-gin-crud-tutorial)「学习级结构」注记 / [dto 篇](./gorm-gin-dto-batch)§四 | 工程化（一）一                     |
+| `BookStore` 接口（消费者侧）+ Service + 注入 + `internal/` | [入门篇](./gorm-gin-crud-tutorial)「学习级结构」注记 / [dto 篇](./gorm-gin-dto-batch)§四 | 工程化（一）一                     |
 | `httptest` 表驱动测试                                | [dto 篇](./gorm-gin-dto-batch)§四 / 入门篇注记                                           | 工程化（一）二                     |
 | 泛型 `GetPaginated[T]`                               | [dto 篇](./gorm-gin-dto-batch)§四                                                        | 工程化（一）三                     |
 | 事务 `db.Transaction()`                              | 入门篇 ch10                                                                              | 工程化（一）一（Service 原子操作） |
@@ -422,4 +428,4 @@ sqlDB.SetMaxIdleConns(10)           // 空闲上限：池中最多保留 10 条�
 
 **你现在的项目**：三层架构（book 维度链路端到端迁移，其余按同构模板补齐）+ handler 层表驱动测试 + 统一错误中间件（404/500/504 语义集中 + slog 日志）+ 排序白名单 + 文件头嗅探（含流倒回与 2MB 上限）+ 可切换的存储抽象 + 连接池配置——可以放心上线的骨架齐了。
 
-回头看，前几篇里每一处 `WithContext`、每一次 `errors.Is` 的铺垫，最后都汇进了本篇的一张错误中间件和一张兑现映射表——它们的意义，在收拢的那一刻才完全显现。
+前几篇的每一处 `WithContext`、每一次 `errors.Is`，最后都汇进了上面这张错误中间件和这张对账表。

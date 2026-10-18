@@ -24,18 +24,23 @@ A field name should reflect **what is stored**:
 | **A relative path (`/uploads/x.jpg`) — this tutorial's choice** | **`cover_path`**  |
 | An object-storage key (S3, etc.)                         | `cover_key`             |
 
-This tutorial writes images into the `uploads/` directory on disk and stores **relative paths** in the database (switching domains, putting a CDN in front, or relocating never requires touching the data). Hence the name `cover_path`. Does your front end prefer `coverUrl`? Use a Go tag to decouple "internal semantics" from "external contract" — **accurate internally, handy as JSON, both at no cost**:
+This tutorial writes images into the `uploads/` directory on disk and stores **relative paths** in the database: switching domains, putting a CDN in front, or relocating the directory means **not a single row changes** — only the base you join with when reading does.
 
-```go
-CoverPath string `json:"coverUrl" gorm:"column:cover_path"`
-```
+Hence the name `cover_path` (it stores a path). Externally, though, the front end wants "something it can drop straight into `<img src>`", so the JSON key is `coverUrl`: same-origin today it is `/uploads/x.jpg`, and once a CDN or object storage is in front it becomes a full `https://...` — the key describes the **external contract** (a displayable address), not the literal value in the column right now.
+
+In Go that is a single line: the field `CoverPath`, plus `json:"coverUrl"` to separate the two names (no column tag needed — the default naming strategy turns `CoverPath` into `cover_path`, as Part 3 of the crash course explains). The exact place to add it is 1.2.
+
+> **Two things to note:**
+>
+> - `json:"coverUrl"` is the **one necessary tag**: without it the JSON carries the Go field name `CoverPath`. And remember that **a JSON key is an external contract** — renaming it after release costs far more than renaming a column (front ends, caches, docs, already-shipped clients all have to follow), so decide deliberately;
+> - **The cost of a relative path**: the front end does not get an absolute address. A same-origin page can use `<img src="/uploads/x.jpg">` directly; **a cross-origin deployment (say the Nuxt site on its own domain) must join it with the API base**: `apiBase + coverUrl`. If you want "what you get is ready to use", join it into an absolute address in the response (the configured public base + path) — which is also the legitimate reason to keep the key named `coverUrl`.
 
 ### 1.2 Adding the Field to the Model
 
-`models/book.go` — append after `Price` (field-tag convention from 1.1; existing fields like `Comments` stay unchanged):
+`models/book.go` — append one line after `Price` (this is 1.1's naming decision landing in code; existing fields like `Comments` stay unchanged):
 
 ```go
-CoverPath string `json:"coverUrl" gorm:"column:cover_path"` // relative path, may be empty
+CoverPath string `json:"coverUrl"` // relative path, may be empty; the cover_path column comes from the default naming strategy
 ```
 
 `AutoMigrate` adds a nullable `cover_path` column to `books`; **existing rows are unaffected** (empty value).
@@ -48,7 +53,6 @@ CoverPath string `json:"coverUrl" gorm:"column:cover_path"` // relative path, ma
 package handlers
 
 import (
-    "errors"
     "fmt"
     "gin-demo/db"
     "gin-demo/models"
@@ -58,25 +62,15 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
-    "gorm.io/gorm"
 )
 
 // UploadCover uploads a book cover: type and size restricted, saved to uploads/,
 // the path written back to cover_path
 func UploadCover(c *gin.Context) {
-    id := c.Param("id")
-
-    // 1. The book must exist
-    var book models.Book
-    result := db.DB.WithContext(c.Request.Context()).First(&book, id)
-    if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-        c.JSON(http.StatusNotFound, gin.H{"error": "book not found"})
-        return
-    }
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
-        return
-    }
+    // 1. The parent check already happened in 2.4's requireBook middleware: a missing book
+    //    never reaches this handler. Take the entity the middleware stashed in the context,
+    //    which also saves a second query for the book data
+    book := c.MustGet("book").(*models.Book)
 
     // 2. Grab the file and validate it
     file, err := c.FormFile("cover")
@@ -107,7 +101,7 @@ func UploadCover(c *gin.Context) {
     // coverPath is a URL path, joined with forward slashes (why not filepath.Join — see the note below)
     coverPath := "/uploads/" + filename
     if err := db.DB.WithContext(c.Request.Context()).
-        Model(&book).Update("cover_path", coverPath).Error; err != nil {
+        Model(book).Update("cover_path", coverPath).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update book"})
         return
     }
@@ -118,10 +112,11 @@ func UploadCover(c *gin.Context) {
 
 Key points:
 
+- **The route must hang off the `/books/:id` group** (2.4's `bookGroup`): `c.MustGet("book")` relies on `requireBook` having called `c.Set`, and a missing middleware panics outright. If you skipped 2.4, put the `First(&book, id)` existence check back as step 1;
 - **The filename never trusts user input:** `filepath.Ext` takes only the extension; the base name is built from `book.ID + timestamp` — this blocks both overwrites and `../../`-style path injection;
 - **Don't mix the two kinds of paths:** `coverPath` is a **URL path**, always forward slashes `/` (what is stored and handed to the front end) — use `path.Join` or plain concatenation; only saving to disk uses `filepath.Join` (OS separator). Windows backslashes are exactly the counterexample — joining a URL with `filepath.Join` would store `\uploads\` on Windows, and the front end would never match it;
 - Type validation is an **extension whitelist** (the simple teaching version; the strict approach sniffs file headers with `http.DetectContentType` — landed in Section 2 of [GORM Engineering in Practice (Part 2): Reliability & Production Readiness](./gorm-gin-engineering-reliability));
-- `Model(&book).Update("cover_path", ...)` updates a single field without touching any other — echoing the `Updates(struct)` semantics from the crash course.
+- `Model(book).Update("cover_path", ...)` updates a single field without touching any other — echoing the `Updates(struct)` semantics from the crash course.
 
 ### 1.4 Static Serving & Directory Setup
 
@@ -130,7 +125,6 @@ Key points:
 ```go
 import (
     "os"
-    "path/filepath"
     // ...everything else unchanged
 )
 
@@ -140,8 +134,9 @@ func main() {
         log.Fatal("migration failed:", err)
     }
 
-    // Disk directory: joined with filepath.Join (OS separator); MkdirAll and Static share the same value
-    uploadDir := filepath.Join(".", "uploads")
+    // Disk directory: locally this defaults to uploads/ relative to the working directory;
+    // in production point UPLOAD_DIR at an absolute path
+    uploadDir := "uploads"
     _ = os.MkdirAll(uploadDir, 0o755) // make sure the directory exists
 
     r := gin.Default()
@@ -149,19 +144,21 @@ func main() {
     r.Static("/uploads", uploadDir) // URL prefix hardcoded with forward slashes: /uploads; the directory follows uploadDir
     // /uploads/xxx.jpg → ./uploads/xxx.jpg
 
-    // ...new in the routes block:
-    r.POST("/books/:id/cover", handlers.UploadCover)
+    // ...new in the routes block: the cover route joins 2.4's bookGroup (its path is already /books/:id)
+    bookGroup.POST("/cover", handlers.UploadCover)
 }
 ```
 
-`r.Static("/uploads", uploadDir)` maps `/uploads/<filename>` straight onto the disk directory — the browser / front end only needs to concatenate `coverUrl` to display the image.
+**`uploads` is a relative path**, resolved against the process's working directory — running `go run` from the project root is fine locally, but under systemd / Docker / an IDE that starts the service elsewhere, images get written to (and read from) a different directory. Point an `UPLOAD_DIR` environment variable at an absolute path in production.
+
+`r.Static("/uploads", uploadDir)` maps `/uploads/<filename>` straight onto the disk directory: a same-origin page can use `<img src="/uploads/x.jpg">` right away; a cross-origin front end joins it with the API base (see the two notes in 1.1).
 
 **Testing:**
 
 ```bash
 curl -X POST http://localhost:8080/books/1/cover \
   -F "cover=@/path/to/cover.jpg"
-# {"coverUrl":"/uploads/1_1734xxxx.jpg"}
+# {"coverUrl":"/uploads/1_1734xxxx.jpg"}   <- a relative path; cross-origin front ends need apiBase + this value
 
 curl -I http://localhost:8080/uploads/1_1734xxxx.jpg   # 200, Content-Type image/jpeg
 
@@ -178,7 +175,7 @@ curl -X POST http://localhost:8080/books/1/cover -F "cover=@/etc/hosts"
 
 ### 2.1 First, Consolidate the Helper
 
-In the relations part, `ListComments` does its pagination parsing inline (seeing the full shape first is the right teaching order). Now fold it into `handlers/pagination.go`, shared by every paginated endpoint:
+In the relations part, `ListComments` does its pagination parsing inline (seeing the full shape first is the right teaching order). Now move those lines out verbatim into `handlers/pagination.go` — same behavior, just one reusable home instead of an inline copy:
 
 ```go
 // handlers/pagination.go — pagination-param parsing + validation (defensive: bad values fall back to defaults)
@@ -191,8 +188,8 @@ import (
 )
 
 func parsePagination(c *gin.Context) (page, pageSize int) {
-    page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-    if err != nil || page < 1 {
+    page, _ = strconv.Atoi(c.DefaultQuery("page", "1")) // Atoi returns 0 on error; the < 1 check below catches it
+    if page < 1 {
         page = 1
     }
     pageSize, _ = strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -274,7 +271,7 @@ curl "http://localhost:8080/books?page=2&pageSize=5"
 Key points (all skeleton-level GORM query knowledge):
 
 - **`ILIKE` is PG-specific:** `LIKE` is case-sensitive, `ILIKE` is not. The tutorial runs PostgreSQL, so it writes `ILIKE`; on MySQL use `LIKE`, on SQLite use `LIKE` (SQLite's `LIKE` is case-insensitive for ASCII) — one concrete instance of driver differences. Also note a `q` containing `%`/`_` is treated as wildcards: parameterization only stops SQL injection, not wildcard semantics — a literal search needs escaping or an `ESCAPE` clause first, which the tutorial doesn't expand on;
-- **`query` is a reusable chain:** the same `query` variable runs `Count` first, then takes `Order/Offset/Limit` for `Find` — no paging conditions are attached before `Count`, so what you get is the **filtered total**, the canonical shape of a paginated endpoint;
+- **Search on top of Part 2's skeleton:** the `Count` → `Order/Offset/Limit` order is unchanged; fetching just has one extra `Where` in front of it. Because `Count` runs before any paging condition, it naturally yields the **filtered total** — the canonical shape of a search-plus-pagination endpoint;
 - **ORDER injection:** if a `sort` parameter ever comes from users, never concatenate it into `Order()` (`"/books?sort=created_at;DROP..."`) — the tutorial simply fixes the sort; accepting an external sort field requires whitelisting it first (landed in §2.1 of [GORM Engineering in Practice (Part 2): Reliability & Production Readiness](./gorm-gin-engineering-reliability)).
 
 ### 2.3 Adding a Comment Count to the List: JOIN + GROUP BY
@@ -323,7 +320,7 @@ curl "http://localhost:8080/books?q=Go&pageSize=10"
 # items[0].commentCount should be that book's count of undeleted comments (0 for books without comments)
 ```
 
-> **Contract layering between the list and the detail endpoints:** `GET /books` returns `{items,total,page,pageSize}`; `GET /books/:id` returns one book + its comments. **Lists stay light, details run heavy** — this is where every earlier "load on demand" decision lands.
+> Contract layering: `GET /books` returns `{items,total,page,pageSize}`; `GET /books/:id` returns one book + its comments — **lists stay light, details run heavy**.
 
 ---
 
