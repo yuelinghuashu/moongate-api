@@ -81,7 +81,8 @@
           "Nuxt",
           "Docker",
           "Caddy",
-          "Engineering"
+          "Engineering",
+          "CI/CD"
         ],
         "lang": "zh",
         "isFallback": false,

@@ -7,6 +7,7 @@ order: 1
 tags:
   - Go
   - Engineering
+  - Compiler
 ---
 
 > To a computer, a text file is just a string of characters with no structure at all. Our first job is to make the computer "see" what is hidden inside those characters.

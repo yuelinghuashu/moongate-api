@@ -3,6 +3,22 @@
   "body": {
     "data": [
       {
+        "title": "刷新才出内容：一次「客户端跳转空白」的三层伪装排查实录",
+        "description": "<text>",
+        "date": "2026-10-19T00:00:00Z",
+        "slug": "nuxt-cors-blank-navigation-troubleshooting",
+        "series": null,
+        "order": null,
+        "tags": [
+          "Nuxt",
+          "Go",
+          "Security"
+        ],
+        "lang": "zh",
+        "isFallback": false,
+        "hasTranslation": false
+      },
+      {
         "title": "Nuxt SSR 内存泄漏排查实录：一台 2G 服务器被拖垮的完整复盘",
         "description": "<text>",
         "date": "2026-09-09T00:00:00Z",
@@ -34,27 +50,11 @@
         "lang": "zh",
         "isFallback": false,
         "hasTranslation": true
-      },
-      {
-        "title": "服务与迁移：把 Agent 变成流式 API，可切云端",
-        "description": "<text>",
-        "date": "2026-09-08T00:00:00Z",
-        "slug": "streaming-and-migration",
-        "series": "go-agent",
-        "order": 4,
-        "tags": [
-          "Go",
-          "Agent",
-          "LLM"
-        ],
-        "lang": "zh",
-        "isFallback": false,
-        "hasTranslation": true
       }
     ],
     "limit": 3,
     "page": 1,
-    "total": 68,
+    "total": 69,
     "totalPages": 23
   }
 }

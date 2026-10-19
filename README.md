@@ -34,8 +34,18 @@ Markdown 内容加载、语言回退、搜索/标签过滤、分页与系列分�
 ### CORS
 
 线上前端与 API 同源（`NUXT_PUBLIC_API_URL=https://moongate.top`，Caddy 反代 `/api`），
-浏览器请求不跨源，因此**生产不需要放行任何 Origin**。本地开发跨源（Nuxt 跑在 3000），
-用 `CORS_ORIGINS`（逗号分隔）放行，默认 `http://localhost:3000`；只放行 `GET`/`OPTIONS`。
+浏览器请求不跨源，因此**生产不需要放行任何 Origin**。
+
+本地开发跨源，规则分两层：
+
+1. `CORS_ORIGINS`（逗号分隔）显式指定时**优先**，与服务端口无关；
+2. 未配置时，**只有 `ENV=development`**（见 `.env.example`）才放行
+   `localhost` / `127.0.0.1` / `[::1]` 的任意端口；其它环境（生产、或未声明 `ENV`）
+   一律拒绝，启动时会打一行告警。
+
+所以本地 `.env` 必须包含 `ENV=development`，否则前端所有跨源请求都会 403，
+症状是"客户端跳转没数据、刷新才有"（刷新走 SSR，不经过 CORS）。容器镜像里已显式
+设 `ENV=production`。只放行 `GET`/`OPTIONS`；跨源规则有 `main_test.go` 的表驱动测试守着。
 
 ## 内容管理
 

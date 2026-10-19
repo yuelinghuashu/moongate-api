@@ -166,7 +166,8 @@
             "Nuxt",
             "Docker",
             "Caddy",
-            "Engineering"
+            "Engineering",
+            "CI/CD"
           ],
           "lang": "zh",
           "isFallback": true,
@@ -657,7 +658,8 @@
           "order": 1,
           "tags": [
             "Go",
-            "Engineering"
+            "Engineering",
+            "Compiler"
           ],
           "lang": "en",
           "isFallback": false,
