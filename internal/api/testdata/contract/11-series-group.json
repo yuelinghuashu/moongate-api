@@ -58,7 +58,7 @@
           "hasTranslation": false
         },
         {
-          "title": "从零到一：为 Moongate 博客打造一个支持多级引用的评论区",
+          "title": "从零到一：为博客打造一个支持多级引用的评论区",
           "description": "<text>",
           "date": "2026-03-08T00:00:00Z",
           "slug": "nuxt-multi-level-replies",
@@ -626,23 +626,6 @@
           "lang": "zh",
           "isFallback": true,
           "hasTranslation": false
-        },
-        {
-          "title": "Nuxt i18n 的 `$tm` 函数：环境差异问题与解决方案",
-          "description": "<text>",
-          "date": "2026-01-21T00:00:00Z",
-          "slug": "nuxt-i18n-tm-function-guide",
-          "series": "i18n",
-          "order": 3,
-          "tags": [
-            "Nuxt",
-            "i18n",
-            "Engineering",
-            "Performance"
-          ],
-          "lang": "zh",
-          "isFallback": true,
-          "hasTranslation": false
         }
       ]
     },
@@ -872,17 +855,34 @@
       ]
     },
     {
-      "slug": "performance",
+      "slug": "nuxt-practice",
       "docs": [
         {
           "title": "解决Nuxt Content渲染问题：从基础配置到渲染显示完整指南",
           "description": "<text>",
           "date": "2025-12-28T00:00:00Z",
           "slug": "nuxt-content-config-guide",
-          "series": "performance",
+          "series": "nuxt-practice",
           "order": 1,
           "tags": [
             "Nuxt",
+            "Engineering",
+            "Performance"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        },
+        {
+          "title": "Nuxt i18n 的 `$tm` 函数：环境差异问题与解决方案",
+          "description": "<text>",
+          "date": "2026-01-21T00:00:00Z",
+          "slug": "nuxt-i18n-tm-function-guide",
+          "series": "nuxt-practice",
+          "order": 2,
+          "tags": [
+            "Nuxt",
+            "i18n",
             "Engineering",
             "Performance"
           ],
@@ -895,13 +895,12 @@
           "description": "<text>",
           "date": "2026-02-11T00:00:00Z",
           "slug": "nuxt-state-persistence-guide",
-          "series": "performance",
-          "order": 2,
+          "series": "nuxt-practice",
+          "order": 3,
           "tags": [
             "Nuxt",
             "State Management",
-            "Hydration",
-            "Performance"
+            "Hydration"
           ],
           "lang": "zh",
           "isFallback": true,
@@ -912,11 +911,10 @@
           "description": "<text>",
           "date": "2026-02-17T00:00:00Z",
           "slug": "nuxt-image-best-practice",
-          "series": "performance",
-          "order": 3,
+          "series": "nuxt-practice",
+          "order": 4,
           "tags": [
             "Nuxt",
-            "Performance",
             "Performance"
           ],
           "lang": "zh",

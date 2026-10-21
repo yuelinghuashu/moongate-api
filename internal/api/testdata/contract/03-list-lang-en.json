@@ -3,7 +3,7 @@
   "body": {
     "data": [
       {
-        "title": "刷新才出内容：一次「客户端跳转空白」的三层伪装排查实录",
+        "title": "Content Only Shows Up After a Refresh: A CORS Postmortem in Three Layers of Disguise",
         "description": "<text>",
         "date": "2026-10-19T00:00:00Z",
         "slug": "nuxt-cors-blank-navigation-troubleshooting",
@@ -14,9 +14,9 @@
           "Go",
           "Security"
         ],
-        "lang": "zh",
-        "isFallback": true,
-        "hasTranslation": false
+        "lang": "en",
+        "isFallback": false,
+        "hasTranslation": true
       },
       {
         "title": "A Nuxt.js SSR Memory Leak Postmortem: How One Global Variable Crippled a 2GB Server",

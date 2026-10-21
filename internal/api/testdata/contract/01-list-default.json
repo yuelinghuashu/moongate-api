@@ -16,7 +16,7 @@
         ],
         "lang": "zh",
         "isFallback": false,
-        "hasTranslation": false
+        "hasTranslation": true
       },
       {
         "title": "Nuxt SSR 内存泄漏排查实录：一台 2G 服务器被拖垮的完整复盘",
