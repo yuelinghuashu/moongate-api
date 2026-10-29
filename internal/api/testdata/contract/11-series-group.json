@@ -630,6 +630,91 @@
       ]
     },
     {
+      "slug": "interpreter-node-architecture",
+      "docs": [
+        {
+          "title": "树遍历解释器的 Node 架构（一）：三种读法——求值、检查与渲染都挂在节点上",
+          "description": "<text>",
+          "date": "2026-10-27T00:00:00Z",
+          "slug": "interpreter-node-architecture-three-reads",
+          "series": "interpreter-node-architecture",
+          "order": 1,
+          "tags": [
+            "Go",
+            "Interpreter",
+            "Engineering"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        },
+        {
+          "title": "树遍历解释器的 Node 架构（二）：位置与错误——坐标怎么进入接口",
+          "description": "<text>",
+          "date": "2026-10-27T00:00:00Z",
+          "slug": "interpreter-node-architecture-position-and-errors",
+          "series": "interpreter-node-architecture",
+          "order": 2,
+          "tags": [
+            "Go",
+            "Interpreter",
+            "Engineering"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        },
+        {
+          "title": "树遍历解释器的 Node 架构（三）：封条与两笔账——穷尽性谁付钱",
+          "description": "<text>",
+          "date": "2026-10-27T00:00:00Z",
+          "slug": "interpreter-node-architecture-sealing-and-exhaustiveness",
+          "series": "interpreter-node-architecture",
+          "order": 3,
+          "tags": [
+            "Go",
+            "Interpreter",
+            "Engineering"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        },
+        {
+          "title": "树遍历解释器的 Node 架构（四）：顺序与深度——下钻写在第几行",
+          "description": "<text>",
+          "date": "2026-10-27T00:00:00Z",
+          "slug": "interpreter-node-architecture-order-and-depth",
+          "series": "interpreter-node-architecture",
+          "order": 4,
+          "tags": [
+            "Go",
+            "Interpreter",
+            "Engineering"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        },
+        {
+          "title": "树遍历解释器的 Node 架构（五）：Node 契约的边界——上下文、失败与环境镜像",
+          "description": "<text>",
+          "date": "2026-10-27T00:00:00Z",
+          "slug": "interpreter-node-architecture-mirrors-and-invariants",
+          "series": "interpreter-node-architecture",
+          "order": 5,
+          "tags": [
+            "Go",
+            "Interpreter",
+            "Engineering"
+          ],
+          "lang": "zh",
+          "isFallback": true,
+          "hasTranslation": false
+        }
+      ]
+    },
+    {
       "slug": "lexer-from-scratch",
       "docs": [
         {
