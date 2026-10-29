@@ -16,10 +16,10 @@
         ],
         "lang": "zh",
         "isFallback": false,
-        "hasTranslation": false
+        "hasTranslation": true
       },
       {
-        "title": "树遍历解释器的 Node 架构（四）：顺序与深度——下钻写在第几行",
+        "title": "树遍历解释器的 Node 架构（四）：顺序与深度——下钻位置与递归上限",
         "description": "<text>",
         "date": "2026-10-27T00:00:00Z",
         "slug": "interpreter-node-architecture-order-and-depth",
@@ -32,10 +32,10 @@
         ],
         "lang": "zh",
         "isFallback": false,
-        "hasTranslation": false
+        "hasTranslation": true
       },
       {
-        "title": "树遍历解释器的 Node 架构（三）：封条与两笔账——穷尽性谁付钱",
+        "title": "树遍历解释器的 Node 架构（三）：未导出方法与两种扩展——穷尽性由谁保证",
         "description": "<text>",
         "date": "2026-10-27T00:00:00Z",
         "slug": "interpreter-node-architecture-sealing-and-exhaustiveness",
@@ -48,7 +48,7 @@
         ],
         "lang": "zh",
         "isFallback": false,
-        "hasTranslation": false
+        "hasTranslation": true
       }
     ],
     "limit": 3,

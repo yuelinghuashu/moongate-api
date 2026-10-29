@@ -3,7 +3,7 @@
   "body": {
     "data": [
       {
-        "title": "树遍历解释器的 Node 架构（五）：Node 契约的边界——上下文、失败与环境镜像",
+        "title": "Tree-Walking Interpreter Node Architecture (Part 5): The Boundary of the Node Contract — Contexts, Failures, and Environment Mirroring",
         "description": "<text>",
         "date": "2026-10-27T00:00:00Z",
         "slug": "interpreter-node-architecture-mirrors-and-invariants",
@@ -14,12 +14,12 @@
           "Interpreter",
           "Engineering"
         ],
-        "lang": "zh",
-        "isFallback": true,
-        "hasTranslation": false
+        "lang": "en",
+        "isFallback": false,
+        "hasTranslation": true
       },
       {
-        "title": "树遍历解释器的 Node 架构（四）：顺序与深度——下钻写在第几行",
+        "title": "Tree-Walking Interpreter Node Architecture (Part 4): Order and Depth — Descent Position and Recursion Bound",
         "description": "<text>",
         "date": "2026-10-27T00:00:00Z",
         "slug": "interpreter-node-architecture-order-and-depth",
@@ -30,9 +30,9 @@
           "Interpreter",
           "Engineering"
         ],
-        "lang": "zh",
-        "isFallback": true,
-        "hasTranslation": false
+        "lang": "en",
+        "isFallback": false,
+        "hasTranslation": true
       }
     ],
     "limit": 2,

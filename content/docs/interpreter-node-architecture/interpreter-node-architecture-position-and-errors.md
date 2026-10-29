@@ -95,6 +95,16 @@ Binary{Op: OpPlus}            @1:2
      ^ 第 6 列：左操作数是合并出来的子树，位置取它自己的运算符 +
 ```
 
+把第二种输入的树摊开（`@行:列` 是各节点的 `At`）：
+
+```text
+Binary{Op: OpStar}  @1:13
+├── Binary{Op: OpPlus}  @1:6   ← 合并到这一层后，leftPos 取 + 的位置
+│   ├── StringLiteral{Value: "a"} @1:2
+│   └── StringLiteral{Value: "b"} @1:8
+└── NumberLiteral{Value: 2} @1:15
+```
+
 第二种才是 `leftPos` 的用武之地：报错指向那一层的 `+`，而不是最左边的 `"a"`。这是有意的——问题出在哪一层合并，就指向哪一层。
 
 如果绕过预检直接求值，`1 + 2 * "a"` 的报错会落在 `*`（第 7 列）：那是求值的兜底分支，用的一律是运算符位置。
@@ -123,18 +133,21 @@ Binary{Op: OpPlus}            @1:2
 
 几种主流实现的位置表示摆在一起，差别一目了然：
 
-| 设计           | 位置表示                |
-| -------------- | ----------------------- |
-| Lox（jlox）    | `Token` 引用            |
-| Lox（clox）    | 无（不留树）            |
-| ESTree / Babel | `loc` / `start` / `end` |
-| TypeScript     | `pos` / `end`           |
-| Rust `syn`     | `Span`                  |
-| 本实现         | `At` 单点               |
+| 设计           | 位置表示                                     |
+| -------------- | -------------------------------------------- |
+| Lox（jlox）    | `Token` 引用                                 |
+| Lox（clox）    | 无（不留树）                                 |
+| ESTree / Babel | `loc` / `start` / `end`                      |
+| TypeScript     | `pos` / `end`                                |
+| Rust `syn`     | `Span`                                       |
+| Go `go/ast`    | `Pos()` / `End()`（`token.Pos` + `FileSet`） |
+| 本实现         | `At` 单点                                    |
 
 分界不在"精确到什么程度"，而在"错误要标出多大一段"。本实现要的最多就是"哪一处"，所以一个点够用。
 
 一旦要标出整段、要跨行、要让编辑器在原文上画波浪线，就得把 `Position` 换成 `Span`，`errAtPos` 和上面那张位置表跟着改。
+
+Go 的 `go/ast` 走的是这条区间路线：`Node` 只有 `Pos()` / `End()`，位置是 `token.Pos` 偏移，行列由 `token.FileSet` 现算。本实现用 `At` 单点直接存行列，省掉 `FileSet` 与 `End()` 的计算，但标不出整段；要接 LSP，换成 `Span` 只是第一步，`token.Pos` 的字节偏移与 LSP 的 UTF-16 列之间还要换算。
 
 这条边界还会从别处反推回来。第 4 篇给解析器装了深度闸，求值侧却没有同款的闸——不是"位置说不清"，而是**求值侧已经不需要**。
 

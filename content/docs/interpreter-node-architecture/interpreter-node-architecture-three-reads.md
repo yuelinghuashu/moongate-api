@@ -1,6 +1,6 @@
 ---
-title: 树遍历解释器的 Node 架构（一）：三种读法——求值、检查与渲染都挂在节点上
-description: 求值、检查、渲染三种读法为什么都长在节点方法上；Node / Expr / Stmt 为什么拆成三个接口；每层拒绝了哪些替代、代价落在哪。位置与封条留给后两篇。
+title: 树遍历解释器的 Node 架构（一）：三种读法——都实现为节点方法
+description: 求值、检查、渲染三种读法为什么都长在节点方法上；Node / Expr / Stmt 为什么拆成三个接口；每层拒绝了哪些替代、代价落在哪。位置与接口开不开放留给后两篇。
 date: 2026-10-27
 series: interpreter-node-architecture
 order: 1
@@ -28,13 +28,7 @@ tags:
 
 两个问题都没有两全的答案，只能选择由谁承担代价。第 3 篇那张对照表，就是把五种主流设计放进这两个坐标里比较。
 
-本文的写法是归纳式的：三个需求，一个需求逼出一个方法，每节末尾留一张**决策卡**，记下这一层拒绝了哪些替代、代价落在哪、什么情况下失效。
-
-接口长完之后还有两个问题没答：错误怎么带坐标（第 2 篇）、接口开不开放（第 3 篇）。
-
 本实现的前提也先摆在这里：**语法封闭、读法固定（求值、类型检查、渲染，外加语句执行）、只有本包的两个宿主在消费**。第 3 篇的对照表用来检验这个前提站不站得住。
-
-下面每出现一个需求，就给节点补上一层表示，接口跟着多一行。三种读法补齐之后，表达式已经能求值、能检查、能渲染。
 
 本系列假定你写过、或至少读过树遍历解释器。它谈的是接口设计上的权衡，不是从零教学；词法与语法分析的细节不在讨论范围内。
 
@@ -43,7 +37,7 @@ tags:
 ```text
 第 1 篇：立接口（三种读法 + Expr / Stmt 拆分）—— 核心
     ├─ 第 2 篇：位置进接口（坐标与错误）
-    ├─ 第 3 篇：封条（谁能扩展）
+    ├─ 第 3 篇：导出边界（谁能扩展）
     ├─ 第 4 篇：顺序与深度（方法体怎么写、递归压在哪）
     └─ 第 5 篇：接口外的那一圈（宿主、环境镜像、不可变、未来三条缝）
 ```
@@ -124,7 +118,7 @@ type Binary struct {
 
 叶子返回自己，`NumberLiteral.Eval` 是一行 `return IntValue(n.Value), nil`。
 
-`Binary` 要复杂一档：它先沿左脊把链摊平，再自内向外逐层应用，所以很长的左结合链不吃 Go 栈。下面是骨架（只留 `OpPlus` 的分支，`&&`/`||` 的短路在 `applyBinary` 入口先判左值，不在这个循环里，这里也省了）。片段里的 `Position` 与 `errAtPos` 定义在第 2 篇，`TypeEnv` 见下面的需求二，`Result` 见本篇末尾，先看签名就够：
+`Binary` 要复杂一档：它先沿左脊把链摊平，再自内向外逐层应用，所以很长的左结合链不吃 Go 栈。下面是骨架（展开 `OpPlus` 与 `&&`/`||` 的分支，其余运算符分支省略；短路守卫留在入口，因为它决定右子树求不求值）。片段里的 `Position` 与 `errAtPos` 定义在第 2 篇，`TypeEnv` 见下面的需求二，`Result` 见本篇末尾，先看签名就够：
 
 ```go
 func (b Binary) Eval(env *Env) (Value, error) {
@@ -139,6 +133,15 @@ func (b Binary) Eval(env *Env) (Value, error) {
 }
 
 func applyBinary(st binaryStep, left Value, env *Env) (Value, error) {
+	if st.op == OpAnd || st.op == OpOr { // 短路：左值能定结果时，右子树不求值
+		if !left.IsBool() {
+			return Value{}, errAtPos(st.at, KindType, "运算符 %s 需要 bool，得到 %s", st.op, left.TypeName())
+		}
+		lb := left.AsBool()
+		if st.op == OpAnd && !lb { return BoolValue(false), nil }
+		if st.op == OpOr && lb { return BoolValue(true), nil }
+	}
+
 	right, err := st.right.Eval(env) // 右子树在这里才求值
 	if err != nil { return Value{}, err }
 	switch st.op {
@@ -151,12 +154,18 @@ func applyBinary(st binaryStep, left Value, env *Env) (Value, error) {
 		}
 		return Value{}, errAtPos(st.at, KindType, "运算符 + 需要 int 或 string，得到 %s 和 %s",
 			left.TypeName(), right.TypeName())
+	case OpAnd, OpOr:
+		if !right.IsBool() {
+			return Value{}, errAtPos(st.at, KindType, "运算符 %s 需要 bool，得到 %s", st.op, right.TypeName())
+		}
+		return BoolValue(right.AsBool()), nil
 	}
+	// 其余运算符分支（比较、取模等）省略
 	return Value{}, errAtPos(st.at, KindInternal, "未知运算符 %d", st.op)
 }
 ```
 
-最左操作数先算，然后自内向外逐层合成；任何一层失败就原样返回。`+` 对两个 int 求和、对两个 string 拼接，其余组合报类型不符。
+最左操作数先算，然后自内向外逐层合成；任何一层失败就原样返回。`+` 对两个 int 求和、对两个 string 拼接，其余组合报类型不符；`&&` / `||` 在入口先判左值，能定结果时右子树不再求值。
 
 `leftSpine` 本身只有十来行：顺着 `Left` 往下走，遇到不是 `Binary` 的就停，把沿途的运算符、位置和右子树收进 `steps`。
 
@@ -202,7 +211,7 @@ leftSpine  steps = [{+, right=3}, {+, right=2}]   ← 从外到内
 
 > **决策一｜分派放在节点方法上**
 >
-> - **拒绝**：`any` 加类型开关，漏一个分支编译器不说话；也拒绝 visitor，它把"每种形态都要实现"的义务从节点搬到每个读法。
+> - **拒绝**：`any` 加类型开关，漏一个分支编译器不说话；也拒绝 visitor，它把"每种形态都要实现"的义务从节点移到每个读法。
 > - **代价**：加一种读法，所属接口下的每种形态都要补一个方法（`Expr` 六种、`Stmt` 两种）——成本摊在节点上，不在读法上。
 > - **失效**：读法会持续增长（诊断、格式化、多后端）时，这份代价开始复利，visitor 或函数表更划算（对照见第 3 篇）。
 
@@ -343,18 +352,18 @@ type Result struct {
 
 ## 小结：三种读法、八种节点
 
-三种读法补齐，实现里一共八种节点：六种表达式（`Expr`）加两种语句（`Stmt`）。每种带自己的字段：
+三种读法补齐，实现里一共八种节点：六种表达式（`Expr`）加两种语句（`Stmt`）。三层接口各自带的方法，以及八种节点的归属：
 
 ```text
-Node
-├── Expr
+Node { Pos, writeTo }
+├── Expr { Eval, typeCheck }        ← 有值
 │   ├── NumberLiteral{Value int64, At}
 │   ├── StringLiteral{Value string, At}
 │   ├── BoolLiteral{Value bool, At}
 │   ├── Identifier{Name string, At}
 │   ├── Binary{Op Op, Left, Right Expr, At}
 │   └── Unary{Op Op, X Expr, At}
-└── Stmt
+└── Stmt { Exec, typeCheck }        ← 无值
     ├── ExprStmt{X Expr}
     └── Let{Name string, Value Expr, At}
 ```
